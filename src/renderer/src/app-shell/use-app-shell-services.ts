@@ -1,4 +1,7 @@
+import { useEffect } from 'react'
+
 import { useAppStore } from '../store'
+import { attachWorktreeHistoryMouseNavigation } from '../lib/worktree-history-mouse-navigation'
 import { useClosedEditorTabCleanup } from '../components/editor/useClosedEditorTabCleanup'
 import { useIpcEvents } from '../hooks/useIpcEvents'
 import { useAutomationDispatchEvents } from '../hooks/useAutomationDispatchEvents'
@@ -64,4 +67,5 @@ export function useAppShellServices(): void {
   useBrowserIdentityMigrationNotice()
   useCodexTerminalServerIsolationNotice()
   useCodexSharedSettingsNotice()
+  useEffect(() => attachWorktreeHistoryMouseNavigation(), [])
 }
