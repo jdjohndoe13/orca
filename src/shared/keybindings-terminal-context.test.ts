@@ -167,7 +167,13 @@ describe('keybindings', () => {
     expect(getEffectiveKeybindingsForAction('terminal.copySelection', 'darwin')).toEqual(['Mod+C'])
     expect(getEffectiveKeybindingsForAction('terminal.copySelection', 'linux')).toEqual([
       'Ctrl+Shift+C',
-      'Ctrl+C'
+      'Ctrl+C',
+      'Ctrl+Insert'
+    ])
+    expect(getEffectiveKeybindingsForAction('terminal.copySelection', 'win32')).toEqual([
+      'Ctrl+Shift+C',
+      'Ctrl+C',
+      'Ctrl+Insert'
     ])
     expect(getEffectiveKeybindingsForAction('terminal.selectAll', 'darwin')).toEqual(['Mod+A'])
     expect(getEffectiveKeybindingsForAction('terminal.selectAll', 'linux')).toEqual([
@@ -200,6 +206,21 @@ describe('keybindings', () => {
         'linux'
       )
     ).toBe(true)
+    expect(
+      keybindingMatchesAction(
+        'terminal.copySelection',
+        { key: 'Insert', code: 'Insert', control: true, meta: false, alt: false, shift: false },
+        'win32'
+      )
+    ).toBe(true)
+    // Why: Ctrl+Insert is only a Windows/Linux console convention; darwin keeps Mod+C alone.
+    expect(
+      keybindingMatchesAction(
+        'terminal.copySelection',
+        { key: 'Insert', code: 'Insert', control: true, meta: false, alt: false, shift: false },
+        'darwin'
+      )
+    ).toBe(false)
     expect(
       keybindingMatchesAction(
         'terminal.selectAll',

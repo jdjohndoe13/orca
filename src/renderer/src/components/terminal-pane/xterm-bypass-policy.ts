@@ -404,6 +404,9 @@ export function shouldBypassXtermKeyboardEvent(
   if (matchesClipboardBinding('Shift+Insert', event, 'linux')) {
     return true
   }
+  if (matchesClipboardBinding('Ctrl+Insert', event, 'linux')) {
+    return true
+  }
 
   return false
 }

@@ -87,6 +87,18 @@ describe('shouldBypassXtermKeyboardEvent — Windows/Linux', () => {
     ).toBe(true)
   })
 
+  it('bubbles Ctrl+Insert (Windows console copy convention)', () => {
+    expect(
+      shouldBypassXtermKeyboardEvent(event({ key: 'Insert', code: 'Insert', ctrlKey: true }), noSel)
+    ).toBe(true)
+    expect(
+      shouldBypassXtermKeyboardEvent(
+        event({ key: 'Insert', code: 'Insert', ctrlKey: true }),
+        withSel
+      )
+    ).toBe(true)
+  })
+
   it('does not bubble plain Ctrl letter chords — shell shortcuts must reach PTY', () => {
     // Ctrl+A, Ctrl+E, Ctrl+U, Ctrl+R, Ctrl+L — all readline-critical.
     for (const keyCode of ['a', 'e', 'u', 'r', 'l']) {
