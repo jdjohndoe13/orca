@@ -9,6 +9,9 @@ import {
   syncTerminalScrollIntentFromViewport
 } from '@/lib/pane-manager/terminal-scroll-intent'
 import type { resolveTerminalKeyboardShortcutAction } from './terminal-keyboard-shortcut-matching'
+import { writeTerminalPastePtyInput } from './terminal-pty-paste-writer'
+import { resolveTerminalCtrlCInputEncoding } from './terminal-ctrl-c-encoding'
+import { hasTerminalMouseReportingMode } from '@/lib/pane-manager/pane-terminal-mouse-wheel'
 
 type TerminalShortcutAction = NonNullable<ReturnType<typeof resolveTerminalKeyboardShortcutAction>>
 
@@ -33,6 +36,8 @@ type ActionDispatchContext = {
   paneCwdRef: React.RefObject<PaneCwdMap>
   managerRef: React.RefObject<PaneManager | null>
   getKeyboardSplitTelemetrySource: () => 'contextual_tour' | 'keyboard'
+  // Why: lazy so the pane's kitty-protocol snapshot is read only on the copy-interrupt write path.
+  getKittyKeyboardFlagsActivePane?: () => number
   armNativeOnlyShortcut: (event: KeyboardEvent) => void
 }
 
@@ -63,6 +68,7 @@ export function dispatchTerminalShortcutAction(
     paneCwdRef,
     managerRef,
     getKeyboardSplitTelemetrySource,
+    getKittyKeyboardFlagsActivePane,
     armNativeOnlyShortcut
   } = context
 
@@ -81,7 +87,21 @@ export function dispatchTerminalShortcutAction(
   }
   if (action.type === 'copySelection') {
     const pane = manager.getActivePane() ?? manager.getPanes()[0]
-    if (!pane || !pane.terminal.getSelection()) {
+    if (!pane) {
+      return
+    }
+    if (!pane.terminal.getSelection()) {
+      // A mouse-reporting TUI runs its own selection copy on Ctrl+C, so the
+      // chord must reach it as the same bytes a real Ctrl+C keydown produces.
+      if (!hasTerminalMouseReportingMode(pane.terminal.element)) {
+        return
+      }
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      void writeTerminalPastePtyInput(
+        paneTransportsRef.current.get(pane.id),
+        resolveTerminalCtrlCInputEncoding(getKittyKeyboardFlagsActivePane?.() ?? 0)
+      )
       return
     }
     event.preventDefault()
