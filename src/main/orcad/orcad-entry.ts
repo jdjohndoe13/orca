@@ -32,6 +32,7 @@ import {
   changedAiVaultSearchSettings,
   type AiVaultSearchSettings
 } from '../../shared/ai-vault-search-settings'
+import { createRuntimeEnvironmentTransport } from '../runtime/orchestration/runtime-environment-transport'
 
 export { parseArgs }
 
@@ -276,6 +277,10 @@ async function startOrcadRuntime(
       agentHookServer.dropStatusEntriesForRemovedWorktree(worktreeId, host),
     buildAgentHookPtyEnv: () =>
       isAgentStatusHooksEnabled(profileStore.getSettings()) ? agentHookServer.buildPtyEnv() : {},
+    // Why the shared factory: orcad serves paired clients exactly like desktop main,
+    // so it must advertise the identical environment transport the gateway methods
+    // (and orchestration federation) dial through.
+    orchestrationEnvironmentTransport: createRuntimeEnvironmentTransport(runtimeUserDataPath),
     // Why the dedupe here and not in the instance: `apply` closes and reconstructs
     // unconditionally, so an unchanged value would restart a healthy index.
     applySessionSearchSettings: (before, after) => {

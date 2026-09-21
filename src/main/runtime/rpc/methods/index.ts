@@ -1,3 +1,4 @@
+import { RUNTIME_ENVIRONMENT_GATEWAY_METHODS } from './runtime-environment-gateway-methods'
 import { STATUS_METHODS } from './status'
 import { ORCAD_TERMINAL_CENSUS_METHODS } from './orcad-terminal-census'
 import { ORCAD_MIGRATION_METHODS } from './orcad-migration'
@@ -61,6 +62,7 @@ import { AGENT_LAUNCH_METHODS } from './agent-launch'
 // auditing the security boundary or wiring new CLI commands.
 export const ALL_RPC_METHODS = [
   ...STATUS_METHODS,
+  ...RUNTIME_ENVIRONMENT_GATEWAY_METHODS,
   ...ORCAD_TERMINAL_CENSUS_METHODS,
   ...ORCAD_MIGRATION_METHODS,
   ...AGENT_HOOK_METHODS,

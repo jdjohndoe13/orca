@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { encodePairingOffer } from './pairing'
+import { getPreferredPairingOffer } from './runtime-environments'
 import {
   RuntimeEnvironmentStoreError,
   addEnvironmentFromPairingCode,
@@ -203,5 +204,71 @@ describe('runtime environment store', () => {
       })
     ).toThrow(RuntimeEnvironmentStoreError)
     expect(listEnvironments(userDataPath)).toEqual([first])
+  })
+})
+
+describe('runtime environment store source vocabulary', () => {
+  const tempDirs: string[] = []
+  const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')
+
+  beforeEach(() => {
+    Object.defineProperty(process, 'platform', { configurable: true, value: 'linux' })
+  })
+
+  afterEach(() => {
+    if (originalPlatform) {
+      Object.defineProperty(process, 'platform', originalPlatform)
+    }
+    for (const dir of tempDirs.splice(0)) {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  function seededStore() {
+    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-env-store-'))
+    tempDirs.push(userDataPath)
+    const gateway = addEnvironmentFromPairingCode(userDataPath, {
+      name: 'gateway box',
+      pairingCode: pairingCode('ws://10.0.0.1:6768'),
+      now: 1_000
+    })
+    return { userDataPath, gateway, offer: getPreferredPairingOffer(gateway) }
+  }
+
+  it('degrades a source arm this build does not know instead of rejecting the store', () => {
+    const { userDataPath } = seededStore()
+    writeFileSync(
+      getEnvironmentStorePath(userDataPath),
+      JSON.stringify({
+        version: 1,
+        environments: [
+          {
+            id: 'env-gateway',
+            name: 'gateway box',
+            createdAt: 1_000,
+            updatedAt: 1_000,
+            lastUsedAt: null,
+            runtimeId: null,
+            // A future build's arm: openEnum must degrade it, not reject the file.
+            source: 'x-runtime-v2-runner',
+            endpoints: [
+              {
+                id: 'ws-env-gateway',
+                kind: 'websocket',
+                label: 'WebSocket',
+                endpoint: 'ws://10.0.0.1:6768',
+                deviceToken: 'device-token',
+                publicKeyB64: 'A'.repeat(43)
+              }
+            ],
+            preferredEndpointId: 'ws-env-gateway'
+          }
+        ]
+      })
+    )
+
+    const [loaded] = listEnvironments(userDataPath)
+    expect(loaded!.name).toBe('gateway box')
+    expect(loaded!.source).toBe('manual')
   })
 })

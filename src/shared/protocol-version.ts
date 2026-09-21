@@ -99,6 +99,11 @@ export const WORKTREE_GITHUB_PR_SUPPRESSION_RUNTIME_CAPABILITY =
 export const REPO_SEARCH_QUALIFIED_REFS_RUNTIME_CAPABILITY =
   'repo.search-qualified-refs.v1' as const
 export const REMOTE_RUNTIME_SHARED_CONTROL_CAPABILITY = 'remote-runtime.shared-control.v1' as const
+// Why: advertises the multi-hop gateway surface (Phase 1: `runtimeEnvironment.downstream.list`
+// plus the phase-1 read allowlist over `runtimeEnvironment.call`). Registered unconditionally —
+// every build that registers the methods advertises it, so an old host answers these method
+// names with method_not_found and an old client never calls them at all.
+export const REMOTE_RUNTIME_RELAY_RUNTIME_CAPABILITY = 'remote-runtime.relay.v1' as const
 export const FOLDER_WORKSPACE_PATH_STATUS_RUNTIME_CAPABILITY =
   'folder-workspace.path-status.v1' as const
 export const LINEAR_ISSUE_ATTRIBUTE_FILTER_RUNTIME_CAPABILITY =
@@ -345,6 +350,7 @@ export const RUNTIME_CAPABILITIES = [
   'runtime.status.compat.v1',
   'runtime.environments.v1',
   REMOTE_RUNTIME_SHARED_CONTROL_CAPABILITY,
+  REMOTE_RUNTIME_RELAY_RUNTIME_CAPABILITY,
   ...ORCHESTRATION_RUNTIME_CAPABILITIES,
   BROWSER_SCREENCAST_RUNTIME_CAPABILITY,
   BROWSER_TAB_CREATE_KNOWN_ID_RUNTIME_CAPABILITY,

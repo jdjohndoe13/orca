@@ -461,6 +461,10 @@ import {
 } from './repo-params'
 import { BrowserTarget } from './rpc-param-primitives'
 import { ClientCapabilitiesUpdate } from './runtime-client-capabilities-params'
+import {
+  RuntimeEnvironmentDownstreamListParamsSchema,
+  RuntimeEnvironmentGatewayCallParamsSchema
+} from './runtime-environment-relay-params'
 import { SessionTabsUnsubscribeAllParams } from './session-tabs-params'
 import {
   ActivateTab,
@@ -1136,6 +1140,8 @@ export const RPC_PARAMS_BY_METHOD = {
   'runtime.clientCapabilities.update': ClientCapabilitiesUpdate,
   'runtime.clientEvents.subscribe': null,
   'runtime.clientEvents.unsubscribe': ClientEventsUnsubscribeParams,
+  'runtimeEnvironment.call': RuntimeEnvironmentGatewayCallParamsSchema,
+  'runtimeEnvironment.downstream.list': RuntimeEnvironmentDownstreamListParamsSchema,
   'session.tabs.activate': ActivateTab,
   'session.tabs.close': CloseTab,
   'session.tabs.closeLifecycle': CloseLifecycleTab,

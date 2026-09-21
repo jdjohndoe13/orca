@@ -12,6 +12,7 @@ import { sendRemoteRuntimeRequest } from '../../shared/remote-runtime-client'
 import { ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES } from '../../shared/electron-remote-runtime-client-capabilities'
 import { redactRuntimeEnvironment } from '../../shared/runtime-environments'
 import type { RuntimeStatus } from '../../shared/runtime-types'
+import { synchronizeDownstreamEnvironmentRows } from './runtime-environment-pairing-downstream-sync'
 
 type VerifyAndAddRuntimeEnvironmentArgs = {
   name: string
@@ -79,6 +80,14 @@ export async function verifyAndAddRuntimeEnvironmentFromPairingCode(
           : 'Orca verified the host but could not save it. Check local settings storage and try again.'
     }
   }
+  // Fire-and-forget: the downstream view rows ride along after the pairing
+  // result, and a failed census must never gate the pairing itself (the sync
+  // resolves to a summary on every path).
+  void synchronizeDownstreamEnvironmentRows({
+    userDataPath,
+    gateway: environment,
+    capabilities: runtimeStatus.capabilities ?? []
+  })
   return {
     ok: true,
     environment: redactRuntimeEnvironment(environment),

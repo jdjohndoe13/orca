@@ -64,6 +64,8 @@ import { selectLinuxKeyringBackend } from './select-linux-keyring-backend'
 import { setPtyHostBindings } from '../ipc/pty-host-bindings'
 import { electronRuntimeDesktopSurface } from '../host/electron-runtime-desktop-surface'
 import { setRuntimeDesktopSurface } from '../runtime/runtime-desktop-surface'
+import { electronRuntimeWindowBroadcastSurface } from '../host/electron-window-broadcast-surface'
+import { setRuntimeWindowBroadcastSurface } from '../runtime/runtime-window-broadcast-surface'
 import { electronRuntimeBrowserCommandsFactory } from '../host/electron-browser-commands'
 import { setRuntimeBrowserCommandsFactory } from '../runtime/runtime-browser-commands-factory'
 import { electronHttpClient } from '../host/electron-http-client'
@@ -307,6 +309,10 @@ function initializeMainProcessPreflight(options: MainProcessPreflightOptions): b
   // tab-create-reply channel are desktop-only. A Node host installs none and the
   // runtime routes notifications to paired clients instead.
   setRuntimeDesktopSurface(electronRuntimeDesktopSurface)
+  // Why here too: the runtime-environment connection code publishes connection diagnostics
+  // to renderers without importing electron; on a Node host nothing is published, which is
+  // correct — there are no renderers to reach.
+  setRuntimeWindowBroadcastSurface(electronRuntimeWindowBroadcastSurface)
   // Why here: constructing RuntimeBrowserCommands is what pulls the Chromium browser
   // cluster into the graph. The desktop installs it; a Node host installs none and every
   // browser RPC rejects, which capability filtering already tells clients about.

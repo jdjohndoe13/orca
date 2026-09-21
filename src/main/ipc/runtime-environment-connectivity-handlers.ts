@@ -34,6 +34,7 @@ import {
   getRuntimeEnvironmentStatus
 } from './runtime-environment-transport-routing'
 import { publicRuntimeEnvironmentWithHostKey } from './runtime-environment-host-key'
+import { callDownstreamEnvironment } from './runtime-environment-relay-routing'
 
 function manuallyDisconnectedResponse(
   environment: ReturnType<typeof resolveEnvironment>
@@ -223,6 +224,12 @@ function registerPassiveCallHandler(getUserDataPath: () => string): void {
       const environment = resolveEnvironment(getUserDataPath(), args.selector)
       if (isRuntimeEnvironmentManuallyDisconnected(environment.id)) {
         return manuallyDisconnectedResponse(environment)
+      }
+      // A downstream view row dials through its gateway, never directly: the
+      // route endpoint may name the gateway's offer, and only the relay hops
+      // (and unwraps) the upstream host's envelope for capability probes etc.
+      if (environment.gatewayEnvironmentId) {
+        return callDownstreamEnvironment(getUserDataPath(), environment, args)
       }
       let response: RuntimeRpcResponse<unknown>
       try {

@@ -2,6 +2,7 @@
 import { OrcaRuntimeWithHasExactPersistedTerminalSurfaceIdentity } from './orca-runtime-has-exact-persisted-terminal-surface-identity'
 import type {
   OrchestrationEnvironmentCallOptions,
+  OrchestrationEnvironmentTransport,
   OrchestrationWorkerServer
 } from './orchestration/environment-transport'
 import type { RuntimeOrchestrationEnvelope } from '../../shared/runtime-rpc-envelope'
@@ -42,6 +43,13 @@ export class OrcaRuntimeWithGetRuntimeId extends OrcaRuntimeWithHasExactPersiste
       envelope,
       internal
     )
+  }
+
+  /** Raw environment transport for the relay gateway methods: they must forward the
+   *  upstream envelope verbatim, which the federation wrapper (that throws on upstream
+   *  failures) cannot do. Null when the entrypoint wired no transport. */
+  getOrchestrationEnvironmentTransport(): OrchestrationEnvironmentTransport | null {
+    return this.orchestrationEnvironmentTransport
   }
 
   syncOrchestrationFederation(runId?: string): Promise<void> {

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { PAIRING_OFFER_VERSION, type PairingOffer } from './pairing'
+import { openEnum } from './zod-salvage'
 import { classifyRemotePairingHostname } from './remote-pairing-address'
 import { RuntimeEnvironmentReconciliationRecordSchema } from './runtime-environment-reconciliation-record'
 
@@ -19,8 +20,11 @@ export const PublicRuntimeAccessEndpointSchema = RuntimeAccessEndpointSchema.omi
 
 export type PublicRuntimeAccessEndpoint = z.infer<typeof PublicRuntimeAccessEndpointSchema>
 
-export const RuntimeEnvironmentSourceSchema = z.enum(['manual', 'ephemeral-vm'])
-export type RuntimeEnvironmentSource = z.infer<typeof RuntimeEnvironmentSourceSchema>
+export const RuntimeEnvironmentSourceSchema = openEnum(
+  ['manual', 'ephemeral-vm'] as const,
+  'manual'
+)
+export type RuntimeEnvironmentSource = 'manual' | 'ephemeral-vm'
 
 export const RuntimeSshTunnelLinkSchema = z.object({
   sshTargetId: z.string().min(1),
@@ -67,6 +71,8 @@ export const PersistedRuntimeEnvironmentSchema = z.object({
   lastUsedAt: z.number().finite().nullable(),
   runtimeId: z.string().min(1).nullable(),
   source: RuntimeEnvironmentSourceSchema.optional(),
+  /** Marker only: an id in the gateway host's store; this row is a view of that host. */
+  gatewayEnvironmentId: z.string().min(1).optional(),
   connectionDependency: z.literal('ssh-tunnel').optional(),
   endpoints: z.array(RuntimeAccessEndpointSchema).min(1),
   preferredEndpointId: z.string().min(1)
@@ -166,6 +172,7 @@ export function createEnvironmentFromPairingOffer(args: {
   offer: PairingOffer
   runtimeId?: string | null
   source?: RuntimeEnvironmentSource
+  gatewayEnvironmentId?: string
   connectionDependency?: 'ssh-tunnel'
 }): KnownRuntimeEnvironment {
   const endpointId = `ws-${args.id}`
@@ -179,6 +186,7 @@ export function createEnvironmentFromPairingOffer(args: {
     lastUsedAt: null,
     runtimeId: args.runtimeId ?? null,
     ...(args.source ? { source: args.source } : {}),
+    ...(args.gatewayEnvironmentId ? { gatewayEnvironmentId: args.gatewayEnvironmentId } : {}),
     ...(args.connectionDependency ? { connectionDependency: args.connectionDependency } : {}),
     endpoints: [
       {

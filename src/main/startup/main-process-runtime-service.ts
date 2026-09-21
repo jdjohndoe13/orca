@@ -24,6 +24,7 @@ import { resolveTuiAgentLaunchEnv } from '../../shared/tui-agent-launch-defaults
 import { getPreferredPairingOffer } from '../../shared/runtime-environments'
 import { fingerprintOrchestrationPeer } from '../runtime/orchestration/environment-transport'
 import { callRuntimeEnvironment } from '../ipc/runtime-environment-transport-routing'
+import { createRuntimeEnvironmentTransport } from '../runtime/orchestration/runtime-environment-transport'
 import { mainProcessState as state } from './main-process-state'
 import { prepareCodexRuntimeHomeForLaunch } from './codex-launch-preparation'
 import type { RuntimeDesktopWindowStatus } from '../../shared/runtime-types'
@@ -52,28 +53,10 @@ export function initializeMainProcessRuntime(): OrcaRuntimeService {
   if (!store || !stats) {
     throw new Error('Store and stats must be initialized before runtime')
   }
-  const orchestrationEnvironmentTransport: OrchestrationEnvironmentTransport = {
-    resolve: (selector) => {
-      const environment = resolveEnvironment(app.getPath('userData'), selector)
-      const pairing = getPreferredPairingOffer(environment)
-      return {
-        environmentId: environment.id,
-        name: environment.name,
-        peerFingerprint: fingerprintOrchestrationPeer(pairing.publicKeyB64),
-        pairingRevision: environment.pairingRevision ?? environment.createdAt
-      }
-    },
-    call: (selector, method, params, timeoutMs, envelope, expectedPairingRevision) =>
-      callRuntimeEnvironment(
-        app.getPath('userData'),
-        selector,
-        method,
-        params,
-        timeoutMs,
-        expectedPairingRevision,
-        envelope
-      )
-  }
+  // Why the shared factory and not an inline object: orcad must wire the identical
+  // transport, and the two entries must not drift (see createRuntimeEnvironmentTransport).
+  const orchestrationEnvironmentTransport: OrchestrationEnvironmentTransport =
+    createRuntimeEnvironmentTransport(app.getPath('userData'))
   // Why here and not in the window listener: `subscribeEnrichedStatus` also fires under headless
   // `orca serve`, which never opens one, and the fleet path runs there too.
   const observedPaneIdentities = new AgentStatusObservedPaneIdentities()
