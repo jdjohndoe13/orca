@@ -110,6 +110,13 @@ export const REMOTE_RUNTIME_RELAY_RUNTIME_CAPABILITY = 'remote-runtime.relay.v1'
 // build that registers it advertises it, an old host answers method_not_found.
 export const REMOTE_RUNTIME_RELAY_ATTACH_RUNTIME_CAPABILITY =
   'remote-runtime.relay.attach.v1' as const
+// Why: milestone 2 widens the operate allowlist (git/worktrees/files/agent
+// lifecycle/terminal management/PR landing). Widening an allowlist needs no
+// negotiation — an old client never names the new methods — and this milestone
+// deliberately keeps both fences allowlist-driven, so the capability is
+// registered unconditionally for future negotiation only.
+export const REMOTE_RUNTIME_RELAY_OPERATE_RUNTIME_CAPABILITY =
+  'remote-runtime.relay-operate.v2' as const
 export const FOLDER_WORKSPACE_PATH_STATUS_RUNTIME_CAPABILITY =
   'folder-workspace.path-status.v1' as const
 export const LINEAR_ISSUE_ATTRIBUTE_FILTER_RUNTIME_CAPABILITY =
@@ -358,6 +365,7 @@ export const RUNTIME_CAPABILITIES = [
   REMOTE_RUNTIME_SHARED_CONTROL_CAPABILITY,
   REMOTE_RUNTIME_RELAY_RUNTIME_CAPABILITY,
   REMOTE_RUNTIME_RELAY_ATTACH_RUNTIME_CAPABILITY,
+  REMOTE_RUNTIME_RELAY_OPERATE_RUNTIME_CAPABILITY,
   ...ORCHESTRATION_RUNTIME_CAPABILITIES,
   BROWSER_SCREENCAST_RUNTIME_CAPABILITY,
   BROWSER_TAB_CREATE_KNOWN_ID_RUNTIME_CAPABILITY,

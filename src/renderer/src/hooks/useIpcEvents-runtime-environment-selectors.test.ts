@@ -247,6 +247,32 @@ describe('createRuntimeEnvironmentStoreSyncSubscriber', () => {
   })
 })
 
+describe('getRuntimeClientEventEnvironmentIds', () => {
+  it('skips relay-row environments: they are mirrors and their gateway owns the wiring', () => {
+    const state = makeRuntimeEnvironmentStoreState({
+      environments: [
+        { id: 'env-a', createdAt: 1 },
+        { id: 'relay-env-b', createdAt: 2 }
+      ],
+      statuses: new Map([
+        ['env-a', { status: { runtimeId: 'peer-a' }, checkedAt: 1 }],
+        ['relay-env-b', { status: { runtimeId: 'peer-b' }, checkedAt: 1 }]
+      ]),
+      activeEnvironmentId: 'relay-env-b'
+    })
+    expect(getRuntimeClientEventEnvironmentIds(state)).toEqual(['env-a'])
+  })
+
+  it('keeps a non-relay active environment subscribed', () => {
+    const state = makeRuntimeEnvironmentStoreState({
+      environments: [],
+      statuses: new Map(),
+      activeEnvironmentId: 'env-a'
+    })
+    expect(getRuntimeClientEventEnvironmentIds(state)).toEqual(['env-a'])
+  })
+})
+
 describe('invalidateRuntimeClientEventReplay', () => {
   it('explicitly syncs an advanced SSH generation when stale publication is a no-op and hydration fails', async () => {
     const sshStateReference = new Map()

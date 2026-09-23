@@ -359,6 +359,78 @@ describe('callDownstreamEnvironment', () => {
     }
   })
 
+  it('forwards the milestone-2 landing calls verbatim: a commit and a worktree removal reach the hosted box', async () => {
+    const cases: [string, Record<string, unknown>][] = [
+      ['git.commit', { worktree: 'wta', message: 'fix: keep the relay fence honest' }],
+      ['worktree.rm', { name: 'wta', hostId: 'local' }]
+    ]
+
+    for (const [method, params] of cases) {
+      const inner = {
+        id: 'r1',
+        ok: true,
+        result: {},
+        _meta: { runtimeId: 'runtime-c1' }
+      }
+      callRuntimeEnvironmentMock.mockResolvedValueOnce({
+        id: 'rpc-1',
+        ok: true,
+        result: { response: inner, _meta: { gatewayEnvironmentId: DOWNSTREAM_GATEWAY_ENV_ID } },
+        _meta: { runtimeId: 'runtime-gateway' }
+      })
+
+      const response = await callDownstreamEnvironment(
+        userDataPath,
+        resolveEnvironment(userDataPath, downstreamEnvironmentId(DOWNSTREAM_GATEWAY_ENV_ID)),
+        { method, params }
+      )
+
+      expect(response).toEqual(inner)
+      const dial = callRuntimeEnvironmentMock.mock.lastCall!
+      expect(dial[3]).toEqual({
+        gatewayEnvironmentId: DOWNSTREAM_GATEWAY_ENV_ID,
+        method,
+        params
+      })
+    }
+  })
+
+  it('forwards the follow-up operate calls verbatim: reviewer removal and a workspace port kill', async () => {
+    const cases: [string, Record<string, unknown>][] = [
+      ['github.removePRReviewers', { repo: 'team/app', prNumber: 42, reviewers: ['ghost'] }],
+      ['workspacePorts.kill', { pid: 1234, port: 3000 }]
+    ]
+
+    for (const [method, params] of cases) {
+      const inner = {
+        id: 'r1',
+        ok: true,
+        result: {},
+        _meta: { runtimeId: 'runtime-c1' }
+      }
+      callRuntimeEnvironmentMock.mockResolvedValueOnce({
+        id: 'rpc-1',
+        ok: true,
+        result: { response: inner, _meta: { gatewayEnvironmentId: DOWNSTREAM_GATEWAY_ENV_ID } },
+        _meta: { runtimeId: 'runtime-gateway' }
+      })
+
+      const response = await callDownstreamEnvironment(
+        userDataPath,
+        resolveEnvironment(userDataPath, downstreamEnvironmentId(DOWNSTREAM_GATEWAY_ENV_ID)),
+        { method, params }
+      )
+
+      expect(response).toEqual(inner)
+      const dial = callRuntimeEnvironmentMock.mock.lastCall!
+      expect(dial[3]).toEqual({
+        gatewayEnvironmentId: DOWNSTREAM_GATEWAY_ENV_ID,
+        method,
+        params
+      })
+    }
+  })
+
   it('still refuses the binary stream methods on the call vehicle: they ride downstream.subscribe', async () => {
     for (const method of REMOTE_RUNTIME_RELAY_ATTACH_STREAM_METHODS) {
       const response = await callDownstreamEnvironment(

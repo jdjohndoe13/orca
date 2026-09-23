@@ -10,7 +10,7 @@ import {
   RUNTIME_ENVIRONMENT_RELAY_ATTACH_SUBSCRIBE_METHOD,
   isRelayForwardableRuntimeMethod,
   isRelayForwardableRuntimeStreamMethod,
-  runtimeEnvironmentRelayPhase1AllowlistMessage,
+  relayForbiddenError,
   RuntimeEnvironmentDownstreamListParamsSchema,
   RuntimeEnvironmentGatewayCallParamsSchema,
   RuntimeEnvironmentGatewayCallResultSchema,
@@ -19,6 +19,8 @@ import {
   type RuntimeEnvironmentGatewayCallResult,
   type RuntimeEnvironmentGatewaySubscribeParams
 } from '../../../../shared/rpc-contract/runtime-environment-relay-params'
+import { downstreamEnvironmentId } from '../../../../shared/runtime-environment-downstream-rows'
+import { rewriteRelayCallParams } from './runtime-environment-relay-param-rewrite'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
 import { RUNTIME_CAPABILITIES } from '../../../../shared/protocol-version'
 import type { RuntimeHostStatusSnapshot } from '../../../../shared/runtime-host-status'
@@ -110,16 +112,25 @@ async function relayRuntimeEnvironmentCall(
   // Why the allowlist gates before the store lookup: junk ids carrying junk
   // methods must not probe which environments exist for free.
   if (!isRelayForwardableRuntimeMethod(params.method)) {
-    throw relayPhase1ForbiddenError(params.method)
+    throw relayForbiddenError(params.method)
   }
   const userDataPath = getAppEnvironment().getPath('userData')
   const environment = resolveGatewayEnvironment(userDataPath, params)
+  // Why that relay row id: the guest's renderer embeds ITS OWN row id
+  // (`relay-<gatewayEnvironmentId>`) inside runtime host ids, so the gateway
+  // reconstructs that exact spelling for the self-match. Outside the dial's
+  // try: a host-id refusal is a fence, not a transport hiccup.
+  const forwardedParams = rewriteRelayCallParams(
+    params.method,
+    params.params,
+    downstreamEnvironmentId(params.gatewayEnvironmentId)
+  )
   let response: RuntimeRpcResponse<unknown>
   try {
     response = await relayEnvironmentTransport(ctx).call(
       environment.id,
       params.method,
-      params.params
+      forwardedParams
     )
   } catch (error) {
     response = relayUnavailableResponse(params.method, error)
@@ -193,7 +204,19 @@ async function relayRuntimeEnvironmentSubscribe(
   // Same pre-store gate as the call method: a junk method on a junk id must not
   // probe which environments exist for free.
   if (!isRelayForwardableRuntimeStreamMethod(params.method)) {
-    throw relayPhase1ForbiddenError(params.method)
+    throw relayForbiddenError(params.method)
+  }
+  // Assert-style guard on the stream vehicle: subscribe params carry no host
+  // ids — the bridge forwards them verbatim, so a rewritten copy means a
+  // smuggled self-row runtime host id, and a foreign one throws inside.
+  if (
+    rewriteRelayCallParams(
+      params.method,
+      params.params,
+      downstreamEnvironmentId(params.gatewayEnvironmentId)
+    ) !== params.params
+  ) {
+    throw relayForbiddenError(params.method)
   }
   const { runtime, connectionId, sendBinary, registerBinaryMessageHandler, signal } = ctx
   if (!connectionId || !sendBinary || !registerBinaryMessageHandler) {
@@ -302,10 +325,4 @@ function assertRelayScopeClient(ctx: RpcContext): void {
       code: 'forbidden'
     })
   }
-}
-
-function relayPhase1ForbiddenError(method: string): Error {
-  return Object.assign(new Error(runtimeEnvironmentRelayPhase1AllowlistMessage(method)), {
-    code: 'forbidden'
-  })
 }

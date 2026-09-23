@@ -1,18 +1,15 @@
 import type { PairingOffer } from './pairing'
 import { readEnvironmentStore, writeEnvironmentStore } from './runtime-environment-store-file'
+import { downstreamEnvironmentId } from './runtime-environment-relay-row-ids'
 import {
   createEnvironmentFromPairingOffer,
   type KnownRuntimeEnvironment
 } from './runtime-environments'
 
-// Relay view rows (Phase 1): one durable row per downstream environment, dialed
-// only through its gateway. The id is deterministic in the gateway store's own id
-// for that environment, so a re-sync updates instead of duplicating — and a host
-// reachable through two client-side routes merges into one row, the last pairing
-// offer having won.
-export function downstreamEnvironmentId(gatewayEnvironmentId: string): string {
-  return `relay-${gatewayEnvironmentId}`
-}
+// Why re-exported: guests' main process reads relay row ids from this module's
+// surfaces; the ids themselves live in the fs-free module so the renderer can
+// import them too.
+export { downstreamEnvironmentId }
 
 export function upsertDownstreamEnvironment(
   userDataPath: string,

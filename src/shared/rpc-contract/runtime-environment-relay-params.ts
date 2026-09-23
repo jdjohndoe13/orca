@@ -41,14 +41,20 @@ export const REMOTE_RUNTIME_RELAY_PHASE1_METHODS = [
 export type RemoteRuntimeRelayPhase1Method = (typeof REMOTE_RUNTIME_RELAY_PHASE1_METHODS)[number]
 
 /**
- * Phase-2 attached-operation methods: creating and activating terminals and
- * driving structured agent sessions on the upstream host, dialed via
- * `runtimeEnvironment.call`. Deliberately absent: `agentSession.list` — no such
- * method is registered anywhere — and other chat/session mutations that Phase 2
- * does not attach. `terminal.send` / `terminal.updateViewport` / `terminal.close`
- * are the pty-transport's write tick, resize pause fallback, and pane retirement —
- * without them an acknowledged write or guest-initiated close surfaces a refusal
- * instead of reaching the upstream PTY.
+ * Phase-2 attached-operation methods, dialed via `runtimeEnvironment.call`.
+ * Milestone 2 widens the attached surface from terminals/agent-session streams
+ * to the full operate surface a relayed workspace needs: git source control and
+ * PR landing plus hosted review creation (GitHub + GitLab), worktree/repo
+ * management, the files read side, folder workspace lifecycle, structured
+ * agent-session lifecycle, terminal management (including the worktree-sleep
+ * shutdown), workspace port scans, and pairing preflights. Deliberately absent:
+ * `agentSession.list` — no such method is registered anywhere — and anything
+ * else not enumerated here. `terminal.send` / `terminal.updateViewport` /
+ * `terminal.close` are the pty-transport's write tick, resize pause fallback,
+ * and pane retirement — without them an acknowledged write or guest-initiated
+ * close surfaces a refusal instead of reaching the upstream PTY.
+ * Host-targeted calls carry host ids; the gateway rewrites them
+ * (runtime-environment-relay-param-rewrite).
  */
 export const REMOTE_RUNTIME_RELAY_ATTACH_OPERATE_METHODS = [
   'session.tabs.createTerminal',
@@ -66,7 +72,168 @@ export const REMOTE_RUNTIME_RELAY_ATTACH_OPERATE_METHODS = [
   'agentSession.subscribeStatus',
   'agentSession.subscribeTurnCompletions',
   'notifications.subscribe',
-  'files.watch'
+  'files.watch',
+  'git.status',
+  'git.history',
+  'git.diff',
+  'git.commitDiff',
+  'git.commitCompare',
+  'git.branchCompare',
+  'git.branchDiff',
+  'git.stage',
+  'git.unstage',
+  'git.bulkStage',
+  'git.bulkUnstage',
+  'git.discard',
+  'git.bulkDiscard',
+  'git.commit',
+  'git.checkout',
+  'git.checkIgnored',
+  'git.submoduleStatus',
+  'git.upstreamStatus',
+  'git.fetch',
+  'git.pull',
+  'git.push',
+  'git.fastForward',
+  'git.rebaseFromBase',
+  'git.abortMerge',
+  'git.abortRebase',
+  'git.conflictOperation',
+  'git.localBranches',
+  'git.remoteFileUrl',
+  'git.remoteCommitUrl',
+  'git.generateCommitMessage',
+  'git.generatePullRequestFields',
+  'git.cancelGenerateCommitMessage',
+  'git.cancelGeneratePullRequestFields',
+  'git.discoverCommitMessageModels',
+  'git.forkSync',
+  'worktree.show',
+  'worktree.ps',
+  'worktree.activate',
+  'worktree.create',
+  'worktree.rm',
+  'worktree.forceDeleteBranch',
+  'worktree.resolvePrBase',
+  'worktree.resolveMrBase',
+  'worktree.set',
+  'worktree.persistSortOrder',
+  'worktree.prefetchCreateBase',
+  'worktree.teardownMissingTerminals',
+  'worktree.listRetiredNames',
+  'repo.gitAvailable',
+  'repo.show',
+  'repo.searchRefs',
+  'repo.baseRefDefault',
+  'repo.setBaseRef',
+  'repo.sparsePresets',
+  'repo.saveSparsePreset',
+  'repo.hooksCheck',
+  'files.read',
+  'files.readPreview',
+  'files.readChunk',
+  'files.readDir',
+  'files.list',
+  'files.listAll',
+  'files.search',
+  'files.searchPaths',
+  'files.stat',
+  'files.pathsExist',
+  'files.readDocPreview',
+  'files.resolveTerminalPath',
+  'files.readTerminalArtifact',
+  'files.readTerminalArtifactPreview',
+  'folderWorkspace.create',
+  'folderWorkspace.update',
+  'folderWorkspace.delete',
+  'agentSession.cancel',
+  'agentSession.send',
+  'agentSession.close',
+  'agentSession.options',
+  'agentSession.setOption',
+  'agentSession.commands',
+  'agentSession.conversationCommand',
+  'agentSession.respondToApproval',
+  'agentSession.respondToQuestion',
+  'agentSession.hold',
+  'agentSession.release',
+  'agentSession.history',
+  'agentSession.handoffStatus',
+  'agentSession.requestHandoff',
+  'agentSession.restartContinue',
+  'agentSession.restartResumable',
+  'agentSession.restartResumableDismiss',
+  'agentSession.restartResume',
+  'agentSession.reveal',
+  'agentSession.rewind',
+  'agentSession.unsubscribe',
+  'agentSession.ensure',
+  'terminal.list',
+  'terminal.create',
+  'terminal.split',
+  'terminal.focus',
+  'terminal.wait',
+  'terminal.isRunningAgent',
+  'terminal.agentStatus',
+  'terminal.inspectProcess',
+  'terminal.resolvePane',
+  'terminal.resolveIdentity',
+  'terminal.restoreFit',
+  'terminal.getAutoRestoreFit',
+  'terminal.setAutoRestoreFit',
+  'terminal.adoptOrphans',
+  'terminal.stopExact',
+  'terminal.sleep',
+  'terminal.closeTab',
+  'terminal.clearBuffer',
+  'terminal.recoverPane',
+  'session.tabs.close',
+  'session.tabs.closeLifecycle',
+  'session.tabs.setTabProps',
+  'session.tabs.updatePaneLayout',
+  'github.repoSlug',
+  'github.workItem',
+  'github.workItemDetails',
+  'github.prForBranch',
+  'github.prChecks',
+  'github.prCheckDetails',
+  'github.prComments',
+  'github.prFileContents',
+  'github.listLabels',
+  'github.listAssignableUsers',
+  'github.validateAccountBinding',
+  'github.rateLimit',
+  'github.mergePR',
+  'github.setPRAutoMerge',
+  'github.updatePRState',
+  'github.updatePRTitle',
+  'github.markPRReadyForReview',
+  'github.requestPRReviewers',
+  'github.removePRReviewers',
+  'github.addIssueComment',
+  'github.addPRReviewComment',
+  'github.addPRReviewCommentReply',
+  'github.resolveReviewThread',
+  'github.setPRFileViewed',
+  'github.repoUpstream',
+  'gitlab.listMRs',
+  'gitlab.workItemByPath',
+  'gitlab.workItemDetails',
+  'gitlab.mergeMR',
+  'gitlab.updateMR',
+  'gitlab.updateMRState',
+  'gitlab.jobTrace',
+  'gitlab.resolveMRDiscussion',
+  'gitlab.rateLimit',
+  'hostedReview.getCreationEligibility',
+  'hostedReview.create',
+  'hostedReview.createStacked',
+  'hostedReview.forBranch',
+  'workspacePorts.scan',
+  'workspacePorts.kill',
+  'preflight.check',
+  'preflight.detectAgents',
+  'skills.discover'
 ] as const
 
 export type RemoteRuntimeRelayAttachOperateMethod =
@@ -139,6 +306,15 @@ export function runtimeEnvironmentRelayPhase1AllowlistMessage(method: string): s
       ', '
     )}.`
   ].join(' ')
+}
+
+/** Every relay refusal throws this shape (message from the one wording builder,
+ *  code `forbidden` for the renderer's classifier), always before a transport
+ *  dial. */
+export function relayForbiddenError(method: string): Error {
+  return Object.assign(new Error(runtimeEnvironmentRelayPhase1AllowlistMessage(method)), {
+    code: 'forbidden'
+  })
 }
 
 const RuntimeEnvironmentRelayMethodSchema = requiredString('Missing upstream method')

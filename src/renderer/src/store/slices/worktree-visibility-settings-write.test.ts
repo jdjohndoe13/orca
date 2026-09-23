@@ -218,3 +218,47 @@ it('publishes successful local fields when the paired runtime write fails', asyn
     worktreeVisibilityDefaults: { external: 'show' }
   })
 })
+
+it('falls back to local-only visibility defaults on a relay row without dialing settings.update', async () => {
+  const relayCall = vi.fn()
+  vi.stubGlobal('window', {
+    api: {
+      settings: {
+        set: vi.fn().mockResolvedValue({
+          activeRuntimeEnvironmentId: 'relay-env-1',
+          worktreeVisibilityDefaults: { external: 'hide' }
+        })
+      },
+      runtimeEnvironments: {
+        call: relayCall
+      }
+    }
+  })
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: fixture satisfies the visibility gate, which reads only activeRuntimeEnvironmentId here.
+  const currentSettings = {
+    activeRuntimeEnvironmentId: 'relay-env-1',
+    worktreeVisibilityDefaults: { external: 'show' }
+  } as GlobalSettings
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: fixture satisfies the two store fields this write path publishes and reads.
+  let state = {
+    settings: currentSettings,
+    worktreeVisibilityDefaultsByHost: {}
+  } as unknown as AppState
+
+  await persistVisibilityAwareSettings({
+    normalizedUpdates: { worktreeVisibilityDefaults: { external: 'hide' } },
+    currentSettings,
+    supportedRuntimeEnvironmentId: 'relay-env-1',
+    set: (updater) => {
+      state = { ...state, ...updater(state) }
+    }
+  })
+
+  // The mirror row has no settings.update of its own: the value persists
+  // client-side on the row's host key, and no runtime dial happens.
+  expect(relayCall).not.toHaveBeenCalled()
+  expect(state.settings?.worktreeVisibilityDefaults).toEqual({ external: 'hide' })
+  expect(state.worktreeVisibilityDefaultsByHost['runtime:relay-env-1']).toEqual({
+    external: 'hide'
+  })
+})

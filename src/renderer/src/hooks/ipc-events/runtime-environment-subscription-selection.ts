@@ -5,6 +5,7 @@ import {
 } from '@/runtime/runtime-host-connection-state'
 import { getEnvironmentSshStateGeneration } from '@/store/slices/runtime-environment-ssh'
 import { getRuntimeEnvironmentConnectionGeneration } from '@/store/slices/runtime-status'
+import { isRelayDownstreamEnvironmentId } from '../../../../shared/runtime-environment-relay-row-ids'
 import type { AppState } from '../../store/types'
 
 export type RuntimeEnvironmentStoreSyncState = Pick<
@@ -21,11 +22,16 @@ export function getRuntimeClientEventEnvironmentIds(
 ): string[] {
   const ids = new Set<string>()
   const activeEnvironmentId = getActiveRuntimeEnvironmentId(state)
-  if (activeEnvironmentId) {
+  if (activeEnvironmentId && !isRelayDownstreamEnvironmentId(activeEnvironmentId)) {
     ids.add(activeEnvironmentId)
   }
   for (const environment of state.runtimeEnvironments ?? []) {
-    if (isRuntimeHostStillInContact(state, environment.id)) {
+    // Why: relay rows are mirrors — `runtimeEnvironment.clientEvents` rides the
+    // gateway's own wiring upstream, so no client-event subscription here.
+    if (
+      !isRelayDownstreamEnvironmentId(environment.id) &&
+      isRuntimeHostStillInContact(state, environment.id)
+    ) {
       ids.add(environment.id)
     }
   }
