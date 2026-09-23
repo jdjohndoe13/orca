@@ -11,16 +11,24 @@ export const RUNTIME_ENVIRONMENT_RELAY_METHOD = 'runtimeEnvironment.call'
 export const RUNTIME_ENVIRONMENT_RELAY_DOWNSTREAM_LIST_METHOD = 'runtimeEnvironment.downstream.list'
 
 /**
- * Phase-1 forwardable reads. The gateway answers everything else with
- * `forbidden` and forwards nothing upstream, so extending the relay surface is
- * an edit to this list — never a new client call pattern.
+ * Phase-1 forwardable reads: a read-only view of repos, projects, groups,
+ * folder workspaces, worktrees, lineage, and folder path status (the reads the
+ * relayed Projects tree needs to expand). The gateway answers everything else
+ * with `forbidden` and forwards nothing upstream, so extending the relay
+ * surface is an edit to this list — never a new client call pattern. Still no
+ * subscriptions, no streaming, no mutations.
  */
 export const REMOTE_RUNTIME_RELAY_PHASE1_METHODS = [
   'status.get',
   'repo.list',
   'project.list',
   'projectHostSetup.list',
-  'projectGroup.list'
+  'projectGroup.list',
+  'worktree.detectedList',
+  'worktree.list',
+  'worktree.lineageList',
+  'folderWorkspace.list',
+  'folderWorkspace.getPathStatus'
 ] as const
 
 export type RemoteRuntimeRelayPhase1Method = (typeof REMOTE_RUNTIME_RELAY_PHASE1_METHODS)[number]
@@ -31,9 +39,14 @@ export function isRemoteRuntimeRelayPhase1Method(
   return REMOTE_RUNTIME_RELAY_PHASE1_METHODS.some((allowed) => allowed === method)
 }
 
+// Stable anchor for refusal classifiers (renderer toast, tests): the tail of
+// the message may change with the list, this prefix and the spacing after it
+// may not without invalidating every matcher across app versions.
+export const REMOTE_RUNTIME_RELAY_REFUSAL_PREFIX = 'Runtime relay does not forward'
+
 /** One wording for both refusal fences (gateway dispatch and the local bridge). */
 export function runtimeEnvironmentRelayPhase1AllowlistMessage(method: string): string {
-  return `Runtime relay does not forward ${method}. Allowed (Phase 1): ${REMOTE_RUNTIME_RELAY_PHASE1_METHODS.join(
+  return `${REMOTE_RUNTIME_RELAY_REFUSAL_PREFIX} ${method}. Allowed (Phase 1): ${REMOTE_RUNTIME_RELAY_PHASE1_METHODS.join(
     ', '
   )}.`
 }

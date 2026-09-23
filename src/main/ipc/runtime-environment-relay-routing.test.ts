@@ -9,7 +9,10 @@ vi.mock('./runtime-environment-transport-routing', () => ({
 }))
 
 import { encodePairingOffer } from '../../shared/pairing'
-import { RUNTIME_ENVIRONMENT_RELAY_METHOD } from '../../shared/rpc-contract/runtime-environment-relay-params'
+import {
+  RUNTIME_ENVIRONMENT_RELAY_METHOD,
+  runtimeEnvironmentRelayPhase1AllowlistMessage
+} from '../../shared/rpc-contract/runtime-environment-relay-params'
 import {
   downstreamEnvironmentId,
   upsertDownstreamEnvironment
@@ -32,6 +35,15 @@ function pairingCode(endpoint = 'ws://10.0.0.1:6768'): string {
 }
 
 const DOWNSTREAM_GATEWAY_ENV_ID = 'env-web-target'
+
+// The five reads this extension adds so a relayed Projects tree can expand below its folder rows.
+const PHASE1_TREE_READS = [
+  'worktree.detectedList',
+  'worktree.list',
+  'worktree.lineageList',
+  'folderWorkspace.list',
+  'folderWorkspace.getPathStatus'
+] as const
 
 function downstreamRow(userDataPath: string): {
   id: string
@@ -147,10 +159,45 @@ describe('callDownstreamEnvironment', () => {
 
     expect(response).toMatchObject({
       ok: false,
-      error: { code: 'forbidden' },
+      error: {
+        code: 'forbidden',
+        message: runtimeEnvironmentRelayPhase1AllowlistMessage('terminal.streamMakeCoffee')
+      },
       _meta: { runtimeId: null }
     })
     expect(callRuntimeEnvironmentMock).not.toHaveBeenCalled()
+  })
+
+  it('dials the phase-1 tree reads through the relay instead of refusing them locally', async () => {
+    for (const method of PHASE1_TREE_READS) {
+      const inner = {
+        id: 'r1',
+        ok: true,
+        result: {},
+        _meta: { runtimeId: 'runtime-c1' }
+      }
+      callRuntimeEnvironmentMock.mockResolvedValue({
+        id: 'rpc-1',
+        ok: true,
+        result: { response: inner, _meta: { gatewayEnvironmentId: DOWNSTREAM_GATEWAY_ENV_ID } },
+        _meta: { runtimeId: 'runtime-gateway' }
+      })
+
+      const response = await callDownstreamEnvironment(
+        userDataPath,
+        resolveEnvironment(userDataPath, downstreamEnvironmentId(DOWNSTREAM_GATEWAY_ENV_ID)),
+        { method }
+      )
+
+      expect(response).toEqual(inner)
+      const dial = callRuntimeEnvironmentMock.mock.lastCall!
+      expect(dial[1]).toBe(downstreamEnvironmentId(DOWNSTREAM_GATEWAY_ENV_ID))
+      expect(dial[2]).toBe(RUNTIME_ENVIRONMENT_RELAY_METHOD)
+      expect(dial[3]).toEqual({
+        gatewayEnvironmentId: DOWNSTREAM_GATEWAY_ENV_ID,
+        method
+      })
+    }
   })
 
   it('surfaces gateway-side failures as-is (gateway stays the truthful identity)', async () => {

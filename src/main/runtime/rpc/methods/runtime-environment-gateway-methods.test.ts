@@ -7,7 +7,8 @@ import {
   RUNTIME_ENVIRONMENT_RELAY_DOWNSTREAM_LIST_METHOD,
   RUNTIME_ENVIRONMENT_RELAY_METHOD,
   RuntimeEnvironmentDownstreamListParamsSchema,
-  RuntimeEnvironmentGatewayCallParamsSchema
+  RuntimeEnvironmentGatewayCallParamsSchema,
+  runtimeEnvironmentRelayPhase1AllowlistMessage
 } from '../../../../shared/rpc-contract/runtime-environment-relay-params'
 import type { RuntimeHostStatusSnapshot } from '../../../../shared/runtime-host-status'
 import { encodePairingOffer } from '../../../../shared/pairing'
@@ -36,6 +37,15 @@ function pairingCode(endpoint = 'ws://10.0.0.1:6768'): string {
     publicKeyB64: Buffer.from(new Uint8Array(32).fill(1)).toString('base64')
   })
 }
+
+// The five reads this extension adds so a relayed Projects tree can expand below its folder rows.
+const PHASE1_TREE_READS = [
+  'worktree.detectedList',
+  'worktree.list',
+  'worktree.lineageList',
+  'folderWorkspace.list',
+  'folderWorkspace.getPathStatus'
+] as const
 
 function ctxFixture(
   transport: OrchestrationEnvironmentTransport | null,
@@ -281,6 +291,42 @@ describe('runtime environment gateway methods', () => {
       expect(result.response).toEqual(innerFailure)
     })
 
+    it('forwards the phase-1 tree reads instead of refusing them, so the Projects tree can expand', async () => {
+      const gateway = addEnvironmentFromPairingCode(userDataPath, {
+        name: 'gateway box',
+        pairingCode: pairingCode('ws://10.0.0.1:6768')
+      })
+
+      for (const method of PHASE1_TREE_READS) {
+        const inner: RuntimeRpcResponse<unknown> = {
+          id: 'req-1',
+          ok: true,
+          result: {},
+          _meta: { runtimeId: 'runtime-upstream' }
+        }
+        const transport: OrchestrationEnvironmentTransport = {
+          resolve: () => {
+            throw new Error('not used by this method')
+          },
+          call: vi.fn(async () => inner)
+        }
+
+        const result = await callMethod.handler(
+          RuntimeEnvironmentGatewayCallParamsSchema.parse({
+            gatewayEnvironmentId: gateway.id,
+            method
+          }),
+          ctxFixture(transport)
+        )
+
+        expect(result).toEqual({
+          response: inner,
+          _meta: { gatewayEnvironmentId: gateway.id }
+        })
+        expect(transport.call).toHaveBeenCalledWith(gateway.id, method, undefined)
+      }
+    })
+
     it('refuses methods outside the phase-1 allowlist without dialing, even unknown spellings', async () => {
       addEnvironmentFromPairingCode(userDataPath, {
         name: 'gateway box',
@@ -295,7 +341,10 @@ describe('runtime environment gateway methods', () => {
           }),
           ctxFixture(idleTransport())
         )
-      ).rejects.toMatchObject({ code: 'forbidden' })
+      ).rejects.toMatchObject({
+        code: 'forbidden',
+        message: runtimeEnvironmentRelayPhase1AllowlistMessage('terminal.streamMakeCoffee')
+      })
     })
 
     it('refuses an unknown gatewayEnvironmentId as invalid argument', async () => {
