@@ -245,7 +245,8 @@ export function appendWorktreeRows(
  *  grouped-lane and flat emitters so their rows cannot diverge. */
 export function buildFolderWorkspaceRow(
   pair: RenderableFolderWorkspace,
-  groupDepth: number
+  groupDepth: number,
+  hostContext?: NoticeHostContext
 ): FolderWorkspaceRow {
   return {
     type: 'folder-workspace',
@@ -253,6 +254,9 @@ export function buildFolderWorkspaceRow(
     folderWorkspace: pair.folderWorkspace,
     projectGroup: pair.projectGroup,
     depth: 0,
-    groupDepth
+    groupDepth,
+    ...(hostContext
+      ? { hostContextLabel: hostContext.label, hostContextHostId: hostContext.hostId }
+      : {})
   }
 }

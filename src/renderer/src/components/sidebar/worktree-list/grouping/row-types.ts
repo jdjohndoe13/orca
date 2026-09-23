@@ -92,6 +92,10 @@ export type FolderWorkspaceRow = {
   projectGroup: ProjectGroup
   depth: number
   groupDepth: number
+  /** Set only when the visible workspace universe spans more than one host. */
+  hostContextLabel?: string
+  /** Carried beside the label so the row's host id stays inspectable. */
+  hostContextHostId?: ExecutionHostId
 }
 
 /** Minimal shape buildRows needs for an in-flight create. Deliberately not the

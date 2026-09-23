@@ -11,7 +11,12 @@ import {
   endWebRuntimeWakeTerminalRespawn
 } from '@/runtime/web-runtime-wake-terminal-respawn'
 import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
-import type { WorktreeStartupPayload } from '@/lib/worktree-startup-payload'
+import {
+  draftViewModeProps,
+  resolveStartupLaunchDraftText,
+  type WorktreeStartupPayload
+} from '@/lib/worktree-startup-payload'
+import { notifyRuntimeRelayForbiddenMessage } from '@/store/slices/worktrees/listing/runtime-scope-forbidden-toast'
 import type { TuiAgent } from '../../../shared/tui-agent'
 import { toast } from 'sonner'
 import { shouldAutoCreateInitialTerminal } from '@/components/terminal/initial-terminal'
@@ -110,9 +115,13 @@ export function ensureWebRuntimeWorktreeTerminalAfterWake(
   })
     .then((outcome) => {
       if (outcome.status === 'failed') {
-        toast.error(outcome.message, {
-          id: `web-runtime-worktree-terminal:${runtimeEnvironmentId}:${worktreeId}`
-        })
+        // Why: a view-only relay refusal shows one friendly tagline instead of
+        // the raw allowlist string; the toast id keeps repeats collapsed.
+        if (!notifyRuntimeRelayForbiddenMessage(outcome.message)) {
+          toast.error(outcome.message, {
+            id: `web-runtime-worktree-terminal:${runtimeEnvironmentId}:${worktreeId}`
+          })
+        }
       }
     })
     .finally(() => {

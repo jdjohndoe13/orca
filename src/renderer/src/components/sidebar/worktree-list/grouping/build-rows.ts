@@ -16,6 +16,7 @@ import type { SectionAppendContext } from './group-sections'
 import {
   getLaneHostWorktreeCounts,
   getLaneHostWorktreeIds,
+  getMixedFolderWorkspaceHostContextLabels,
   getMixedWorktreeHostContextLabels,
   getNoticeHostContextLabels
 } from './host-labels'
@@ -125,6 +126,15 @@ export function buildRows(
     projectIndex,
     hostLabelById
   )
+  // Merged-view parity with worktree cards: folder workspaces get the same
+  // "which host" chip, decided once for the whole build here.
+  const folderWorkspaceHostContextLabels = getMixedFolderWorkspaceHostContextLabels(
+    renderableFolderWorkspaces,
+    worktrees,
+    repoMap,
+    hostLabelById,
+    defaultHostId
+  )
   const renderedNaturalAnchorRepoIds = getRenderedNaturalAnchorRepoIds({
     groupBy,
     worktrees: naturalWorktrees,
@@ -188,7 +198,13 @@ export function buildRows(
         for (const pair of [...renderableFolderWorkspaces].sort((left, right) =>
           compareFolderWorkspacesForDisplay(left.folderWorkspace, right.folderWorkspace)
         )) {
-          result.push(buildFolderWorkspaceRow(pair, 0))
+          result.push(
+            buildFolderWorkspaceRow(
+              pair,
+              0,
+              folderWorkspaceHostContextLabels?.get(pair.folderWorkspace.id)
+            )
+          )
         }
       }
     }
@@ -225,6 +241,7 @@ export function buildRows(
     newExternalWorktreesInboxByRepo,
     pendingByRepo,
     mixedWorktreeHostContextLabels,
+    folderWorkspaceHostContextLabels,
     noticeHostContextLabelByRepoId,
     lineageById,
     worktreeMap,

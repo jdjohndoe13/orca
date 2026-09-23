@@ -18,15 +18,30 @@ export function isRemoteRuntimeRelayForbiddenError(error: unknown): error is Run
   )
 }
 
+function showRuntimeRelayForbiddenToast(): void {
+  toast.error(
+    translate(
+      'auto.store.slices.worktrees.runtimeRelayForbiddenTitle',
+      "That action isn't available on a view-only relay connection yet."
+    ),
+    { id: RUNTIME_SCOPE_FORBIDDEN_TOAST_ID }
+  )
+}
+
+/** Message-level variant for callers that already unboxed an RPC failure into
+ *  a plain string (e.g. a terminal-create outcome); the allowlist wording is
+ *  the only stable marker there. The sonner toast id dedupes repeats. */
+export function notifyRuntimeRelayForbiddenMessage(message: string): boolean {
+  if (!message.startsWith(REMOTE_RUNTIME_RELAY_REFUSAL_PREFIX)) {
+    return false
+  }
+  showRuntimeRelayForbiddenToast()
+  return true
+}
+
 export function notifyRuntimeScopeForbiddenIfNeeded(error: unknown): boolean {
   if (isRemoteRuntimeRelayForbiddenError(error)) {
-    toast.error(
-      translate(
-        'auto.store.slices.worktrees.runtimeRelayForbiddenTitle',
-        "That action isn't available on a view-only relay connection yet."
-      ),
-      { id: RUNTIME_SCOPE_FORBIDDEN_TOAST_ID }
-    )
+    showRuntimeRelayForbiddenToast()
     return true
   }
   if (!isRuntimeScopeForbiddenError(error)) {

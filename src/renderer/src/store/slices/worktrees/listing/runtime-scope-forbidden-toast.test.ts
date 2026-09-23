@@ -8,6 +8,7 @@ import { runtimeEnvironmentRelayPhase1AllowlistMessage } from '../../../../../..
 import { RuntimeRpcCallError } from '../../../../runtime/runtime-rpc-result'
 import {
   notifyRuntimeScopeForbiddenIfNeeded,
+  notifyRuntimeRelayForbiddenMessage,
   isRemoteRuntimeRelayForbiddenError
 } from './runtime-scope-forbidden-toast'
 
@@ -56,5 +57,29 @@ describe('runtime-scope forbidden toast', () => {
     toastError.mockClear()
     expect(notifyRuntimeScopeForbiddenIfNeeded(new Error('repo.list failed'))).toBe(false)
     expect(toastError).not.toHaveBeenCalled()
+  })
+
+  describe('row-activation terminal create refusals', () => {
+    it('prettifies a rejected terminal create to one friendly toast and no raw one', () => {
+      toastError.mockClear()
+      const refusal = runtimeEnvironmentRelayPhase1AllowlistMessage('session.tabs.createTerminal')
+
+      expect(notifyRuntimeRelayForbiddenMessage(refusal)).toBe(true)
+
+      // Exactly one toast, the friendly tagline, never the raw allowlist string.
+      expect(toastError).toHaveBeenCalledTimes(1)
+      expect(toastError.mock.calls[0]![0]).toBe(
+        "That action isn't available on a view-only relay connection yet."
+      )
+      expect(toastError.mock.calls[0]![1]).toEqual({ id: 'runtime-scope-forbidden' })
+      expect(toastError.mock.calls[0]![0]).not.toContain('Runtime relay does not forward')
+    })
+
+    it("leaves ordinary terminal create failures to the caller's raw toast", () => {
+      toastError.mockClear()
+
+      expect(notifyRuntimeRelayForbiddenMessage('The workspace is not connected.')).toBe(false)
+      expect(toastError).not.toHaveBeenCalled()
+    })
   })
 })

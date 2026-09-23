@@ -3,11 +3,16 @@ import { buildRows } from './build-rows'
 import { getFolderWorkspaceLaneKey } from './folder-workspace-lanes'
 import { getPRGroupKey, getPRLaneKey } from './group-keys'
 import type { Row, WorktreeGroupBy } from './row-types'
-import { repo, worktree } from '../../worktree-list-groups-test-fixtures'
+import { repo, worktree, repoMap } from '../../worktree-list-groups-test-fixtures'
+import {
+  LOCAL_EXECUTION_HOST_ID,
+  toRuntimeExecutionHostId
+} from '../../../../../../shared/execution-host'
+import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import type { FolderWorkspace } from '../../../../../../shared/folder-workspace-types'
 import type { ProjectGroup } from '../../../../../../shared/project-group-types'
 import type { Repo } from '../../../../../../shared/repo-types'
-import type { ExecutionHostId } from '../../../../../../shared/execution-host'
+import type { Worktree } from '../../../../../../shared/worktree/types'
 
 const GROUP: ProjectGroup = {
   id: 'group-1',
@@ -242,5 +247,75 @@ describe('host bookkeeping for lanes containing folder workspaces', () => {
     // ids, or the host-section fallback leaks the global id list into it.
     expect(ids?.has(SSH_HOST)).toBe(true)
     expect(ids?.get(SSH_HOST)).toEqual([])
+  })
+})
+
+describe('folder workspace rows carry the host context badge', () => {
+  const RELAY_ENVIRONMENT_ID = 'relay-2559ab63-00e6-423e-9a27-1d7c3f9b1a55'
+  const RELAY_HOST = toRuntimeExecutionHostId(RELAY_ENVIRONMENT_ID)
+
+  function buildFolderRows(
+    options: {
+      worktrees?: Worktree[]
+      folderWorkspaces?: readonly FolderWorkspace[]
+    } = {}
+  ): Extract<Row, { type: 'folder-workspace' }>[] {
+    return buildRows(
+      'none',
+      options.worktrees ?? [worktree],
+      repoMap,
+      null,
+      new Set(),
+      undefined,
+      undefined,
+      'manual',
+      {},
+      new Map((options.worktrees ?? [worktree]).map((entry) => [entry.id, entry])),
+      false,
+      undefined,
+      [GROUP],
+      new Set(),
+      new Map(),
+      new Map(),
+      [],
+      undefined,
+      options.folderWorkspaces ?? [makeFolderWorkspace()],
+      undefined,
+      LOCAL_EXECUTION_HOST_ID
+    ).filter(
+      (row): row is Extract<Row, { type: 'folder-workspace' }> => row.type === 'folder-workspace'
+    )
+  }
+
+  it('labels a downstream relay folder row in a merged worktree view', () => {
+    const rows = buildFolderRows({
+      folderWorkspaces: [makeFolderWorkspace({ executionHostId: RELAY_HOST })]
+    })
+    expect(rows[0]).toMatchObject({
+      hostContextLabel: RELAY_ENVIRONMENT_ID,
+      hostContextHostId: RELAY_HOST
+    })
+  })
+
+  it('skips the badge on a single-host install', () => {
+    const rows = buildFolderRows()
+    expect(rows[0]?.hostContextLabel).toBeUndefined()
+    expect(rows[0]?.hostContextHostId).toBeUndefined()
+  })
+
+  it('labels folder rows when only folder workspaces span hosts', () => {
+    const rows = buildFolderRows({
+      worktrees: [],
+      folderWorkspaces: [
+        makeFolderWorkspace({ id: 'fw-relay', name: 'R', executionHostId: RELAY_HOST }),
+        makeFolderWorkspace({ id: 'fw-local', name: 'L' })
+      ]
+    })
+    expect(rows.find((row) => row.folderWorkspace.id === 'fw-relay')?.hostContextHostId).toBe(
+      RELAY_HOST
+    )
+    expect(rows.find((row) => row.folderWorkspace.id === 'fw-local')?.hostContextHostId).toBe(
+      LOCAL_EXECUTION_HOST_ID
+    )
   })
 })

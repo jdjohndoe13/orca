@@ -45,6 +45,7 @@ export type SectionAppendContext = {
   newExternalWorktreesInboxByRepo: ReadonlyMap<string, NewExternalWorktreesInboxCandidate>
   pendingByRepo: ReadonlyMap<string, PendingCreationRef[]>
   mixedWorktreeHostContextLabels: Map<string, string> | undefined
+  folderWorkspaceHostContextLabels: Map<string, NoticeHostContext> | undefined
   noticeHostContextLabelByRepoId: Map<string, NoticeHostContext> | undefined
   lineageById: Record<string, WorktreeLineage>
   worktreeMap: Map<string, Worktree>
@@ -211,7 +212,13 @@ export function appendOrderedGroups(
         cyclicLineageIds
       })
       for (const pair of folderPairs) {
-        result.push(buildFolderWorkspaceRow(pair, projectGroupDepth))
+        result.push(
+          buildFolderWorkspaceRow(
+            pair,
+            projectGroupDepth,
+            ctx.folderWorkspaceHostContextLabels?.get(pair.folderWorkspace.id)
+          )
+        )
       }
     }
   }
