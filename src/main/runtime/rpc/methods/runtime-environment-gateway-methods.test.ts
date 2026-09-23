@@ -4,10 +4,12 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setAppEnvironment } from '../../../../shared/app-environment'
 import {
+  RUNTIME_ENVIRONMENT_RELAY_ATTACH_SUBSCRIBE_METHOD,
   RUNTIME_ENVIRONMENT_RELAY_DOWNSTREAM_LIST_METHOD,
   RUNTIME_ENVIRONMENT_RELAY_METHOD,
   RuntimeEnvironmentDownstreamListParamsSchema,
   RuntimeEnvironmentGatewayCallParamsSchema,
+  RuntimeEnvironmentGatewaySubscribeParamsSchema,
   runtimeEnvironmentRelayPhase1AllowlistMessage
 } from '../../../../shared/rpc-contract/runtime-environment-relay-params'
 import type { RuntimeHostStatusSnapshot } from '../../../../shared/runtime-host-status'
@@ -21,12 +23,19 @@ import type { RpcContext } from '../core'
 import {
   RUNTIME_ENVIRONMENT_GATEWAY_CALL_METHOD_DEF as callMethod,
   RUNTIME_ENVIRONMENT_GATEWAY_DOWNSTREAM_LIST_METHOD_DEF as listMethod,
+  RUNTIME_ENVIRONMENT_GATEWAY_SUBSCRIBE_METHOD_DEF as subscribeMethod,
   RUNTIME_ENVIRONMENT_GATEWAY_METHODS
 } from './runtime-environment-gateway-methods'
 
-const { statusSnapshotsMock } = vi.hoisted(() => ({ statusSnapshotsMock: vi.fn() }))
+const { statusSnapshotsMock, subscribeRuntimeEnvironmentMock } = vi.hoisted(() => ({
+  statusSnapshotsMock: vi.fn(),
+  subscribeRuntimeEnvironmentMock: vi.fn()
+}))
 vi.mock('../../../ipc/runtime-environment-request-connections', () => ({
   getRuntimeEnvironmentStatusSnapshots: statusSnapshotsMock
+}))
+vi.mock('../../../ipc/runtime-environment-transport-routing', () => ({
+  subscribeRuntimeEnvironment: subscribeRuntimeEnvironmentMock
 }))
 
 function pairingCode(endpoint = 'ws://10.0.0.1:6768'): string {
@@ -51,7 +60,7 @@ function ctxFixture(
   transport: OrchestrationEnvironmentTransport | null,
   clientKind: 'mobile' | 'runtime' = 'runtime'
 ): RpcContext {
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: only the two methods under test are reachable; each reads runtime.getRuntimeId/getOrchestrationEnvironmentTransport.
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: only the three methods under test are reachable; each reads runtime.getRuntimeId/getOrchestrationEnvironmentTransport.
   return {
     clientKind,
     runtime: {
@@ -59,6 +68,73 @@ function ctxFixture(
       getOrchestrationEnvironmentTransport: () => transport
     }
   } as unknown as RpcContext
+}
+
+type FakeSubscription = {
+  requestId: string
+  close: ReturnType<typeof vi.fn>
+  sendBinary: ReturnType<typeof vi.fn>
+}
+
+function subscribeCtxFixture(options: {
+  mobile?: boolean
+  aborted?: boolean
+  bareSocket?: boolean
+  registry: Map<string, () => void>
+  outboundBinary: Uint8Array<ArrayBufferLike>[]
+  attachBinaryHandler: (handler: (bytes: Uint8Array<ArrayBufferLike>) => void) => void
+}): RpcContext {
+  const signal = new AbortController()
+  if (options.aborted) {
+    signal.abort()
+  }
+  const hasBinaryChannel = !options.bareSocket && !options.mobile
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: fixture only satisfies the fences and passthroughs the subscribe handler reads.
+  return {
+    clientKind: options.mobile ? 'mobile' : 'runtime',
+    connectionId: Conn_ID,
+    sendBinary: hasBinaryChannel
+      ? (bytes: Uint8Array<ArrayBufferLike>) => {
+          options.outboundBinary.push(bytes)
+          return true
+        }
+      : undefined,
+    registerBinaryMessageHandler: hasBinaryChannel
+      ? (handler: (bytes: Uint8Array<ArrayBufferLike>) => void) => {
+          options.attachBinaryHandler(handler)
+          return () => {}
+        }
+      : undefined,
+    signal: signal.signal,
+    runtime: {
+      getRuntimeId: () => 'runtime-gateway',
+      getOrchestrationEnvironmentTransport: () => null,
+      registerSubscriptionCleanup: (id: string, cleanup: () => void) => {
+        options.registry.set(id, cleanup)
+      }
+    }
+  } as unknown as RpcContext
+}
+
+const Conn_ID = 'conn-1'
+
+function fakeSubscription(): FakeSubscription {
+  return {
+    requestId: 'outer-1',
+    close: vi.fn(),
+    sendBinary: vi.fn(() => true)
+  }
+}
+
+function emitCollector(): { events: unknown[]; emit: (result: unknown) => void } {
+  const events: unknown[] = []
+  return { events, emit: (result) => events.push(result) }
+}
+
+type GatewayDialCapture = {
+  method: string
+  params: unknown
+  callbacks: { onEvent: (payload: unknown) => void; onClose: () => void }
 }
 
 function snapshotFor(
@@ -100,6 +176,7 @@ describe('runtime environment gateway methods', () => {
 
   beforeEach(() => {
     statusSnapshotsMock.mockReset()
+    subscribeRuntimeEnvironmentMock.mockReset()
     userDataPath = mkdtempSync(join(tmpdir(), 'orca-gateway-methods-'))
     tempDirs.push(userDataPath)
     setAppEnvironment({
@@ -119,10 +196,11 @@ describe('runtime environment gateway methods', () => {
     }
   })
 
-  it('registers exactly the census and the forwarding call', () => {
+  it('registers exactly the census, the forwarding call, and the attached-stream bridge', () => {
     expect(RUNTIME_ENVIRONMENT_GATEWAY_METHODS.map((method) => method.name)).toEqual([
       RUNTIME_ENVIRONMENT_RELAY_DOWNSTREAM_LIST_METHOD,
-      RUNTIME_ENVIRONMENT_RELAY_METHOD
+      RUNTIME_ENVIRONMENT_RELAY_METHOD,
+      RUNTIME_ENVIRONMENT_RELAY_ATTACH_SUBSCRIBE_METHOD
     ])
   })
 
@@ -260,6 +338,55 @@ describe('runtime environment gateway methods', () => {
         _meta: { gatewayEnvironmentId: gateway.id }
       })
       expect(transport.call).toHaveBeenCalledWith(gateway.id, 'repo.list', { depth: 1 })
+    })
+
+    it('forwards the pty-transport write tick, resize fallback, and pane retirement', async () => {
+      // The unified call fence must pass terminal.send / terminal.updateViewport /
+      // terminal.close so an acked write, viewport pause fallback, and guest pane
+      // close reach the upstream PTY instead of dying as a refusal envelope.
+      const gateway = addEnvironmentFromPairingCode(userDataPath, {
+        name: 'gateway box',
+        pairingCode: pairingCode('ws://10.0.0.1:6768')
+      })
+      const cases: [string, Record<string, unknown>, unknown][] = [
+        ['terminal.send', { terminal: 'tw-1', data: '\u0003', sequence: 1 }, { send: 'queued' }],
+        [
+          'terminal.updateViewport',
+          { terminal: 'tw-1', rows: 30, cols: 120 },
+          { terminal: { handle: 'tw-1' } }
+        ],
+        ['terminal.close', { terminal: { handle: 'tw-1' } }, { close: { handle: 'tw-1' } }]
+      ]
+
+      for (const [method, params, result] of cases) {
+        const inner: RuntimeRpcResponse<unknown> = {
+          id: 'req-1',
+          ok: true,
+          result,
+          _meta: { runtimeId: 'runtime-upstream' }
+        }
+        const transport: OrchestrationEnvironmentTransport = {
+          resolve: () => {
+            throw new Error('not used by this method')
+          },
+          call: vi.fn(async () => inner)
+        }
+
+        const forwarded = await callMethod.handler(
+          RuntimeEnvironmentGatewayCallParamsSchema.parse({
+            gatewayEnvironmentId: gateway.id,
+            method,
+            params
+          }),
+          ctxFixture(transport)
+        )
+
+        expect(forwarded).toEqual({
+          response: inner,
+          _meta: { gatewayEnvironmentId: gateway.id }
+        })
+        expect(transport.call).toHaveBeenCalledWith(gateway.id, method, params)
+      }
     })
 
     it('forwards an upstream failure envelope as-is so the guest sees the real verdict', async () => {
@@ -460,6 +587,276 @@ describe('runtime environment gateway methods', () => {
           ctxFixture(null, 'mobile')
         )
       ).rejects.toMatchObject({ code: 'forbidden' })
+    })
+  })
+
+  describe('runtimeEnvironment.downstream.subscribe', () => {
+    const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
+    const noBinary = (): void => {}
+
+    function subscribeParams(gatewayEnvironmentId: string, method = 'terminal.multiplex') {
+      return RuntimeEnvironmentGatewaySubscribeParamsSchema.parse({ gatewayEnvironmentId, method })
+    }
+
+    function dialReturns(subscription: FakeSubscription, dialArgs: GatewayDialCapture[]): void {
+      subscribeRuntimeEnvironmentMock.mockImplementation(
+        (
+          _userDataPath: string,
+          _environmentId: string,
+          method: string,
+          params: unknown,
+          _timeoutMs: number | undefined,
+          callbacks: { onEvent: (payload: unknown) => void; onClose: () => void },
+          _isCurrent?: () => boolean
+        ) => {
+          dialArgs.push({ method, params, callbacks })
+          return Promise.resolve(subscription)
+        }
+      )
+    }
+
+    function pokeBinary(
+      binaryUp: ((bytes: Uint8Array<ArrayBufferLike>) => void) | null,
+      bytes: Uint8Array<ArrayBufferLike>
+    ): void {
+      if (!binaryUp) {
+        throw new Error('the bridge never registered its raw binary handler')
+      }
+      binaryUp(bytes)
+    }
+
+    const REGISTRY_KEY = `runtime-environment.downstream.subscribe:${Conn_ID}`
+
+    it('bridges terminal.multiplex: events and PTY bytes cross both directions verbatim', async () => {
+      const gateway = addEnvironmentFromPairingCode(userDataPath, {
+        name: 'gateway box',
+        pairingCode: pairingCode('ws://10.0.0.1:6768')
+      })
+      const subscription = fakeSubscription()
+      const dialArgs: GatewayDialCapture[] = []
+      dialReturns(subscription, dialArgs)
+      const registry = new Map<string, () => void>()
+      const outboundBinary: Uint8Array<ArrayBufferLike>[] = []
+      const emitted = emitCollector()
+      let binaryUp: ((bytes: Uint8Array<ArrayBufferLike>) => void) | null = null
+      const ctx = subscribeCtxFixture({
+        registry,
+        outboundBinary,
+        attachBinaryHandler: (handler) => {
+          binaryUp = handler
+        }
+      })
+
+      const handler = subscribeMethod.handler(subscribeParams(gateway.id), ctx, emitted.emit)
+      // The dial resolves on outer-socket auth, before any ready/response event.
+      await flush()
+      expect(dialArgs[0]?.method).toBe('terminal.multiplex')
+      const ready = {
+        type: 'response',
+        response: {
+          id: 'o1',
+          ok: true,
+          result: { type: 'ready' },
+          _meta: { runtimeId: 'runtime-upstream' }
+        }
+      }
+      dialArgs[0]?.callbacks.onEvent(ready)
+
+      // Guest input bytes ride the raw binary channel into the upstream sendBinary.
+      const guestBytes = new Uint8Array([
+        0x74, 1, 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 3, 97, 98, 99
+      ])
+      pokeBinary(binaryUp, guestBytes)
+      expect(subscription.sendBinary).toHaveBeenCalledWith(guestBytes)
+
+      // Upstream PTY output crosses to the guest socket byte-verbatim.
+      const ptyBytes = new Uint8Array([0x74, 1, 8, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 2, 104, 105])
+      dialArgs[0]?.callbacks.onEvent({ type: 'binary', bytes: ptyBytes })
+      expect(outboundBinary).toEqual([ptyBytes])
+
+      expect(emitted.events).toEqual([ready])
+      expect(registry.get(REGISTRY_KEY)).toBeTypeOf('function')
+      dialArgs[0]?.callbacks.onEvent({ type: 'close' })
+      await handler
+      // The registry keeps the entry; socket teardown re-runs the latched cleanup.
+      expect(registry.has(REGISTRY_KEY)).toBe(true)
+      expect(subscription.close).toHaveBeenCalledOnce()
+    })
+
+    it('forwards the upstream close as an end event and closes the bridged subscription exactly once', async () => {
+      const gateway = addEnvironmentFromPairingCode(userDataPath, {
+        name: 'gateway box',
+        pairingCode: pairingCode('ws://10.0.0.1:6768')
+      })
+      const subscription = fakeSubscription()
+      const dialArgs: GatewayDialCapture[] = []
+      dialReturns(subscription, dialArgs)
+      const emitted = emitCollector()
+      const ctx = subscribeCtxFixture({
+        registry: new Map(),
+        outboundBinary: [],
+        attachBinaryHandler: noBinary
+      })
+
+      const handler = subscribeMethod.handler(subscribeParams(gateway.id), ctx, emitted.emit)
+      dialArgs[0]?.callbacks.onEvent({ type: 'close' })
+      await handler
+      expect(emitted.events).toEqual([{ type: 'end' }])
+      expect(subscription.close).toHaveBeenCalledOnce()
+      // The registry keeps the entry so socket teardown can re-run the idempotent cleanup.
+    })
+
+    it('refuses non-forwardable methods with the shared refusal wording and never dials', async () => {
+      addEnvironmentFromPairingCode(userDataPath, {
+        name: 'gateway box',
+        pairingCode: pairingCode('ws://10.0.0.1:6768')
+      })
+      const emitted = emitCollector()
+      const ctx = subscribeCtxFixture({
+        registry: new Map(),
+        outboundBinary: [],
+        attachBinaryHandler: noBinary
+      })
+
+      await expect(
+        subscribeMethod.handler(subscribeParams('gateway box', 'browser.open'), ctx, emitted.emit)
+      ).rejects.toMatchObject({
+        code: 'forbidden',
+        message: runtimeEnvironmentRelayPhase1AllowlistMessage('browser.open')
+      })
+      expect(subscribeRuntimeEnvironmentMock).not.toHaveBeenCalled()
+    })
+
+    it('lets phase-1 reads ride the stream fence too; only the upstream substrate rejects them', async () => {
+      addEnvironmentFromPairingCode(userDataPath, {
+        name: 'gateway box',
+        pairingCode: pairingCode('ws://10.0.0.1:6768')
+      })
+      const dialArgs: GatewayDialCapture[] = []
+      dialReturns(fakeSubscription(), dialArgs)
+      const emitted = emitCollector()
+      const ctx = subscribeCtxFixture({
+        registry: new Map(),
+        outboundBinary: [],
+        attachBinaryHandler: noBinary
+      })
+
+      const handler = subscribeMethod.handler(
+        subscribeParams('gateway box', 'repo.list'),
+        ctx,
+        emitted.emit
+      )
+      await flush()
+      expect(dialArgs[0]?.method).toBe('repo.list')
+      dialArgs[0]?.callbacks.onEvent({ type: 'close' })
+      await handler
+    })
+
+    it('refuses sockets without the raw binary channel, matching terminal.multiplex', async () => {
+      const gateway = addEnvironmentFromPairingCode(userDataPath, {
+        name: 'gateway box',
+        pairingCode: pairingCode('ws://10.0.0.1:6768')
+      })
+      const emitted = emitCollector()
+      const ctx = subscribeCtxFixture({
+        registry: new Map(),
+        outboundBinary: [],
+        attachBinaryHandler: noBinary,
+        bareSocket: true
+      })
+
+      await expect(
+        subscribeMethod.handler(subscribeParams(gateway.id), ctx, emitted.emit)
+      ).rejects.toThrow('binary_terminal_stream_required')
+      expect(subscribeRuntimeEnvironmentMock).not.toHaveBeenCalled()
+    })
+
+    it('refuses a socket that died before the bridge dial', async () => {
+      const gateway = addEnvironmentFromPairingCode(userDataPath, {
+        name: 'gateway box',
+        pairingCode: pairingCode('ws://10.0.0.1:6768')
+      })
+      const emitted = emitCollector()
+      const ctx = subscribeCtxFixture({
+        registry: new Map(),
+        outboundBinary: [],
+        attachBinaryHandler: noBinary,
+        aborted: true
+      })
+
+      await expect(
+        subscribeMethod.handler(subscribeParams(gateway.id), ctx, emitted.emit)
+      ).resolves.toBeUndefined()
+      expect(subscribeRuntimeEnvironmentMock).not.toHaveBeenCalled()
+    })
+
+    it('socket teardown through the registry closes the bridged upstream subscription', async () => {
+      const gateway = addEnvironmentFromPairingCode(userDataPath, {
+        name: 'gateway box',
+        pairingCode: pairingCode('ws://10.0.0.1:6768')
+      })
+      const subscription = fakeSubscription()
+      const dialArgs: GatewayDialCapture[] = []
+      dialReturns(subscription, dialArgs)
+      const emitted = emitCollector()
+      const registry = new Map<string, () => void>()
+      const ctx = subscribeCtxFixture({
+        registry,
+        outboundBinary: [],
+        attachBinaryHandler: noBinary
+      })
+
+      const handler = subscribeMethod.handler(subscribeParams(gateway.id), ctx, emitted.emit)
+      await flush()
+      const cleanup = registry.get(REGISTRY_KEY)
+      cleanup?.()
+      await handler
+      // Extra teardown sweeps (socket death, unsubscribe) re-run the latched cleanup harmlessly.
+      cleanup?.()
+      expect(subscription.close).toHaveBeenCalledOnce()
+    })
+
+    it('refuses a relay-view row id like the call vehicle does', async () => {
+      const gateway = addEnvironmentFromPairingCode(userDataPath, {
+        name: 'gateway box',
+        pairingCode: pairingCode('ws://10.0.0.1:6768')
+      })
+      upsertDownstreamEnvironment(userDataPath, {
+        gatewayEnvironmentId: 'env-nested',
+        name: 'nested',
+        upstreamRuntimeId: null,
+        offer: getPreferredPairingOffer(gateway)
+      })
+      const emitted = emitCollector()
+      const ctx = subscribeCtxFixture({
+        registry: new Map(),
+        outboundBinary: [],
+        attachBinaryHandler: noBinary
+      })
+
+      await expect(
+        subscribeMethod.handler(subscribeParams('env-nested'), ctx, emitted.emit)
+      ).rejects.toThrow('Unknown gateway environment: env-nested')
+      expect(subscribeRuntimeEnvironmentMock).not.toHaveBeenCalled()
+    })
+
+    it('refuses mobile-scope callers', async () => {
+      const gateway = addEnvironmentFromPairingCode(userDataPath, {
+        name: 'gateway box',
+        pairingCode: pairingCode('ws://10.0.0.1:6768')
+      })
+      const emitted = emitCollector()
+      const ctx = subscribeCtxFixture({
+        registry: new Map(),
+        outboundBinary: [],
+        attachBinaryHandler: noBinary,
+        mobile: true
+      })
+
+      await expect(
+        subscribeMethod.handler(subscribeParams(gateway.id), ctx, emitted.emit)
+      ).rejects.toMatchObject({ code: 'forbidden' })
+      expect(subscribeRuntimeEnvironmentMock).not.toHaveBeenCalled()
     })
   })
 })

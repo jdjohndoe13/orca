@@ -463,7 +463,8 @@ import { BrowserTarget } from './rpc-param-primitives'
 import { ClientCapabilitiesUpdate } from './runtime-client-capabilities-params'
 import {
   RuntimeEnvironmentDownstreamListParamsSchema,
-  RuntimeEnvironmentGatewayCallParamsSchema
+  RuntimeEnvironmentGatewayCallParamsSchema,
+  RuntimeEnvironmentGatewaySubscribeParamsSchema
 } from './runtime-environment-relay-params'
 import { SessionTabsUnsubscribeAllParams } from './session-tabs-params'
 import {
@@ -1142,6 +1143,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'runtime.clientEvents.unsubscribe': ClientEventsUnsubscribeParams,
   'runtimeEnvironment.call': RuntimeEnvironmentGatewayCallParamsSchema,
   'runtimeEnvironment.downstream.list': RuntimeEnvironmentDownstreamListParamsSchema,
+  'runtimeEnvironment.downstream.subscribe': RuntimeEnvironmentGatewaySubscribeParamsSchema,
   'session.tabs.activate': ActivateTab,
   'session.tabs.close': CloseTab,
   'session.tabs.closeLifecycle': CloseLifecycleTab,

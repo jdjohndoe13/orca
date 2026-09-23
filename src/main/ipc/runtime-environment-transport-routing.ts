@@ -18,6 +18,9 @@ import {
   sendRemoteRuntimeConnectionRequestAbortable,
   sendRemoteRuntimeRequestAbortable
 } from './runtime-environment-abortable-requests'
+import { attachRemoteControlDiagnostics } from './runtime-environment-status-diagnostics'
+import { subscribeRelayDownstreamEnvironment } from './runtime-environment-relay-subscribe-routing'
+import { isRuntimeEnvironmentManuallyDisconnected } from './runtime-environment-manual-disconnect'
 import { runtimeEnvironmentRevisionFailure } from './runtime-environment-revision-guard'
 import { resetSharedControlSupport } from './runtime-environment-shared-control-support'
 import {
@@ -196,6 +199,20 @@ export async function subscribeRuntimeEnvironment(
   // Why: an initial-connect failure rejects (mid-stream drops go through
   // onError above), so the hint is applied to the thrown error here too.
   try {
+    // Why before support routing: a relay row's transport is its gateway's
+    // dedicated streaming socket — the gateway runs its own support routing
+    // against the upstream host, so this side never shares routes.
+    if (environment.gatewayEnvironmentId) {
+      return await subscribeRelayDownstreamEnvironment({
+        userDataPath,
+        environment,
+        method,
+        params,
+        timeoutMs: effectiveTimeoutMs,
+        callbacks,
+        markUsedOnce
+      })
+    }
     if (shouldRouteSubscriptionBySupport(method)) {
       return await subscribeSupportRoutedRuntimeEnvironment({
         userDataPath,

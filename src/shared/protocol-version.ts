@@ -104,6 +104,12 @@ export const REMOTE_RUNTIME_SHARED_CONTROL_CAPABILITY = 'remote-runtime.shared-c
 // every build that registers the methods advertises it, so an old host answers these method
 // names with method_not_found and an old client never calls them at all.
 export const REMOTE_RUNTIME_RELAY_RUNTIME_CAPABILITY = 'remote-runtime.relay.v1' as const
+// Why: Phase 2 extends the relay family with the operate/stream surface
+// (runtimeEnvironment.downstream.subscribe + the Phase-2 operate allowlist over
+// runtimeEnvironment.call). Registered unconditionally like Phase 1 — every
+// build that registers it advertises it, an old host answers method_not_found.
+export const REMOTE_RUNTIME_RELAY_ATTACH_RUNTIME_CAPABILITY =
+  'remote-runtime.relay.attach.v1' as const
 export const FOLDER_WORKSPACE_PATH_STATUS_RUNTIME_CAPABILITY =
   'folder-workspace.path-status.v1' as const
 export const LINEAR_ISSUE_ATTRIBUTE_FILTER_RUNTIME_CAPABILITY =
@@ -351,6 +357,7 @@ export const RUNTIME_CAPABILITIES = [
   'runtime.environments.v1',
   REMOTE_RUNTIME_SHARED_CONTROL_CAPABILITY,
   REMOTE_RUNTIME_RELAY_RUNTIME_CAPABILITY,
+  REMOTE_RUNTIME_RELAY_ATTACH_RUNTIME_CAPABILITY,
   ...ORCHESTRATION_RUNTIME_CAPABILITIES,
   BROWSER_SCREENCAST_RUNTIME_CAPABILITY,
   BROWSER_TAB_CREATE_KNOWN_ID_RUNTIME_CAPABILITY,

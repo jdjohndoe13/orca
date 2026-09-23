@@ -10,6 +10,8 @@ vi.mock('./runtime-environment-transport-routing', () => ({
 
 import { encodePairingOffer } from '../../shared/pairing'
 import {
+  REMOTE_RUNTIME_RELAY_ATTACH_OPERATE_METHODS,
+  REMOTE_RUNTIME_RELAY_ATTACH_STREAM_METHODS,
   RUNTIME_ENVIRONMENT_RELAY_METHOD,
   runtimeEnvironmentRelayPhase1AllowlistMessage
 } from '../../shared/rpc-contract/runtime-environment-relay-params'
@@ -278,6 +280,102 @@ describe('callDownstreamEnvironment', () => {
       ok: false,
       error: { code: 'remote_runtime_unavailable', message: 'socket gone' }
     })
+  })
+
+  it('dials the attach-operate methods through the relay instead of refusing them', async () => {
+    for (const method of REMOTE_RUNTIME_RELAY_ATTACH_OPERATE_METHODS) {
+      const inner = {
+        id: 'r1',
+        ok: true,
+        result: {},
+        _meta: { runtimeId: 'runtime-c1' }
+      }
+      callRuntimeEnvironmentMock.mockResolvedValue({
+        id: 'rpc-1',
+        ok: true,
+        result: { response: inner, _meta: { gatewayEnvironmentId: DOWNSTREAM_GATEWAY_ENV_ID } },
+        _meta: { runtimeId: 'runtime-gateway' }
+      })
+
+      const response = await callDownstreamEnvironment(
+        userDataPath,
+        resolveEnvironment(userDataPath, downstreamEnvironmentId(DOWNSTREAM_GATEWAY_ENV_ID)),
+        { method }
+      )
+
+      expect(response).toEqual(inner)
+      const dial = callRuntimeEnvironmentMock.mock.lastCall!
+      expect(dial[2]).toBe(RUNTIME_ENVIRONMENT_RELAY_METHOD)
+      expect(dial[3]).toEqual({
+        gatewayEnvironmentId: DOWNSTREAM_GATEWAY_ENV_ID,
+        method
+      })
+    }
+  })
+
+  it('forwards the pty-transport write tick, resize fallback, and pane retirement verbatim', async () => {
+    // The remote PTY transport's acknowledged write (interrupt inference),
+    // updateViewport pause fallback, and terminal close all ride terminal.send /
+    // terminal.updateViewport / terminal.close; a refusal here strands the
+    // interrupt and leaks the upstream PTY instead of surfacing a pane error.
+    const cases: [string, Record<string, unknown>, unknown][] = [
+      ['terminal.send', { terminal: 'tw-1', data: '\u0003', sequence: 1 }, { send: 'queued' }],
+      [
+        'terminal.updateViewport',
+        { terminal: 'tw-1', rows: 30, cols: 120 },
+        { terminal: { handle: 'tw-1' } }
+      ],
+      ['terminal.close', { terminal: { handle: 'tw-1' } }, { close: { handle: 'tw-1' } }]
+    ]
+
+    for (const [method, params, result] of cases) {
+      const inner = {
+        id: 'r1',
+        ok: true,
+        result,
+        _meta: { runtimeId: 'runtime-c1' }
+      }
+      callRuntimeEnvironmentMock.mockResolvedValueOnce({
+        id: 'rpc-1',
+        ok: true,
+        result: { response: inner, _meta: { gatewayEnvironmentId: DOWNSTREAM_GATEWAY_ENV_ID } },
+        _meta: { runtimeId: 'runtime-gateway' }
+      })
+
+      const response = await callDownstreamEnvironment(
+        userDataPath,
+        resolveEnvironment(userDataPath, downstreamEnvironmentId(DOWNSTREAM_GATEWAY_ENV_ID)),
+        { method, params }
+      )
+
+      expect(response).toEqual(inner)
+      const dial = callRuntimeEnvironmentMock.mock.lastCall!
+      expect(dial[2]).toBe(RUNTIME_ENVIRONMENT_RELAY_METHOD)
+      expect(dial[3]).toEqual({
+        gatewayEnvironmentId: DOWNSTREAM_GATEWAY_ENV_ID,
+        method,
+        params
+      })
+    }
+  })
+
+  it('still refuses the binary stream methods on the call vehicle: they ride downstream.subscribe', async () => {
+    for (const method of REMOTE_RUNTIME_RELAY_ATTACH_STREAM_METHODS) {
+      const response = await callDownstreamEnvironment(
+        userDataPath,
+        resolveEnvironment(userDataPath, downstreamEnvironmentId(DOWNSTREAM_GATEWAY_ENV_ID)),
+        { method }
+      )
+
+      expect(response).toMatchObject({
+        ok: false,
+        error: {
+          code: 'forbidden',
+          message: runtimeEnvironmentRelayPhase1AllowlistMessage(method)
+        }
+      })
+    }
+    expect(callRuntimeEnvironmentMock).not.toHaveBeenCalled()
   })
 
   it('refuses to route a directly paired environment through the relay', async () => {

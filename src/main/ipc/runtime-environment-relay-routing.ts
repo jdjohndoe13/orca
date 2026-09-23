@@ -1,7 +1,7 @@
 import type { KnownRuntimeEnvironment } from '../../shared/runtime-environments'
 import {
   RUNTIME_ENVIRONMENT_RELAY_METHOD,
-  isRemoteRuntimeRelayPhase1Method,
+  isRelayForwardableRuntimeMethod,
   runtimeEnvironmentRelayPhase1AllowlistMessage,
   RuntimeEnvironmentGatewayCallResultSchema
 } from '../../shared/rpc-contract/runtime-environment-relay-params'
@@ -40,8 +40,8 @@ function relayFailureCode(error: unknown): string {
  *
  * - the renderer sees the upstream host's envelope verbatim (capability and
  *   status probes bind C1, never the gateway host itself);
- * - methods outside the Phase-1 read allowlist are refused here without a
- *   round-trip, mirroring the gateway's own gate;
+ * - methods outside the Phase-1 read + Phase-2 attached-operation allowlist are
+ *   refused here without a round-trip, mirroring the gateway's own gate;
  * - a gateway that answers `runtimeEnvironment.call` wraps failures inside the
  *   relay result, so no relay hop can present this renderer a lost host.
  */
@@ -54,7 +54,7 @@ export async function callDownstreamEnvironment(
   if (!gatewayEnvironmentId) {
     throw new Error('not_a_downstream_environment')
   }
-  if (!isRemoteRuntimeRelayPhase1Method(args.method)) {
+  if (!isRelayForwardableRuntimeMethod(args.method)) {
     return {
       id: args.method,
       ok: false,

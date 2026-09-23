@@ -62,7 +62,9 @@ describe('runtime-scope forbidden toast', () => {
   describe('row-activation terminal create refusals', () => {
     it('prettifies a rejected terminal create to one friendly toast and no raw one', () => {
       toastError.mockClear()
-      const refusal = runtimeEnvironmentRelayPhase1AllowlistMessage('session.tabs.createTerminal')
+      // Phase 2 forwards createTerminal, so the still-refused sample is a method
+      // the relay off-list canonically refuses.
+      const refusal = runtimeEnvironmentRelayPhase1AllowlistMessage('browser.open')
 
       expect(notifyRuntimeRelayForbiddenMessage(refusal)).toBe(true)
 

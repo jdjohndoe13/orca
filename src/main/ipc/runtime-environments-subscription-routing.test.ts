@@ -74,6 +74,17 @@ vi.mock('./runtime-environment-request-connections', async () => {
 
 import { registerRuntimeEnvironmentHandlers } from './runtime-environments'
 import { channelHandlerLookup, pairingCode } from './runtime-environments-ipc-test-harness'
+import { upsertDownstreamEnvironment } from '../../shared/runtime-environment-downstream-rows'
+import { getPreferredPairingOffer } from '../../shared/runtime-environments'
+import { resolveEnvironment } from '../../shared/runtime-environment-store'
+
+const { subscribeRelayDownstreamEnvironmentMock } = vi.hoisted(() => ({
+  subscribeRelayDownstreamEnvironmentMock: vi.fn()
+}))
+
+vi.mock('./runtime-environment-relay-subscribe-routing', () => ({
+  subscribeRelayDownstreamEnvironment: subscribeRelayDownstreamEnvironmentMock
+}))
 
 const handler = channelHandlerLookup(handleMock)
 
@@ -379,5 +390,70 @@ describe('registerRuntimeEnvironmentHandlers', () => {
       }
     )
     expect(subscribeRemoteRuntimeSharedControlRequestMock).not.toHaveBeenCalled()
+  })
+
+  it('routes a relay-view row through the downstream bridge instead of support routing', async () => {
+    registerRuntimeEnvironmentHandlers(store as never)
+    sendRemoteRuntimeRequestMock.mockResolvedValue({
+      id: 'status',
+      ok: true,
+      result: {
+        runtimeId: 'runtime-remote',
+        capabilities: [REMOTE_RUNTIME_SHARED_CONTROL_CAPABILITY]
+      },
+      _meta: { runtimeId: 'runtime-remote' }
+    })
+    const close = vi.fn()
+    subscribeRelayDownstreamEnvironmentMock.mockResolvedValue({
+      requestId: 'relay-stream',
+      close,
+      sendBinary: vi.fn()
+    })
+
+    const add = handler<
+      { name: string; pairingCode: string },
+      { environment: { id: string; name: string } }
+    >('runtimeEnvironments:addFromPairingCode')
+    const { environment } = await add(null, { name: 'gateway box', pairingCode: pairingCode() })
+    upsertDownstreamEnvironment(userDataPath, {
+      gatewayEnvironmentId: 'env-web-target',
+      name: `${environment.name} → web box`,
+      upstreamRuntimeId: null,
+      offer: getPreferredPairingOffer(resolveEnvironment(userDataPath, environment.id))
+    })
+
+    const subscribe = handler<
+      { selector: string; method: string; params?: unknown; subscriptionId?: string },
+      { subscriptionId: string; requestId: string }
+    >('runtimeEnvironments:subscribe')
+    await expect(
+      subscribe(
+        {
+          sender: {
+            id: 1,
+            isDestroyed: () => false,
+            send: vi.fn(),
+            once: vi.fn(),
+            removeListener: vi.fn()
+          }
+        },
+        {
+          selector: 'relay-env-web-target',
+          method: 'terminal.multiplex',
+          params: { client: { id: 'client-1' } }
+        }
+      )
+    ).resolves.toMatchObject({ requestId: 'relay-stream' })
+
+    expect(subscribeRelayDownstreamEnvironmentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'terminal.multiplex',
+        params: { client: { id: 'client-1' } },
+        timeoutMs: 15_000,
+        markUsedOnce: expect.any(Function)
+      })
+    )
+    expect(subscribeRemoteRuntimeSharedControlRequestMock).not.toHaveBeenCalled()
+    expect(subscribeRemoteRuntimeRequestMock).not.toHaveBeenCalled()
   })
 })
