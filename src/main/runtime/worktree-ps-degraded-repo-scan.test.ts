@@ -40,6 +40,7 @@ const SCRATCH_ID = `${REPO_ID}::${REPO_PATH}/.claude/worktrees/scratch`
 const SSH_CONNECTION_ID = 'ssh-remote-1'
 const SSH_HOST_ID = `ssh:${SSH_CONNECTION_ID}`
 const LOCAL_REPO_PATH = '/Users/me/dev/app'
+const RUNTIME_HOST_ID = 'runtime:env-1' as const
 
 function makeMeta(overrides: Record<string, unknown> = {}) {
   return {
@@ -78,6 +79,7 @@ function makeLineage() {
 
 type StoreOptions = {
   connectionId?: string
+  executionHostId?: `runtime:${string}`
   metaById?: Record<string, ReturnType<typeof makeMeta>>
   removeWorktreeLineage?: ReturnType<typeof vi.fn>
   removeWorkspaceLineage?: ReturnType<typeof vi.fn>
@@ -100,7 +102,10 @@ function makeStore(options: StoreOptions = {}) {
         displayName: 'app',
         badgeColor: 'blue',
         addedAt: 1,
-        ...(options.connectionId === undefined ? {} : { connectionId: options.connectionId })
+        ...(options.connectionId === undefined ? {} : { connectionId: options.connectionId }),
+        ...(options.executionHostId === undefined
+          ? {}
+          : { executionHostId: options.executionHostId })
       },
       ...(options.coHostedRepos ?? []).map((repo) => ({
         displayName: 'app',
@@ -361,6 +366,90 @@ describe('worktree.ps on a degraded repo scan', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  // Why: a `runtime:<env>` repo's files live on the paired host, so a local `git worktree list`
+  // answers nothing — exactly the SSH-unreachable shape, owed the same persisted-rows recovery,
+  // or the gateway-expansion rows the host already holds never reach worktree.ps (the mobile
+  // sidebar source) at all.
+  it('keeps persisted worktrees for a runtime-host repo whose local scan cannot describe it', async () => {
+    listWorktreesStrictMock.mockRejectedValue(new Error('git unavailable'))
+    const runtime = new OrcaRuntimeService(
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: makeStore supplies only the repo, meta and lineage reads the degraded-scan paths reach; the rest of the store surface is unreached.
+      makeStore({
+        executionHostId: RUNTIME_HOST_ID,
+        metaById: {
+          [WORKTREE_ID]: makeMeta({ hostId: RUNTIME_HOST_ID }),
+          [MAIN_WORKTREE_ID]: makeMeta({
+            displayName: 'main',
+            instanceId: 'parent-instance',
+            hostId: RUNTIME_HOST_ID
+          })
+        }
+      }) as never
+    )
+
+    const result = await runtime.getWorktreePs(10_000)
+
+    const restored = result.worktrees.find((worktree) => worktree.worktreeId === WORKTREE_ID)
+    expect(restored?.hostId).toBe(RUNTIME_HOST_ID)
+    // Why: no git answered, so a restored row must not claim a branch it cannot have verified.
+    expect(restored?.branch).toBe('')
+    expect(result.hostScope?.hostIds).toContain(RUNTIME_HOST_ID)
+  })
+
+  // Why: worktree.ps resolves through the same fleet scan worktree.list (the desktop sidebar
+  // surface) resolves through, so the runtime-host recovery must reach both or the two listings
+  // disagree about which rows the host owns.
+  it('restores runtime-host rows through the desktop worktree.list path too', async () => {
+    listWorktreesStrictMock.mockRejectedValue(new Error('git unavailable'))
+    const runtime = new OrcaRuntimeService(
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: makeStore supplies only the repo, meta and lineage reads the degraded-scan paths reach; the rest of the store surface is unreached.
+      makeStore({
+        executionHostId: RUNTIME_HOST_ID,
+        metaById: {
+          [WORKTREE_ID]: makeMeta({ hostId: RUNTIME_HOST_ID }),
+          [MAIN_WORKTREE_ID]: makeMeta({
+            displayName: 'main',
+            instanceId: 'parent-instance',
+            hostId: RUNTIME_HOST_ID
+          })
+        }
+      }) as never
+    )
+
+    const listed = await runtime.listManagedWorktrees(`id:${REPO_ID}`)
+
+    const restored = listed.worktrees.find((worktree) => worktree.id === WORKTREE_ID)
+    expect(restored?.hostId).toBe(RUNTIME_HOST_ID)
+  })
+
+  // Why: a runtime-host repo whose local scan succeeds published locally readable truth before
+  // and must keep doing so — the recovery only replaces an empty verdict.
+  it('keeps a healthy local scan authoritative for a runtime-host repo', async () => {
+    listWorktreesStrictMock.mockResolvedValue([
+      { path: REPO_PATH, head: 'abc', branch: 'local-truth', isBare: false, isMainWorktree: true }
+    ])
+    const runtime = new OrcaRuntimeService(
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: makeStore supplies only the repo, meta and lineage reads the degraded-scan paths reach; the rest of the store surface is unreached.
+      makeStore({
+        executionHostId: RUNTIME_HOST_ID,
+        metaById: {
+          [WORKTREE_ID]: makeMeta({ hostId: RUNTIME_HOST_ID }),
+          [MAIN_WORKTREE_ID]: makeMeta({
+            displayName: 'main',
+            instanceId: 'parent-instance',
+            hostId: RUNTIME_HOST_ID
+          })
+        }
+      }) as never
+    )
+
+    const result = await runtime.getWorktreePs(10_000)
+
+    // The scanned truth wins and the unverified persisted row does not ride along.
+    expect(result.worktrees.map((worktree) => worktree.worktreeId)).not.toContain(WORKTREE_ID)
+    expect(result.worktrees.map((worktree) => worktree.worktreeId)).toContain(MAIN_WORKTREE_ID)
   })
 
   // Why: the timeout fires per poll, so only the in-flight scan map keeps a permanent stall from re-spawning `git worktree list`.

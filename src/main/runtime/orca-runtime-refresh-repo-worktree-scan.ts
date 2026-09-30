@@ -18,7 +18,11 @@ import { getSshGitProvider } from '../providers/ssh-git-dispatch'
 import type { GitWorktreeInfo } from '../../shared/worktree/types'
 import { listStoredWorktreeRowsForRepo } from './repo-worktree-row-resolution'
 import type { ResolvedWorktree } from './runtime-worktree-path-identity'
-import { getRepoExecutionHostId, getRepoSshConnectionId } from '../../shared/execution-host'
+import {
+  getRepoExecutionHostId,
+  getRepoSshConnectionId,
+  parseExecutionHostId
+} from '../../shared/execution-host'
 
 export class OrcaRuntimeWithRefreshRepoWorktreeScan extends OrcaRuntimeWithListKnownResolvedWorktreesForExplicitTarget {
   /**
@@ -102,10 +106,18 @@ export class OrcaRuntimeWithRefreshRepoWorktreeScan extends OrcaRuntimeWithListK
     // `git worktree list` then reports nothing, so the remote worktrees never resolve at all.
     const sshConnectionId = getRepoSshConnectionId(repo)
     if (!sshConnectionId) {
-      return await scanLocalRepoWorktreesForResolution(
+      const scan = await scanLocalRepoWorktreesForResolution(
         repo.path,
         getLocalProjectWorktreeGitOptionsForRuntime(repo, projectRuntime)
       )
+      if (scan.ok || parseExecutionHostId(getRepoExecutionHostId(repo))?.kind !== 'runtime') {
+        return scan
+      }
+      // Why: a `runtime:<env>` row named a paired host, and a local `git worktree list` cannot
+      // describe worktrees that live over there. Publishing the empty scan instead of the stored
+      // host-qualified rows starved worktree.ps and every listing that resolves through the fleet
+      // scan of rows this host already certified (the recovery the SSH branches below get).
+      return { ok: false, worktrees: this.listStoredWorktreesForResolution(repo) }
     }
     const provider = getSshGitProvider(sshConnectionId)
     if (!provider) {
