@@ -30,6 +30,7 @@ import { retirePairedRuntimeBrowserClientHostEnvironment } from '../browser/pair
 import { registerRuntimeEnvironmentBrowserClientHostHandler } from './runtime-environment-browser-client-host-handler'
 import { advanceRuntimeEnvironmentCapabilityIncarnation } from './runtime-environment-capability-evidence'
 import { watchRuntimeEnvironmentPreference } from './runtime-environment-preference'
+import { configurePairedEnvironmentRepoCatalogMirror } from './runtime-environment-repo-catalog-mirror'
 
 const remoteRuntimeSubscriptions = new Map<string, RetainedRemoteRuntimeSubscription>()
 const getUserDataPath = (): string => app.getPath('userData')
@@ -100,6 +101,11 @@ export function registerRuntimeEnvironmentHandlers(store: Store): void {
   }
   ipcMain.removeAllListeners('runtimeEnvironments:subscriptionBinary')
   reconcileOrphanedRuntimeSessions(store, getUserDataPath())
+  // Why: pairing-time repo mirrors write through this store; the runtime cache
+  // hooks resolve lazily at mirror time (the runtime may not exist yet here).
+  configurePairedEnvironmentRepoCatalogMirror({
+    getStore: () => store
+  })
 
   registerRuntimeEnvironmentConnectivityHandlers({
     store,

@@ -2,6 +2,7 @@ import { clearBrowserRoutePartitionStorageForEnvironment } from '../browser/brow
 import { retireBrowserRoutePartitionStorageForEnvironment } from '../browser/browser-route-partition-storage-retirement'
 import { clearRuntimeEnvironmentCapabilityEvidence } from './runtime-environment-capability-evidence'
 import { clearRuntimeEnvironmentManualDisconnect } from './runtime-environment-manual-disconnect'
+import { retirePairedEnvironmentRepoCatalog } from './runtime-environment-repo-catalog-retire'
 import { toRuntimeExecutionHostId, type ExecutionHostId } from '../../shared/execution-host'
 
 /** Retires a removed server's client-side state; resolves once its transport is invalidated. */
@@ -11,6 +12,9 @@ export function retireRemovedRuntimeEnvironment(
   forgetHostSession?: (hostId: ExecutionHostId) => void
 ): Promise<void> {
   clearRuntimeEnvironmentCapabilityEvidence(environmentId)
+  // Why: removal retires every repo row this host mirrored from the removed
+  // environment; a store row for a gone machine would dead-end phone listings.
+  void retirePairedEnvironmentRepoCatalog(environmentId)
   // Why: listings enumerate session partitions as known hosts, so a kept one names a dead server.
   forgetHostSession?.(toRuntimeExecutionHostId(environmentId))
   clearRuntimeEnvironmentManualDisconnect(environmentId)

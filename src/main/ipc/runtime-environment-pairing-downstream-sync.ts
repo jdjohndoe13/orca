@@ -15,6 +15,7 @@ import {
   type RuntimeEnvironmentDownstreamRow
 } from '../../shared/rpc-contract/runtime-environment-downstream-list-rows'
 import { callRuntimeEnvironment } from './runtime-environment-transport-routing'
+import { engagePairedEnvironmentRepoCatalogMirror } from './runtime-environment-repo-catalog-engraft'
 
 export type DownstreamEnvironmentSyncSummary = {
   created: number
@@ -37,6 +38,12 @@ export async function synchronizeDownstreamEnvironmentRows(args: {
   gateway: KnownRuntimeEnvironment
   capabilities: readonly string[]
 }): Promise<DownstreamEnvironmentSyncSummary> {
+  // Why fire-and-forget before the census: the repo catalog mirror never blocks
+  // or gates the census — a new phone-usable environment needs its store rows
+  // even when the relay census is refused or unavailable.
+  void engagePairedEnvironmentRepoCatalogMirror(args.userDataPath, args.gateway).catch((error) => {
+    console.warn('[downstream-sync] repo catalog mirror rejected:', error)
+  })
   const gatewayEndpoint = getPreferredPairingOffer(args.gateway).endpoint
   if (!args.capabilities.includes(REMOTE_RUNTIME_RELAY_RUNTIME_CAPABILITY)) {
     // A gateway that cannot census its downstream (older version, relay
