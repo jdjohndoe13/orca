@@ -18,9 +18,7 @@ import {
   sendRemoteRuntimeConnectionRequestAbortable,
   sendRemoteRuntimeRequestAbortable
 } from './runtime-environment-abortable-requests'
-import { attachRemoteControlDiagnostics } from './runtime-environment-status-diagnostics'
 import { subscribeRelayDownstreamEnvironment } from './runtime-environment-relay-subscribe-routing'
-import { isRuntimeEnvironmentManuallyDisconnected } from './runtime-environment-manual-disconnect'
 import { runtimeEnvironmentRevisionFailure } from './runtime-environment-revision-guard'
 import { resetSharedControlSupport } from './runtime-environment-shared-control-support'
 import {

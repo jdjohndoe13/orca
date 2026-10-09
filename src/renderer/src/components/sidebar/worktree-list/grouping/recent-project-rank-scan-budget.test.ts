@@ -79,6 +79,7 @@ describe('recent project rank scan budget', () => {
       newExternalWorktreesInboxByRepo: new Map(),
       pendingByRepo: new Map(),
       mixedWorktreeHostContextLabels: undefined,
+      folderWorkspaceHostContextLabels: undefined,
       noticeHostContextLabelByRepoId: undefined,
       lineageById: {},
       worktreeMap: new Map(),

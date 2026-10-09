@@ -24,7 +24,7 @@ vi.mock('../../shared/remote-runtime-client', () => ({
 }))
 
 import { encodePairingOffer } from '../../shared/pairing'
-import { ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES } from '../../shared/protocol-version'
+import { ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES } from '../../shared/electron-remote-runtime-client-capabilities'
 import {
   RUNTIME_ENVIRONMENT_RELAY_ATTACH_SUBSCRIBE_METHOD,
   REMOTE_RUNTIME_RELAY_ATTACH_STREAM_METHODS,

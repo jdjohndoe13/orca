@@ -110,7 +110,7 @@ describe('terminal copy shortcut dispatch', () => {
     dispatchTerminalShortcutAction({ type: 'copySelection' }, event, manager, context)
 
     expect(event.defaultPrevented).toBe(true)
-    expect(sendInput).toHaveBeenCalledWith('\x03')
+    expect(sendInput).toHaveBeenCalledWith('\x03', 'driving')
     expect(terminalSelectionCopyMocks.copyTerminalSelection).not.toHaveBeenCalled()
   })
 
@@ -127,7 +127,7 @@ describe('terminal copy shortcut dispatch', () => {
     dispatchTerminalShortcutAction({ type: 'copySelection' }, event, manager, context)
 
     expect(event.defaultPrevented).toBe(true)
-    expect(sendInput).toHaveBeenCalledWith('\x1b[99;5u')
+    expect(sendInput).toHaveBeenCalledWith('\x1b[99;5u', 'driving')
   })
 
   it('leaves an unclaimed copy chord alone when the pane is not mouse-reporting', () => {

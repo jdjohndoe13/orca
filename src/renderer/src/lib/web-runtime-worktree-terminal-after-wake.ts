@@ -11,11 +11,7 @@ import {
   endWebRuntimeWakeTerminalRespawn
 } from '@/runtime/web-runtime-wake-terminal-respawn'
 import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
-import {
-  draftViewModeProps,
-  resolveStartupLaunchDraftText,
-  type WorktreeStartupPayload
-} from '@/lib/worktree-startup-payload'
+import type { WorktreeStartupPayload } from '@/lib/worktree-startup-payload'
 import { notifyRuntimeRelayForbiddenMessage } from '@/store/slices/worktrees/listing/runtime-scope-forbidden-toast'
 import type { TuiAgent } from '../../../shared/tui-agent'
 import { toast } from 'sonner'

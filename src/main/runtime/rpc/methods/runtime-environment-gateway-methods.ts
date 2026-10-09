@@ -40,18 +40,21 @@ import type { OrchestrationEnvironmentTransport } from '../../orchestration/envi
 
 export const RUNTIME_ENVIRONMENT_GATEWAY_DOWNSTREAM_LIST_METHOD_DEF = defineMethod({
   name: RUNTIME_ENVIRONMENT_RELAY_DOWNSTREAM_LIST_METHOD,
+  permission: 'workspace',
   params: RuntimeEnvironmentDownstreamListParamsSchema,
   handler: (_params, ctx) => listGatewayDownstreamEnvironments(ctx)
 })
 
 export const RUNTIME_ENVIRONMENT_GATEWAY_CALL_METHOD_DEF = defineMethod({
   name: RUNTIME_ENVIRONMENT_RELAY_METHOD,
+  permission: 'workspace',
   params: RuntimeEnvironmentGatewayCallParamsSchema,
   handler: async (params, ctx) => relayRuntimeEnvironmentCall(params, ctx)
 })
 
 export const RUNTIME_ENVIRONMENT_GATEWAY_SUBSCRIBE_METHOD_DEF = defineStreamingMethod({
   name: RUNTIME_ENVIRONMENT_RELAY_ATTACH_SUBSCRIBE_METHOD,
+  permission: 'workspace',
   params: RuntimeEnvironmentGatewaySubscribeParamsSchema,
   handler: (params, ctx, emit) => relayRuntimeEnvironmentSubscribe(params, ctx, emit)
 })

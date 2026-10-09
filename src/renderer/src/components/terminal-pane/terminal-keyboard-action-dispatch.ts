@@ -100,7 +100,8 @@ export function dispatchTerminalShortcutAction(
       event.stopImmediatePropagation()
       void writeTerminalPastePtyInput(
         paneTransportsRef.current.get(pane.id),
-        resolveTerminalCtrlCInputEncoding(getKittyKeyboardFlagsActivePane?.() ?? 0)
+        resolveTerminalCtrlCInputEncoding(getKittyKeyboardFlagsActivePane?.() ?? 0),
+        'driving'
       )
       return
     }
