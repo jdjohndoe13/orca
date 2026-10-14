@@ -31,6 +31,7 @@ import { registerRuntimeEnvironmentBrowserClientHostHandler } from './runtime-en
 import { advanceRuntimeEnvironmentCapabilityIncarnation } from './runtime-environment-capability-evidence'
 import { watchRuntimeEnvironmentPreference } from './runtime-environment-preference'
 import { configurePairedEnvironmentRepoCatalogMirror } from './runtime-environment-repo-catalog-mirror'
+import { engageAllPairedEnvironmentRepoCatalogMirrors } from './runtime-environment-repo-catalog-triggers'
 
 const remoteRuntimeSubscriptions = new Map<string, RetainedRemoteRuntimeSubscription>()
 const getUserDataPath = (): string => app.getPath('userData')
@@ -106,6 +107,9 @@ export function registerRuntimeEnvironmentHandlers(store: Store): void {
   configurePairedEnvironmentRepoCatalogMirror({
     getStore: () => store
   })
+  // Why: an already paired machine never re-runs the pairing sync, so handlers
+  // boot is the moment every stored pair's mirror gets re-ensured.
+  engageAllPairedEnvironmentRepoCatalogMirrors(getUserDataPath())
 
   registerRuntimeEnvironmentConnectivityHandlers({
     store,

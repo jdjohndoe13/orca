@@ -35,6 +35,7 @@ import {
 } from './runtime-environment-transport-routing'
 import { publicRuntimeEnvironmentWithHostKey } from './runtime-environment-host-key'
 import { callDownstreamEnvironment } from './runtime-environment-relay-routing'
+import { engageOnEnvironmentConnected } from './runtime-environment-repo-catalog-triggers'
 
 function manuallyDisconnectedResponse(
   environment: ReturnType<typeof resolveEnvironment>
@@ -136,9 +137,18 @@ export function registerRuntimeEnvironmentConnectivityHandlers({
     ): Promise<RuntimeRpcResponse<RuntimeStatus>> => {
       const environment = resolveEnvironment(getUserDataPath(), args.selector)
       clearRuntimeEnvironmentManualDisconnect(environment.id)
-      return getRuntimeEnvironmentStatus(getUserDataPath(), environment.id, args.timeoutMs, {
-        reconnect: true
-      })
+      const response = await getRuntimeEnvironmentStatus(
+        getUserDataPath(),
+        environment.id,
+        args.timeoutMs,
+        { reconnect: true }
+      )
+      // Why: a reconnecting pair must re-ensure its mirror; the trigger
+      // piggybacks an in-flight engagement and degrades like the pairing path.
+      if (response.ok) {
+        engageOnEnvironmentConnected(getUserDataPath(), environment)
+      }
+      return response
     }
   )
   ipcMain.handle(
