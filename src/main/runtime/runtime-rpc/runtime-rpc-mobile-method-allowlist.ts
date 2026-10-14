@@ -204,6 +204,12 @@ export const MOBILE_RPC_METHOD_ALLOWLIST = new Set([
   'runtime.clientCapabilities.update',
   'runtime.clientEvents.subscribe',
   'runtime.clientEvents.unsubscribe',
+  // Why: the phone's mirrored (runtime-backed) rows attach the paired environment through the
+  // relay gateway vehicles; the WS allowlist is the first fence, the gateway's forwardable
+  // sets are the second.
+  'runtimeEnvironment.downstream.list',
+  'runtimeEnvironment.call',
+  'runtimeEnvironment.downstream.subscribe',
   'session.tabs.activate',
   'session.tabs.close',
   'session.tabs.closeLifecycle',

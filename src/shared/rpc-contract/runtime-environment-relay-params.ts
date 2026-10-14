@@ -159,7 +159,6 @@ export const REMOTE_RUNTIME_RELAY_ATTACH_OPERATE_METHODS = [
   'agentSession.release',
   'agentSession.history',
   'agentSession.handoffStatus',
-  'agentSession.requestHandoff',
   'agentSession.restartContinue',
   'agentSession.restartResumable',
   'agentSession.restartResumableDismiss',
@@ -243,10 +242,14 @@ export type RemoteRuntimeRelayAttachOperateMethod =
  * Phase-2 binary terminal streams the relay forwards. These exist only as
  * subscription methods (they open streaming sockets), so they ride
  * `runtimeEnvironment.downstream.subscribe` and never `runtimeEnvironment.call`.
+ * `session.tabs.subscribe` keeps a mirrored workspace's tab metadata live the
+ * way a local screen gets it; its params name a worktree selector only, which
+ * is why the zero-rewrite stream assert holds for it.
  */
 export const REMOTE_RUNTIME_RELAY_ATTACH_STREAM_METHODS = [
   'terminal.multiplex',
-  'terminal.subscribe'
+  'terminal.subscribe',
+  'session.tabs.subscribe'
 ] as const
 
 export type RemoteRuntimeRelayAttachStreamMethod =

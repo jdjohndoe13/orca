@@ -42,7 +42,7 @@ describe('runtime environment relay method lists', () => {
   // Update the number when deliberately extending the operate surface; a
   // surprise here is a list edit nobody meant to make.
   it('pins the milestone-2 operate surface size', () => {
-    expect(REMOTE_RUNTIME_RELAY_ATTACH_OPERATE_METHODS.length).toBe(177)
+    expect(REMOTE_RUNTIME_RELAY_ATTACH_OPERATE_METHODS.length).toBe(176)
   })
 
   it('refuses methods absent from every relay list even when registered', () => {

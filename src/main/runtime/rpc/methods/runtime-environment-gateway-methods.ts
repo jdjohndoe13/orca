@@ -75,7 +75,7 @@ export const RUNTIME_ENVIRONMENT_GATEWAY_METHODS = [
 async function listGatewayDownstreamEnvironments(
   ctx: RpcContext
 ): Promise<RuntimeEnvironmentDownstreamListResult> {
-  assertRelayScopeClient(ctx)
+  assertRelayScopeClient(ctx, RUNTIME_ENVIRONMENT_RELAY_DOWNSTREAM_LIST_METHOD)
   const userDataPath = getAppEnvironment().getPath('userData')
   const snapshotsById = new Map(
     getRuntimeEnvironmentStatusSnapshots().map((snapshot) => [snapshot.environmentId, snapshot])
@@ -111,7 +111,7 @@ async function relayRuntimeEnvironmentCall(
   params: RuntimeEnvironmentGatewayCallParams,
   ctx: RpcContext
 ): Promise<RuntimeEnvironmentGatewayCallResult> {
-  assertRelayScopeClient(ctx)
+  assertRelayScopeClient(ctx, RUNTIME_ENVIRONMENT_RELAY_METHOD)
   // Why the allowlist gates before the store lookup: junk ids carrying junk
   // methods must not probe which environments exist for free.
   if (!isRelayForwardableRuntimeMethod(params.method)) {
@@ -203,7 +203,7 @@ async function relayRuntimeEnvironmentSubscribe(
   ctx: RpcContext,
   emit: (result: unknown) => void
 ): Promise<void> {
-  assertRelayScopeClient(ctx)
+  assertRelayScopeClient(ctx, RUNTIME_ENVIRONMENT_RELAY_ATTACH_SUBSCRIBE_METHOD)
   // Same pre-store gate as the call method: a junk method on a junk id must not
   // probe which environments exist for free.
   if (!isRelayForwardableRuntimeStreamMethod(params.method)) {
@@ -319,11 +319,35 @@ function gatewayDownstreamStateFor(
   return 'unreachable'
 }
 
-function assertRelayScopeClient(ctx: RpcContext): void {
+/** The mobile-allowed vehicle names, exported for the fence's own test pin. */
+export const MOBILE_RELAY_VEHICLE_METHODS = new Set([
+  RUNTIME_ENVIRONMENT_RELAY_DOWNSTREAM_LIST_METHOD,
+  RUNTIME_ENVIRONMENT_RELAY_METHOD,
+  RUNTIME_ENVIRONMENT_RELAY_ATTACH_SUBSCRIBE_METHOD
+])
+
+// The three names above are string literals at dispatch time; the type pins
+// assertRelayScopeClient to exactly the gateway surface.
+type RUNTIME_ENVIRONMENT_GATEWAY_VEHICLE_METHOD =
+  | typeof RUNTIME_ENVIRONMENT_RELAY_DOWNSTREAM_LIST_METHOD
+  | typeof RUNTIME_ENVIRONMENT_RELAY_METHOD
+  | typeof RUNTIME_ENVIRONMENT_RELAY_ATTACH_SUBSCRIBE_METHOD
+
+function assertRelayScopeClient(
+  ctx: RpcContext,
+  method: RUNTIME_ENVIRONMENT_GATEWAY_VEHICLE_METHOD
+): void {
   // Why a second fence: the websocket gate refuses non-allowlisted methods for
   // mobile scopes ahead of dispatch, so this only fires for transports that skip
   // that gate — same pattern as the paired-only write refusals.
-  if (ctx.clientKind === 'mobile') {
+  if (ctx.clientKind !== 'mobile') {
+    return
+  }
+  // Mobile relay reads/attach are allowlist-fenced before dispatch and their
+  // forwarded methods are re-fenced at the forwardable sets; these three
+  // vehicles are the whole mobile surface, so every other runtimeEnvironment.*
+  // stays runtime-scope only here too.
+  if (!MOBILE_RELAY_VEHICLE_METHODS.has(method)) {
     throw Object.assign(new Error('Runtime relay methods are runtime-scope only.'), {
       code: 'forbidden'
     })

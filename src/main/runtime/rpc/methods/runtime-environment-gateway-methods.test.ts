@@ -88,7 +88,9 @@ function subscribeCtxFixture(options: {
   if (options.aborted) {
     signal.abort()
   }
-  const hasBinaryChannel = !options.bareSocket && !options.mobile
+  const hasBinaryChannel = !options.bareSocket
+  // Why: mobile sockets stream binary PTY frames through the same E2EE channel,
+  // so the fixture must not pair mobile sockets with a bare channel.
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: fixture only satisfies the fences and passthroughs the subscribe handler reads.
   return {
     clientKind: options.mobile ? 'mobile' : 'runtime',
@@ -292,16 +294,6 @@ describe('runtime environment gateway methods', () => {
       )
 
       expect(result.environments[1]!.state).toBe('unknown')
-    })
-
-    it('refuses mobile-scope callers', async () => {
-      statusSnapshotsMock.mockReturnValue([])
-      await expect(
-        listMethod.handler(
-          RuntimeEnvironmentDownstreamListParamsSchema.parse({}),
-          ctxFixture(null, 'mobile')
-        )
-      ).rejects.toMatchObject({ code: 'forbidden' })
     })
   })
 
@@ -571,23 +563,6 @@ describe('runtime environment gateway methods', () => {
         }
       })
     })
-
-    it('refuses mobile-scope callers', async () => {
-      const gateway = addEnvironmentFromPairingCode(userDataPath, {
-        name: 'gateway box',
-        pairingCode: pairingCode('ws://10.0.0.1:6768')
-      })
-
-      await expect(
-        callMethod.handler(
-          RuntimeEnvironmentGatewayCallParamsSchema.parse({
-            gatewayEnvironmentId: gateway.id,
-            method: 'repo.list'
-          }),
-          ctxFixture(null, 'mobile')
-        )
-      ).rejects.toMatchObject({ code: 'forbidden' })
-    })
   })
 
   describe('runtimeEnvironment.downstream.subscribe', () => {
@@ -837,25 +812,6 @@ describe('runtime environment gateway methods', () => {
       await expect(
         subscribeMethod.handler(subscribeParams('env-nested'), ctx, emitted.emit)
       ).rejects.toThrow('Unknown gateway environment: env-nested')
-      expect(subscribeRuntimeEnvironmentMock).not.toHaveBeenCalled()
-    })
-
-    it('refuses mobile-scope callers', async () => {
-      const gateway = addEnvironmentFromPairingCode(userDataPath, {
-        name: 'gateway box',
-        pairingCode: pairingCode('ws://10.0.0.1:6768')
-      })
-      const emitted = emitCollector()
-      const ctx = subscribeCtxFixture({
-        registry: new Map(),
-        outboundBinary: [],
-        attachBinaryHandler: noBinary,
-        mobile: true
-      })
-
-      await expect(
-        subscribeMethod.handler(subscribeParams(gateway.id), ctx, emitted.emit)
-      ).rejects.toMatchObject({ code: 'forbidden' })
       expect(subscribeRuntimeEnvironmentMock).not.toHaveBeenCalled()
     })
   })
