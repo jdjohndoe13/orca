@@ -26,6 +26,10 @@ export type LiveWorktreeName = {
   /** What the host last proved about this worktree still existing — see the bounce in
    *  use-missing-worktree-bounce.ts. */
   resolution: WorktreeShowResolution
+  /** The record's execution-host stamp, read off the same `worktree.show` reply. */
+  hostId: string | null
+  /** True once a successful read has answered the stamp (absent means local). */
+  stampKnown: boolean
 }
 
 export function useLiveWorktreeName({
@@ -51,6 +55,13 @@ export function useLiveWorktreeName({
   // answers selector_not_found for a live worktree — one miss is suspicion, not proof.
   // The fallback poll guarantees a confirming read (a failed show never stops it).
   const missingStreakRef = useRef({ worktreeId, count: 0 })
+  // Why: the same reply already carries the execution-host stamp the session
+  // screen needs to decide relay vs local tabs; a second read would race itself.
+  const [stamp, setStamp] = useState<{
+    worktreeId: string
+    hostId: string | null
+    stampKnown: boolean
+  }>(() => ({ worktreeId, hostId: null, stampKnown: false }))
 
   useEffect(() => {
     setWorktreeName((current) =>
@@ -120,6 +131,13 @@ export function useLiveWorktreeName({
             return
           }
           const worktree = accepted.value
+          setStamp((current) =>
+            current.worktreeId === worktreeId &&
+            current.stampKnown &&
+            current.hostId === (worktree?.hostId ?? null)
+              ? current
+              : { worktreeId, hostId: worktree?.hostId ?? null, stampKnown: true }
+          )
           const liveName = worktree ? getLiveWorktreeDisplayName([worktree], worktreeId) : null
           if (liveName) {
             setWorktreeName((current) =>
@@ -201,10 +219,12 @@ export function useLiveWorktreeName({
 
   if (isFloatingWorkspace) {
     // The sentinel has no worktree record to resolve, so nothing is ever proven about it.
-    return { name: FLOATING_WORKSPACE_TITLE, resolution: 'unknown' }
+    return { name: FLOATING_WORKSPACE_TITLE, resolution: 'unknown', hostId: null, stampKnown: true }
   }
   return {
     name: worktreeName.worktreeId === worktreeId ? worktreeName.name : routeNameHint,
-    resolution: resolved.worktreeId === worktreeId ? resolved.resolution : 'unknown'
+    resolution: resolved.worktreeId === worktreeId ? resolved.resolution : 'unknown',
+    hostId: stamp.worktreeId === worktreeId ? stamp.hostId : null,
+    stampKnown: stamp.worktreeId === worktreeId ? stamp.stampKnown : false
   }
 }

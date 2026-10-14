@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RpcClient } from '../transport/rpc-client'
 import type { ConnectionState } from '../transport/types'
 import type { SessionTabsApplyOutcome } from './mobile-session-tabs-stream-health'
+import type { RelayTabsSource } from './mobile-remote-runtime-session-tabs'
 import { useMobileSessionTabsReconciliation } from './use-mobile-session-tabs-reconciliation'
 import type { MobileTerminalInventoryRefreshOptions } from './use-mobile-terminal-inventory-recovery'
 
@@ -81,6 +82,7 @@ const replacementClient = {
 let currentClient: RpcClient = client
 let currentWorktreeId = 'repo::worktree'
 let currentTerminalInventoryRecoveryScopeKey = 'host::repo::worktree'
+let currentRelay: RelayTabsSource | null = null
 
 function applyWithRecovery(value: TestResult): SessionTabsApplyOutcome<string> {
   const outcome = applySessionTabs(value)
@@ -95,6 +97,7 @@ function Harness(): null {
     client: currentClient,
     connState: connectionState,
     worktreeId: currentWorktreeId,
+    relay: currentRelay,
     applySessionTabs: applyWithRecovery,
     consumeAcceptedSessionTabs,
     fetchTerminals,
@@ -161,6 +164,7 @@ describe('useMobileSessionTabsReconciliation', () => {
     currentClient = client
     currentWorktreeId = 'repo::worktree'
     currentTerminalInventoryRecoveryScopeKey = 'host::repo::worktree'
+    currentRelay = null
     recoveryNeeded = false
     clearRecoveryAt = Number.POSITIVE_INFINITY
     listSequence = 0
@@ -173,6 +177,15 @@ describe('useMobileSessionTabsReconciliation', () => {
     consumeAcceptedSessionTabs.mockClear()
     unsubscribe.mockClear()
     sendRequest.mockClear()
+    sendRequest.mockImplementation(async () => ({
+      id: `list-${++listSequence}`,
+      ok: true as const,
+      result: {
+        snapshotVersion: listSequence,
+        tabs: [`tab-${listSequence}`]
+      },
+      _meta: { runtimeId: 'runtime-1' }
+    }))
     subscribe
       .mockReset()
       .mockImplementation(
@@ -587,5 +600,51 @@ describe('useMobileSessionTabsReconciliation', () => {
     expect(subscribe).toHaveBeenCalledTimes(1)
     expect(unsubscribe).not.toHaveBeenCalled()
     expect(streamListener).toBe(initialListener)
+  })
+
+  it('polls a relay row through the gateway call and never subscribes locally', async () => {
+    currentRelay = { mode: 'relay', gatewayEnvironmentId: 'env-1' }
+    sendRequest.mockImplementation(async () => ({
+      id: 'call-1',
+      ok: true as const,
+      result: {
+        response: { id: 'l', ok: true, result: { snapshotVersion: 1, tabs: ['relay-tab'] } },
+        _meta: { gatewayEnvironmentId: 'env-1' }
+      }
+    }))
+    await mount()
+    await flush()
+
+    expect(subscribe).not.toHaveBeenCalled()
+    expect(sendRequest).toHaveBeenCalledWith('runtimeEnvironment.call', {
+      gatewayEnvironmentId: 'env-1',
+      method: 'session.tabs.list',
+      params: { worktree: 'id:repo::worktree' }
+    })
+    expect(applySessionTabs).toHaveBeenCalledWith(expect.objectContaining({ tabs: ['relay-tab'] }))
+  })
+
+  it('reads a relay refusal as degraded, never applies it as an empty snapshot', async () => {
+    currentRelay = { mode: 'relay', gatewayEnvironmentId: 'env-1' }
+    sendRequest.mockImplementation(async () => ({
+      id: 'call-1',
+      ok: true as const,
+      result: { response: { id: 'l', ok: false, error: { code: 'unavailable', message: 'down' } } }
+    }))
+    await mount()
+    await flush()
+
+    expect(applySessionTabs).not.toHaveBeenCalled()
+  })
+
+  it('parks a pending row: no subscribe and no list request until the stamp resolves', async () => {
+    currentRelay = { mode: 'pending' }
+    await mount()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6_000)
+    })
+
+    expect(subscribe).not.toHaveBeenCalled()
+    expect(sendRequest).not.toHaveBeenCalled()
   })
 })

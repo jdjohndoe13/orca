@@ -95,12 +95,19 @@ export const sessionWorktreeRecordSchema = z
         id: salvagedOptional('id', z.string()),
         displayName: salvagedOptional('displayName', z.string().nullable()),
         repo: salvagedOptional('repo', z.string().nullable()),
+        // The session screen reads this to decide whether the row is mirrored
+        // (runtime:<env>) and route its tabs through the gateway relay.
+        hostId: salvagedOptional('hostId', z.string().nullable()),
         diffComments: z.unknown().optional()
       })
     )
   })
   .transform(
-    (reply): (WorktreeDisplayNameSource & { diffComments?: unknown }) | undefined => reply.worktree
+    (
+      reply
+    ):
+      | (WorktreeDisplayNameSource & { hostId?: string | null; diffComments?: unknown })
+      | undefined => reply.worktree
   )
 
 /**
