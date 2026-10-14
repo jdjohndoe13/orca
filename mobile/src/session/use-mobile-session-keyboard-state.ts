@@ -35,6 +35,7 @@ export type MobileSessionKeyboardScope = Pick<
   | 'terminalRefs'
   | 'terminals'
   | 'terminalTextScale'
+  | 'sessionRelay'
   | 'unsubscribeTerminal'
   | 'viewportMeasuredRef'
   | 'viewportRef'
@@ -69,7 +70,8 @@ export function useMobileSessionKeyboardState(scope: MobileSessionKeyboardScope)
     terminalFrameRef,
     showNativeChatRef,
     unsubscribeTerminal,
-    subscribeToTerminal
+    subscribeToTerminal,
+    sessionRelay
   } = scope
   // Why: non-subscribe layout refits (tab strip, fold, rotation) live in a dedicated hook — see terminal-viewport-refit.ts.
   const {
@@ -91,7 +93,8 @@ export function useMobileSessionKeyboardState(scope: MobileSessionKeyboardScope)
     tabStripVisible: terminals.length > 1,
     textScale: terminalTextScale,
     unsubscribeTerminal,
-    subscribeToTerminal
+    subscribeToTerminal,
+    sessionRelay
   })
 
   // Why: react-native-web's `Keyboard` never fires, so inside the shell's page this screen heard no

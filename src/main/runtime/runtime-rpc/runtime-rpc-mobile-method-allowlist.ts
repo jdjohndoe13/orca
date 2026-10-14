@@ -210,6 +210,7 @@ export const MOBILE_RPC_METHOD_ALLOWLIST = new Set([
   'runtimeEnvironment.downstream.list',
   'runtimeEnvironment.call',
   'runtimeEnvironment.downstream.subscribe',
+  'runtimeEnvironment.downstream.unsubscribe',
   'session.tabs.activate',
   'session.tabs.close',
   'session.tabs.closeLifecycle',

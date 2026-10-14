@@ -6,10 +6,12 @@ import { setAppEnvironment } from '../../../../shared/app-environment'
 import {
   RUNTIME_ENVIRONMENT_RELAY_ATTACH_SUBSCRIBE_METHOD,
   RUNTIME_ENVIRONMENT_RELAY_DOWNSTREAM_LIST_METHOD,
+  RUNTIME_ENVIRONMENT_RELAY_DOWNSTREAM_UNSUBSCRIBE_METHOD,
   RUNTIME_ENVIRONMENT_RELAY_METHOD,
   RuntimeEnvironmentDownstreamListParamsSchema,
   RuntimeEnvironmentGatewayCallParamsSchema,
-  RuntimeEnvironmentGatewaySubscribeParamsSchema
+  RuntimeEnvironmentGatewaySubscribeParamsSchema,
+  RuntimeEnvironmentGatewayUnsubscribeParamsSchema
 } from '../../../../shared/rpc-contract/runtime-environment-relay-params'
 import type { RuntimeHostStatusSnapshot } from '../../../../shared/runtime-host-status'
 import { encodePairingOffer } from '../../../../shared/pairing'
@@ -21,6 +23,7 @@ import {
   RUNTIME_ENVIRONMENT_GATEWAY_CALL_METHOD_DEF as callMethod,
   RUNTIME_ENVIRONMENT_GATEWAY_DOWNSTREAM_LIST_METHOD_DEF as listMethod,
   RUNTIME_ENVIRONMENT_GATEWAY_SUBSCRIBE_METHOD_DEF as subscribeMethod,
+  RUNTIME_ENVIRONMENT_GATEWAY_UNSUBSCRIBE_METHOD_DEF as unsubscribeMethod,
   MOBILE_RELAY_VEHICLE_METHODS
 } from './runtime-environment-gateway-methods'
 
@@ -60,8 +63,15 @@ function ctxFixture(
 
 const Conn_ID = 'conn-1'
 
+type BridgeRegistration = {
+  id: string
+  connectionId?: string
+  requestId?: string
+  cleanup: () => void
+}
+
 function subscribeCtxFixture(options: {
-  registry: Map<string, () => void>
+  registrations: BridgeRegistration[]
   outboundBinary: Uint8Array<ArrayBufferLike>[]
   attachBinaryHandler: (handler: (bytes: Uint8Array<ArrayBufferLike>) => void) => void
 }): RpcContext {
@@ -69,6 +79,7 @@ function subscribeCtxFixture(options: {
   return {
     clientKind: 'mobile',
     connectionId: Conn_ID,
+    requestId: 'req-bridge',
     sendBinary: (bytes: Uint8Array<ArrayBufferLike>) => {
       options.outboundBinary.push(bytes)
       return true
@@ -81,8 +92,13 @@ function subscribeCtxFixture(options: {
     runtime: {
       getRuntimeId: () => 'runtime-gateway',
       getOrchestrationEnvironmentTransport: () => null,
-      registerSubscriptionCleanup: (id: string, cleanup: () => void) => {
-        options.registry.set(id, cleanup)
+      registerSubscriptionCleanup: (
+        id: string,
+        cleanup: () => void,
+        connectionId?: string,
+        requestId?: string
+      ) => {
+        options.registrations.push({ id, connectionId, requestId, cleanup })
       }
     }
   } as unknown as RpcContext
@@ -151,11 +167,12 @@ describe('runtime environment gateway mobile scope', () => {
     }
   })
 
-  it('admits exactly the three relay vehicles for mobile scopes', () => {
+  it('admits exactly the four relay vehicles for mobile scopes', () => {
     expect([...MOBILE_RELAY_VEHICLE_METHODS]).toEqual([
       RUNTIME_ENVIRONMENT_RELAY_DOWNSTREAM_LIST_METHOD,
       RUNTIME_ENVIRONMENT_RELAY_METHOD,
-      RUNTIME_ENVIRONMENT_RELAY_ATTACH_SUBSCRIBE_METHOD
+      RUNTIME_ENVIRONMENT_RELAY_ATTACH_SUBSCRIBE_METHOD,
+      RUNTIME_ENVIRONMENT_RELAY_DOWNSTREAM_UNSUBSCRIBE_METHOD
     ])
   })
 
@@ -209,7 +226,7 @@ describe('runtime environment gateway mobile scope', () => {
     expect(transport.call).toHaveBeenCalledWith(gateway.id, 'repo.list', undefined)
   })
 
-  it('bridges for a mobile socket too, binary frames riding the same channel', async () => {
+  it('bridges for a mobile socket, skips the raw handler, and releases by request', async () => {
     const gateway = addEnvironmentFromPairingCode(userDataPath, {
       name: 'gateway box',
       pairingCode: pairingCode('ws://10.0.0.1:6768')
@@ -234,15 +251,15 @@ describe('runtime environment gateway mobile scope', () => {
         return Promise.resolve(subscription)
       }
     )
-    const registry = new Map<string, () => void>()
+    const registrations: BridgeRegistration[] = []
     const outboundBinary: Uint8Array<ArrayBufferLike>[] = []
     const emitted = emitCollector()
-    const binaryUpHandlers: ((bytes: Uint8Array<ArrayBufferLike>) => void)[] = []
+    const rawHandlerCalls: ((bytes: Uint8Array<ArrayBufferLike>) => void)[] = []
     const ctx = subscribeCtxFixture({
-      registry,
+      registrations,
       outboundBinary,
       attachBinaryHandler: (handler) => {
-        binaryUpHandlers.push(handler)
+        rawHandlerCalls.push(handler)
       }
     })
 
@@ -256,11 +273,34 @@ describe('runtime environment gateway mobile scope', () => {
     )
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(dialArgs[0]?.method).toBe('terminal.subscribe')
+    // The phone's local terminal streams own its binary router in per-stream
+    // mode; the bridge must not register a raw handler that would conflict.
+    expect(rawHandlerCalls).toHaveLength(0)
+    // PTY output still crosses: the bridge forwards it through sendBinary.
     dialArgs[0]?.callbacks.onEvent({ type: 'binary', bytes: new Uint8Array([0x74, 1, 8]) })
     expect(outboundBinary).toEqual([new Uint8Array([0x74, 1, 8])])
-    binaryUpHandlers[0]?.(new Uint8Array([0x73, 2, 1]))
-    expect(subscription.sendBinary).toHaveBeenCalledWith(new Uint8Array([0x73, 2, 1]))
-    dialArgs[0]?.callbacks.onEvent({ type: 'close' })
+    // The bridge is request-addressed so the shared phone socket can release it.
+    expect(registrations).toHaveLength(1)
+    expect(registrations[0]?.requestId).toBe('req-bridge')
+    expect(registrations[0]?.connectionId).toBe(Conn_ID)
+    const release = unsubscribeMethod!.handler(
+      RuntimeEnvironmentGatewayUnsubscribeParamsSchema.parse({ requestId: 'req-bridge' }),
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the release handler only reads releaseSubscriptionByRequest.
+      {
+        clientKind: 'mobile',
+        connectionId: Conn_ID,
+        runtime: {
+          releaseSubscriptionByRequest: (connectionId: string | undefined, requestId: string) => {
+            for (const reg of registrations) {
+              if (reg.connectionId === connectionId && reg.requestId === requestId) {
+                reg.cleanup()
+              }
+            }
+          }
+        }
+      } as unknown as RpcContext
+    )
+    expect(release).toEqual({ released: true })
     await handler
     expect(subscription.close).toHaveBeenCalledOnce()
   })

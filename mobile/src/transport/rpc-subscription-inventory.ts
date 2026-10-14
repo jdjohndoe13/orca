@@ -87,6 +87,18 @@ export const RPC_SUBSCRIPTION_SITES: readonly RpcSubscriptionSite[] = [
       wall: 'Writes to a webview terminal ref this runner has no substitute for: the stream consumer calls `ref.init` and `dataRef.write`, so what a frame does is a device effect rather than an observation.'
     }
   },
+  // The same terminal stream for a mirrored (runtime-backed) workspace, wrapped
+  // in the gateway's subscribe vehicle and released by the request-addressed
+  // `downstream.unsubscribe` the transport sends for the bridge.
+  {
+    file: 'src/session/mobile-terminal-stream-subscribe.ts',
+    method: 'runtimeEnvironment.downstream.subscribe',
+    release: 'params',
+    coverage: {
+      kind: 'walled',
+      wall: 'Same wall as the local terminal subscribe beside it: the stream consumer calls `ref.init` and `dataRef.write` on a webview terminal ref this runner has no substitute for, and the bridge additionally needs a gateway plus an upstream host the recorder cannot stand up.'
+    }
+  },
   {
     file: 'src/session/use-live-worktree-name.ts',
     method: 'runtime.clientEvents.subscribe',

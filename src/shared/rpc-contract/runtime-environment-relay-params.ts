@@ -17,6 +17,12 @@ export const RUNTIME_ENVIRONMENT_RELAY_DOWNSTREAM_LIST_METHOD = 'runtimeEnvironm
 // over the one-shot `runtimeEnvironment.call` envelope format.
 export const RUNTIME_ENVIRONMENT_RELAY_ATTACH_SUBSCRIBE_METHOD =
   'runtimeEnvironment.downstream.subscribe'
+// Why a fourth vehicle: the phone's socket is shared and cannot be closed to
+// retire a bridge, so the bridge's owner releases it by the request id that
+// opened it. An old gateway answers method_not_found, which the phone treats as
+// success (the bridge then leaks until socket close — the status quo).
+export const RUNTIME_ENVIRONMENT_RELAY_DOWNSTREAM_UNSUBSCRIBE_METHOD =
+  'runtimeEnvironment.downstream.unsubscribe'
 
 /**
  * Phase-1 forwardable reads: a read-only view of repos, projects, groups,
@@ -354,6 +360,13 @@ export const RuntimeEnvironmentGatewaySubscribeParamsSchema = z.looseObject({
 })
 export type RuntimeEnvironmentGatewaySubscribeParams = z.infer<
   typeof RuntimeEnvironmentGatewaySubscribeParamsSchema
+>
+
+export const RuntimeEnvironmentGatewayUnsubscribeParamsSchema = z.looseObject({
+  requestId: requiredString('Missing bridge request ID')
+})
+export type RuntimeEnvironmentGatewayUnsubscribeParams = z.infer<
+  typeof RuntimeEnvironmentGatewayUnsubscribeParamsSchema
 >
 
 /**

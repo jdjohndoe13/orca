@@ -1,6 +1,8 @@
 import type { TabActivationIntent } from '../../../src/shared/tab-activation-intent'
 import { LogicalClientCutoverError } from '../transport/stable-logical-rpc-client'
 import { sessionTabActivate, sessionTerminalFocus } from './mobile-session-write-operations'
+import { forwardOrLocal } from './mobile-remote-runtime-forwarded-call'
+import type { RelayTabsSource } from './mobile-remote-runtime-session-tabs'
 import type { RpcResponse } from '../transport/types'
 import {
   getMobileTerminalDiagnosticErrorName,
@@ -84,10 +86,14 @@ export function focusMobileTerminal(
 
 export function activateMobileSessionTab(
   client: ActivationClient,
-  params: MobileSessionTabActivationParams
+  params: MobileSessionTabActivationParams,
+  relay?: RelayTabsSource | null
 ): Promise<RpcResponse> {
   return retryIdempotentActivationAfterCutover(
-    () => sessionTabActivate.request(client, params),
+    () =>
+      forwardOrLocal(client, relay, 'session.tabs.activate', params, () =>
+        sessionTabActivate.request(client, params)
+      ),
     'session.tabs.activate',
     params.tabId
   )

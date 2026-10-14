@@ -8,6 +8,7 @@ export function useMobileSessionTabSwitching(scope: MobileSessionKeyboardStateMo
   const {
     worktreeId,
     client,
+    sessionRelay,
     sessionTabs,
     defaultTerminalHandlesToLiveInput,
     setActiveHandle,
@@ -53,13 +54,17 @@ export function useMobileSessionTabSwitching(scope: MobileSessionKeyboardStateMo
       subscribeToTerminal(handle)
       if (client) {
         if (matchingTab) {
-          void activateMobileSessionTab(client, {
-            worktree: `id:${worktreeId}`,
-            tabId: matchingTab.id,
-            notifyClients: false,
-            navigation: 'caller',
-            intent: 'user'
-          }).catch(() => {})
+          void activateMobileSessionTab(
+            client,
+            {
+              worktree: `id:${worktreeId}`,
+              tabId: matchingTab.id,
+              notifyClients: false,
+              navigation: 'caller',
+              intent: 'user'
+            },
+            sessionRelay
+          ).catch(() => {})
         }
       }
     },
@@ -69,7 +74,8 @@ export function useMobileSessionTabSwitching(scope: MobileSessionKeyboardStateMo
       sessionTabs,
       subscribeToTerminal,
       unsubscribeTerminal,
-      worktreeId
+      worktreeId,
+      sessionRelay
     ]
   )
 
@@ -93,13 +99,17 @@ export function useMobileSessionTabSwitching(scope: MobileSessionKeyboardStateMo
         activeHandleRef.current = null
         setActiveHandle(null)
         if (client) {
-          void activateMobileSessionTab(client, {
-            worktree: `id:${worktreeId}`,
-            tabId: tab.id,
-            notifyClients: false,
-            navigation: 'caller',
-            intent: 'user'
-          }).catch(() => {})
+          void activateMobileSessionTab(
+            client,
+            {
+              worktree: `id:${worktreeId}`,
+              tabId: tab.id,
+              notifyClients: false,
+              navigation: 'caller',
+              intent: 'user'
+            },
+            sessionRelay
+          ).catch(() => {})
         }
         return
       }
@@ -117,13 +127,17 @@ export function useMobileSessionTabSwitching(scope: MobileSessionKeyboardStateMo
       activeHandleRef.current = null
       setActiveHandle(null)
       if (client) {
-        void activateMobileSessionTab(client, {
-          worktree: `id:${worktreeId}`,
-          tabId: tab.id,
-          notifyClients: false,
-          navigation: 'caller',
-          intent: 'user'
-        }).catch(() => {})
+        void activateMobileSessionTab(
+          client,
+          {
+            worktree: `id:${worktreeId}`,
+            tabId: tab.id,
+            notifyClients: false,
+            navigation: 'caller',
+            intent: 'user'
+          },
+          sessionRelay
+        ).catch(() => {})
       }
       if (tab.type === 'browser') {
         return
@@ -142,7 +156,16 @@ export function useMobileSessionTabSwitching(scope: MobileSessionKeyboardStateMo
       // Why: tab list lacks a reliable version for desktop clean saves; re-read on revisit unless the phone has a draft.
       void readMarkdownTab(tab)
     },
-    [client, markdownDocs, readFileTab, readMarkdownTab, switchTab, unsubscribeTerminal, worktreeId]
+    [
+      client,
+      markdownDocs,
+      readFileTab,
+      readMarkdownTab,
+      switchTab,
+      unsubscribeTerminal,
+      worktreeId,
+      sessionRelay
+    ]
   )
   // Ref to latest switchSessionTab so fetchSessionTabs can activate a synced browser tab without a dependency cycle.
   switchSessionTabRef.current = switchSessionTab

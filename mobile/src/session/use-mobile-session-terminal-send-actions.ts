@@ -10,6 +10,7 @@ import {
 } from '../terminal/terminal-live-input'
 import { dismissTerminalKeyboard } from '../terminal/terminal-keyboard-dismiss'
 import { terminalInputSend } from '../terminal/mobile-terminal-operations'
+import { forwardOrLocal } from './mobile-remote-runtime-forwarded-call'
 import {
   buildTerminalSendParams,
   TERMINAL_INPUT_SEND_OPTIONS
@@ -25,6 +26,7 @@ export function useMobileSessionTerminalSendActions(scope: MobileSessionTerminal
   const {
     client,
     activeHandle,
+    sessionRelay,
     activeSessionTab,
     setActionTarget,
     setMarkdownActionTarget,
@@ -113,18 +115,17 @@ export function useMobileSessionTerminalSendActions(scope: MobileSessionTerminal
 
     try {
       // Why: fail now and restore the text — a send parked across a reconnect would execute long after the tap.
-      const response = await terminalInputSend.request(
-        client,
-        buildTerminalSendParams({
-          terminal: activeHandle,
-          text,
-          enter: true,
-          deviceToken: deviceTokenRef.current
-        }),
-        TERMINAL_INPUT_SEND_OPTIONS
+      const sendParams = buildTerminalSendParams({
+        terminal: activeHandle,
+        text,
+        enter: true,
+        deviceToken: deviceTokenRef.current
+      })
+      const response = await forwardOrLocal(client, sessionRelay, 'terminal.send', sendParams, () =>
+        terminalInputSend.request(client, sendParams, TERMINAL_INPUT_SEND_OPTIONS)
       )
       const accepted = terminalInputSend.interpret(response) === true
-      if (accepted) {
+      if (accepted && sessionRelay?.mode !== 'relay') {
         reportWorkerTerminalUserInput(client, activeHandle)
       }
       if (!accepted) {
@@ -157,7 +158,8 @@ export function useMobileSessionTerminalSendActions(scope: MobileSessionTerminal
       activeSessionTabType: activeSessionTabTypeRef.current,
       connState: connStateRef.current,
       bytes: input.bytes,
-      deviceToken: deviceTokenRef.current
+      deviceToken: deviceTokenRef.current,
+      sessionRelay
     })
   }
 
@@ -184,29 +186,26 @@ export function useMobileSessionTerminalSendActions(scope: MobileSessionTerminal
       }
       // Why: live-mirror deltas queued behind a dying send drain into the connect
       // wait and replay stale bytes after reconnect (#6713's `YZZYecho …` corruption).
-      return terminalInputSend
-        .request(
-          rpc,
-          buildTerminalSendParams({
-            terminal: handle,
-            text,
-            enter: false,
-            deviceToken: deviceTokenRef.current
-          }),
-          TERMINAL_INPUT_SEND_OPTIONS
-        )
-        .then(
-          (response) => {
-            const accepted = terminalInputSend.interpret(response) === true
-            if (accepted) {
-              reportWorkerTerminalUserInput(rpc, handle)
-            }
-            return accepted
-          },
-          () => false
-        )
+      const liveParams = buildTerminalSendParams({
+        terminal: handle,
+        text,
+        enter: false,
+        deviceToken: deviceTokenRef.current
+      })
+      return forwardOrLocal(rpc, sessionRelay, 'terminal.send', liveParams, () =>
+        terminalInputSend.request(rpc, liveParams, TERMINAL_INPUT_SEND_OPTIONS)
+      ).then(
+        (response) => {
+          const accepted = terminalInputSend.interpret(response) === true
+          if (accepted && sessionRelay?.mode !== 'relay') {
+            reportWorkerTerminalUserInput(rpc, handle)
+          }
+          return accepted
+        },
+        () => false
+      )
     },
-    [showToast]
+    [showToast, sessionRelay]
   )
   sendLiveTerminalInputRef.current = sendLiveTerminalInput
 

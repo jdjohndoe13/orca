@@ -18,3 +18,39 @@ export function buildReadyStreamUnsubscribe(
   const release = READY_STREAM_RELEASE_METHODS.get(method)
   return release ? { method: release, params: { subscriptionId } } : null
 }
+
+export type ServerSubscriptionStream = {
+  method: string
+  subscriptionId?: string
+  cancelled?: boolean
+  sent?: boolean
+}
+
+export function sendServerSubscriptionUnsubscribe(
+  stream: ServerSubscriptionStream,
+  sendRpc: (method: string, params: unknown) => void
+): void {
+  if (!stream.subscriptionId) {
+    return
+  }
+  const unsubscribe = buildReadyStreamUnsubscribe(stream.method, stream.subscriptionId)
+  if (unsubscribe) {
+    sendRpc(unsubscribe.method, unsubscribe.params)
+  }
+}
+
+/** Cancel a ready-id stream: release now if the host named its id, else let the
+ *  ready reply (or the unsent drop) handle it. */
+export function disposeServerSubscription(
+  stream: ServerSubscriptionStream,
+  sendRpc: (method: string, params: unknown) => void,
+  remove: () => void
+): void {
+  stream.cancelled = true
+  if (stream.subscriptionId) {
+    sendServerSubscriptionUnsubscribe(stream, sendRpc)
+    remove()
+  } else if (!stream.sent) {
+    remove()
+  }
+}

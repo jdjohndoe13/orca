@@ -5,11 +5,11 @@ import type { ConnectionState } from '../transport/types'
 import type { TerminalWebViewHandle } from './TerminalWebView'
 import type { TerminalFrame } from './terminal-webview-messages'
 import { shouldRecoverTerminalOnAppStateChange } from './terminal-foreground-recovery'
-import { terminalViewportUpdate } from './mobile-terminal-operations'
+import { attemptTerminalViewportUpdate } from './terminal-viewport-update-attempt'
+import type { RelayTabsSource } from '../session/mobile-remote-runtime-session-tabs'
 import {
   isTerminalViewportRefitTargetCurrent,
   reduceTerminalFrameHeightRefit,
-  resolveTerminalUpdateViewportCapability,
   type TerminalFrameHeightRefitEvent,
   type TerminalFrameHeightRefitState,
   type TerminalUpdateViewportCapability
@@ -35,6 +35,8 @@ type TerminalViewportRefitOptions = {
   textScale: number
   unsubscribeTerminal: (handle: string) => void
   subscribeToTerminal: (handle: string) => void
+  // Mirrored rows send the in-place viewport update through the gateway relay.
+  sessionRelay: RelayTabsSource | null | undefined
 }
 
 // Why: re-measure on layout changes outside the subscribe path (tab strip, fold/rotate/resize), or a PTY renders "cut in half" (#4579).
@@ -53,7 +55,8 @@ export function useTerminalViewportRefit(options: TerminalViewportRefitOptions) 
     tabStripVisible,
     textScale,
     unsubscribeTerminal,
-    subscribeToTerminal
+    subscribeToTerminal,
+    sessionRelay
   } = options
 
   const refitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -119,7 +122,7 @@ export function useTerminalViewportRefit(options: TerminalViewportRefitOptions) 
           }
           const frame = terminalFrameRef.current
           const dims = frame ? ref.fitDimensions(frame) : null
-          if (!dims) {
+          if (!dims || !frame) {
             return
           }
           const forceRefit = forceNextRefitRef.current
@@ -133,28 +136,23 @@ export function useTerminalViewportRefit(options: TerminalViewportRefitOptions) 
           // Why: prefer in-place updateViewport over resubscribe to keep the mobile subscriber record alive. See docs/mobile-presence-lock.md.
           const rpc = clientRef.current
           const deviceToken = deviceTokenRef.current
-          if (rpc && deviceToken && updateViewportCapabilityRef.current !== 'unsupported') {
-            try {
-              const reply = await terminalViewportUpdate.request(rpc, {
-                terminal: handle,
-                client: { id: deviceToken, type: 'mobile' as const },
-                viewport: dims
-              })
-              if (!isCurrentTarget()) {
-                return
+          if (rpc && deviceToken) {
+            const outcome = await attemptTerminalViewportUpdate({
+              rpc,
+              deviceToken,
+              capability: updateViewportCapabilityRef.current,
+              handle,
+              dims,
+              frame,
+              ref,
+              sessionRelay,
+              isCurrentTarget,
+              onCapability: (capability) => {
+                updateViewportCapabilityRef.current = capability
               }
-              updateViewportCapabilityRef.current = resolveTerminalUpdateViewportCapability(reply)
-              const outcome = terminalViewportUpdate.interpret(reply)
-              if (outcome?.updated) {
-                rpc.updateTerminalSubscriptionViewport(handle, dims)
-                if (outcome.applied) {
-                  // Why: updateViewport re-streams only the visible screen, so local scrollback stays wrapped at the old width — reflow it locally.
-                  ref.reflow(dims.cols, dims.rows, frame)
-                }
-                return
-              }
-            } catch {
-              // Fall through to legacy resubscribe.
+            })
+            if (outcome.kind !== 'fallthrough') {
+              return
             }
           }
           if (!isCurrentTarget()) {
@@ -177,7 +175,8 @@ export function useTerminalViewportRefit(options: TerminalViewportRefitOptions) 
       deviceTokenRef,
       initializedHandlesRef,
       unsubscribeTerminal,
-      subscribeToTerminal
+      subscribeToTerminal,
+      sessionRelay
     ]
   )
   const scheduleForcedViewportRefit = useCallback(() => {

@@ -20,6 +20,7 @@ export function useMobileSessionTerminalSubscription(
   const {
     client,
     clientId,
+    sessionRelay,
     setTerminalModes,
     terminalCwdRef,
     viewportRef,
@@ -287,7 +288,8 @@ export function useMobileSessionTerminalSubscription(
         () => {
           unsubscribeTerminalRef.current(handle)
           signalTerminalInventoryRecovery()
-        }
+        },
+        sessionRelay
       )
 
       if (subscribeSeqRef.current.get(handle) === seq) {
@@ -300,6 +302,7 @@ export function useMobileSessionTerminalSubscription(
     [
       client,
       clientId,
+      sessionRelay,
       getTerminalRef,
       markNativeChatInputLeaseReady,
       scheduleDelayedAction,

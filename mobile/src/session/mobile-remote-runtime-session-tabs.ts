@@ -1,6 +1,6 @@
 import { parseExecutionHostId } from '../../../src/shared/execution-host'
 import { sessionTabsListRead } from './mobile-session-read-operations'
-import type { UnvalidatedRpcRequestPort } from '../transport/unvalidated-rpc-request-port'
+import { forwardedRuntimeCall } from './mobile-remote-runtime-forwarded-call'
 import type { RpcResponse } from '../transport/types'
 
 // The relay vehicles a mirrored (runtime-backed) workspace's session screen reads
@@ -9,7 +9,6 @@ import type { RpcResponse } from '../transport/types'
 // directly — the stamp suffix is the env id in the gateway's own store, which is
 // exactly the `gatewayEnvironmentId` the relay call addresses.
 
-const RELAY_CALL_METHOD = 'runtimeEnvironment.call'
 const RELAY_SESSION_TABS_LIST_METHOD = 'session.tabs.list'
 
 /** The gateway's own store id for the row's paired environment, or null when local. */
@@ -40,11 +39,8 @@ export function resolveRelayTabsSource(
   return gatewayEnvironmentId ? { mode: 'relay', gatewayEnvironmentId } : null
 }
 
-type ForwardedReply = {
-  ok?: boolean
-  result?: unknown
-  error?: { code?: string; message?: string }
-}
+/** Derived from the operation's own sender parameter so this file never names the raw port. */
+type TabsListSender = Parameters<typeof sessionTabsListRead.request>[0]
 
 /**
  * The tab list for a mirrored workspace, read through the gateway and unwrapped
@@ -53,43 +49,21 @@ type ForwardedReply = {
  * transport, or the upstream host's — arrives as a failure so the screen degrades
  * instead of mistaking an unreachable host for an empty session.
  */
-export async function requestRemoteSessionTabsList(
-  client: UnvalidatedRpcRequestPort,
+export function requestRemoteSessionTabsList(
+  client: TabsListSender,
   gatewayEnvironmentId: string,
   scope: string
 ): Promise<RpcResponse> {
-  const response = await client.sendRequest(RELAY_CALL_METHOD, {
-    gatewayEnvironmentId,
-    method: RELAY_SESSION_TABS_LIST_METHOD,
-    params: { worktree: scope }
+  return forwardedRuntimeCall(client, gatewayEnvironmentId, RELAY_SESSION_TABS_LIST_METHOD, {
+    worktree: scope
   })
-  if (!response.ok) {
-    return {
-      id: response.id,
-      ok: false,
-      error: { code: 'remote_runtime_unavailable', message: response.error.message }
-    }
-  }
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the gateway's call result is `{ response: <upstream reply> }`; reading the member off the unknown payload is the contract's own shape.
-  const forwarded = (response.result as { response?: ForwardedReply } | undefined)?.response
-  if (!forwarded?.ok) {
-    return {
-      id: response.id,
-      ok: false,
-      error: {
-        code: 'remote_runtime_unavailable',
-        message: forwarded?.error?.message ?? 'remote session tabs unavailable'
-      }
-    }
-  }
-  return { id: response.id, ok: true, result: forwarded.result }
 }
 
 /** The tab list read the controller runs: the gateway relay, or the local method.
  *  Not async: the local path must hand back the sender's own promise, and the
  *  controller's cohort timing is pinned to that microtask count. */
 export function fetchSessionTabsList(
-  client: UnvalidatedRpcRequestPort,
+  client: TabsListSender,
   relay: RelayTabsSource | null | undefined,
   scope: string
 ): Promise<RpcResponse> {

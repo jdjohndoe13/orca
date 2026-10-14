@@ -6,6 +6,7 @@ import { setAppEnvironment } from '../../../../shared/app-environment'
 import {
   RUNTIME_ENVIRONMENT_RELAY_ATTACH_SUBSCRIBE_METHOD,
   RUNTIME_ENVIRONMENT_RELAY_DOWNSTREAM_LIST_METHOD,
+  RUNTIME_ENVIRONMENT_RELAY_DOWNSTREAM_UNSUBSCRIBE_METHOD,
   RUNTIME_ENVIRONMENT_RELAY_METHOD,
   RuntimeEnvironmentDownstreamListParamsSchema,
   RuntimeEnvironmentGatewayCallParamsSchema,
@@ -198,11 +199,12 @@ describe('runtime environment gateway methods', () => {
     }
   })
 
-  it('registers exactly the census, the forwarding call, and the attached-stream bridge', () => {
+  it('registers the census, the forwarding call, the attached-stream bridge, and its release', () => {
     expect(RUNTIME_ENVIRONMENT_GATEWAY_METHODS.map((method) => method.name)).toEqual([
       RUNTIME_ENVIRONMENT_RELAY_DOWNSTREAM_LIST_METHOD,
       RUNTIME_ENVIRONMENT_RELAY_METHOD,
-      RUNTIME_ENVIRONMENT_RELAY_ATTACH_SUBSCRIBE_METHOD
+      RUNTIME_ENVIRONMENT_RELAY_ATTACH_SUBSCRIBE_METHOD,
+      RUNTIME_ENVIRONMENT_RELAY_DOWNSTREAM_UNSUBSCRIBE_METHOD
     ])
   })
 

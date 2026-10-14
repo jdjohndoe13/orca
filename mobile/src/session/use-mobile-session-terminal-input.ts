@@ -1,6 +1,7 @@
 import { reportWorkerTerminalUserInput } from '../terminal/worker-terminal-takeover-report'
 import { useCallback } from 'react'
 import { terminalBufferClear, terminalInputSend } from '../terminal/mobile-terminal-operations'
+import { forwardOrLocal } from './mobile-remote-runtime-forwarded-call'
 import {
   clearTerminalLiveInputFocusTimer,
   scheduleTerminalLiveInputFocus
@@ -26,6 +27,7 @@ export function useMobileSessionTerminalInput(scope: MobileSessionFileActionsMod
   const {
     client,
     connState,
+    sessionRelay,
     toggleTerminalLiveInput,
     activeHandle,
     ptyModesRef,
@@ -87,61 +89,63 @@ export function useMobileSessionTerminalInput(scope: MobileSessionFileActionsMod
     []
   )
 
-  const flushTerminalGestureInput = useCallback(async (handle: string) => {
-    const queued = terminalGestureInputQueuesRef.current.get(handle)
-    if (!queued) {
-      return
-    }
-    if (queued.timer) {
-      clearTimeout(queued.timer)
-      queued.timer = null
-    }
-    if (terminalGestureInputInFlightRef.current.has(handle)) {
-      return
-    }
+  const flushTerminalGestureInput = useCallback(
+    async (handle: string) => {
+      const queued = terminalGestureInputQueuesRef.current.get(handle)
+      if (!queued) {
+        return
+      }
+      if (queued.timer) {
+        clearTimeout(queued.timer)
+        queued.timer = null
+      }
+      if (terminalGestureInputInFlightRef.current.has(handle)) {
+        return
+      }
 
-    terminalGestureInputQueuesRef.current.delete(handle)
-    const isActive =
-      handle === activeHandleRef.current && activeSessionTabTypeRef.current === 'terminal'
-    const isFresh = Date.now() - queued.lastUpdatedMs <= TERMINAL_GESTURE_INPUT_MAX_QUEUE_AGE_MS
-    const rpc = clientRef.current
-    if (!rpc || connStateRef.current !== 'connected' || !isActive || !isFresh) {
-      return
-    }
+      terminalGestureInputQueuesRef.current.delete(handle)
+      const isActive =
+        handle === activeHandleRef.current && activeSessionTabTypeRef.current === 'terminal'
+      const isFresh = Date.now() - queued.lastUpdatedMs <= TERMINAL_GESTURE_INPUT_MAX_QUEUE_AGE_MS
+      const rpc = clientRef.current
+      if (!rpc || connStateRef.current !== 'connected' || !isActive || !isFresh) {
+        return
+      }
 
-    terminalGestureInputInFlightRef.current.add(handle)
-    try {
-      // Why: gesture arrows parked across a reconnect would move a TUI long after the swipe.
-      const response = await terminalInputSend.request(
-        rpc,
-        buildTerminalSendParams({
+      terminalGestureInputInFlightRef.current.add(handle)
+      try {
+        // Why: gesture arrows parked across a reconnect would move a TUI long after the swipe.
+        const sendParams = buildTerminalSendParams({
           terminal: handle,
           text: queued.bytes,
           enter: false,
           deviceToken: deviceTokenRef.current
-        }),
-        TERMINAL_INPUT_SEND_OPTIONS
-      )
-      if (terminalInputSend.interpret(response) === true) {
-        reportWorkerTerminalUserInput(rpc, handle)
-      }
-    } catch {
-      // Transient failure
-    } finally {
-      terminalGestureInputInFlightRef.current.delete(handle)
-      const next = terminalGestureInputQueuesRef.current.get(handle)
-      if (next) {
-        if (Date.now() - next.lastUpdatedMs > TERMINAL_GESTURE_INPUT_MAX_QUEUE_AGE_MS) {
-          if (next.timer) {
-            clearTimeout(next.timer)
+        })
+        const response = await forwardOrLocal(rpc, sessionRelay, 'terminal.send', sendParams, () =>
+          terminalInputSend.request(rpc, sendParams, TERMINAL_INPUT_SEND_OPTIONS)
+        )
+        if (terminalInputSend.interpret(response) === true && sessionRelay?.mode !== 'relay') {
+          reportWorkerTerminalUserInput(rpc, handle)
+        }
+      } catch {
+        // Transient failure
+      } finally {
+        terminalGestureInputInFlightRef.current.delete(handle)
+        const next = terminalGestureInputQueuesRef.current.get(handle)
+        if (next) {
+          if (Date.now() - next.lastUpdatedMs > TERMINAL_GESTURE_INPUT_MAX_QUEUE_AGE_MS) {
+            if (next.timer) {
+              clearTimeout(next.timer)
+            }
+            terminalGestureInputQueuesRef.current.delete(handle)
+          } else {
+            void flushTerminalGestureInput(handle)
           }
-          terminalGestureInputQueuesRef.current.delete(handle)
-        } else {
-          void flushTerminalGestureInput(handle)
         }
       }
-    }
-  }, [])
+    },
+    [sessionRelay]
+  )
 
   const enqueueTerminalGestureInput = useCallback(
     (handle: string, bytes: string, sequenceCount: number) => {
@@ -216,17 +220,21 @@ export function useMobileSessionTerminalInput(scope: MobileSessionFileActionsMod
     [allowTerminalGestureInput, client, connState, enqueueTerminalGestureInput]
   )
 
-  const handleTerminalQueryReply = useCallback((handle: string, bytes: string) => {
-    void sendMobileTerminalQueryReply({
-      bytes,
-      client: clientRef.current,
-      clientId: deviceTokenRef.current,
-      connected: connStateRef.current === 'connected',
-      handle,
-      hostSupportsQueryReplyInput: hostQueryReplyInputSupportedRef.current,
-      subscribedTerminals: terminalUnsubsRef.current
-    })
-  }, [])
+  const handleTerminalQueryReply = useCallback(
+    (handle: string, bytes: string) => {
+      void sendMobileTerminalQueryReply({
+        bytes,
+        client: clientRef.current,
+        clientId: deviceTokenRef.current,
+        connected: connStateRef.current === 'connected',
+        handle,
+        hostSupportsQueryReplyInput: hostQueryReplyInputSupportedRef.current,
+        subscribedTerminals: terminalUnsubsRef.current,
+        sessionRelay
+      })
+    },
+    [sessionRelay]
+  )
 
   async function handleClearTerminal(target: Terminal) {
     if (!client) {
@@ -235,7 +243,13 @@ export function useMobileSessionTerminalInput(scope: MobileSessionFileActionsMod
     getTerminalRef(target.handle)?.clear()
     try {
       // The reply is unread: main toasted success on any fulfilled envelope, refusal included.
-      await terminalBufferClear.request(client, { terminal: target.handle })
+      await forwardOrLocal(
+        client,
+        sessionRelay,
+        'terminal.clearBuffer',
+        { terminal: target.handle },
+        () => terminalBufferClear.request(client, { terminal: target.handle })
+      )
       showToast('Terminal cleared')
     } catch {
       showToast("Couldn't clear terminal", 1500)

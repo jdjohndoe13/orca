@@ -464,7 +464,8 @@ import { ClientCapabilitiesUpdate } from './runtime-client-capabilities-params'
 import {
   RuntimeEnvironmentDownstreamListParamsSchema,
   RuntimeEnvironmentGatewayCallParamsSchema,
-  RuntimeEnvironmentGatewaySubscribeParamsSchema
+  RuntimeEnvironmentGatewaySubscribeParamsSchema,
+  RuntimeEnvironmentGatewayUnsubscribeParamsSchema
 } from './runtime-environment-relay-params'
 import { SessionTabsUnsubscribeAllParams } from './session-tabs-params'
 import {
@@ -1144,6 +1145,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'runtimeEnvironment.call': RuntimeEnvironmentGatewayCallParamsSchema,
   'runtimeEnvironment.downstream.list': RuntimeEnvironmentDownstreamListParamsSchema,
   'runtimeEnvironment.downstream.subscribe': RuntimeEnvironmentGatewaySubscribeParamsSchema,
+  'runtimeEnvironment.downstream.unsubscribe': RuntimeEnvironmentGatewayUnsubscribeParamsSchema,
   'session.tabs.activate': ActivateTab,
   'session.tabs.close': CloseTab,
   'session.tabs.closeLifecycle': CloseLifecycleTab,

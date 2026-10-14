@@ -2,6 +2,8 @@ import { separateImagePasteFromFollowingText } from '../../../src/shared/image-p
 import { reportWorkerTerminalUserInput } from '../terminal/worker-terminal-takeover-report'
 import { useCallback, type RefObject } from 'react'
 import { terminalInputSend } from '../terminal/mobile-terminal-operations'
+import { forwardOrLocal } from './mobile-remote-runtime-forwarded-call'
+import type { RelayTabsSource } from './mobile-remote-runtime-session-tabs'
 import { useClipboardReader } from '../platform/clipboard'
 import type { TerminalModes } from '../terminal/terminal-webview-contract'
 import type { RpcClient } from '../transport/rpc-client'
@@ -43,6 +45,7 @@ type UseMobileTerminalPasteOptions = {
   readonly ptyModesRef: RefObject<Map<string, TerminalModes>>
   readonly refreshCanPaste: () => void
   readonly showToast: (message: string, durationMs?: number) => void
+  readonly sessionRelay?: RelayTabsSource | null
 }
 
 export function useMobileTerminalPaste({
@@ -62,7 +65,8 @@ export function useMobileTerminalPaste({
   onSuccess,
   ptyModesRef,
   refreshCanPaste,
-  showToast
+  showToast,
+  sessionRelay
 }: UseMobileTerminalPasteOptions): () => Promise<void> {
   // The pasteboard through the seam, both halves: text is `native.clipboard.read` on the page and
   // an image is `native.media.pick { source: 'clipboard' }`, never an inline value, because a
@@ -120,15 +124,22 @@ export function useMobileTerminalPaste({
       ) {
         return
       }
-      const response = await terminalInputSend.request(currentClient, {
+      const pasteParams = {
         terminal: targetHandle,
         text: payload,
         enter: false,
         ...(deviceTokenRef.current
           ? { client: { id: deviceTokenRef.current, type: 'mobile' as const } }
           : {})
-      })
-      if (terminalInputSend.interpret(response) === true) {
+      }
+      const response = await forwardOrLocal(
+        currentClient,
+        sessionRelay,
+        'terminal.send',
+        pasteParams,
+        () => terminalInputSend.request(currentClient, pasteParams)
+      )
+      if (terminalInputSend.interpret(response) === true && sessionRelay?.mode !== 'relay') {
         reportWorkerTerminalUserInput(currentClient, targetHandle)
       }
       onSuccess()
@@ -165,6 +176,7 @@ export function useMobileTerminalPaste({
     onSuccess,
     ptyModesRef,
     refreshCanPaste,
-    showToast
+    showToast,
+    sessionRelay
   ])
 }

@@ -1,13 +1,27 @@
 import {
-  decodeBrowserScreencastFrame,
-  type BrowserScreencastFrame
-} from './browser-screencast-protocol'
+  BrowserScreencastSlots,
+  decodeBrowserScreencast,
+  routeBrowserScreencastFrame
+} from './browser-screencast-slots'
+import type { BrowserScreencastFrame } from './browser-screencast-protocol'
 import {
   buildRequestStreamUnsubscribe,
+  updateGatewayBridgeTerminalViewport,
   updateTerminalSubscriptionViewport
 } from './rpc-client-terminal-subscription'
-import { buildReadyStreamUnsubscribe, isReadyIdStream } from './rpc-client-server-subscription'
+import {
+  disposeServerSubscription,
+  isReadyIdStream,
+  sendServerSubscriptionUnsubscribe
+} from './rpc-client-server-subscription'
 import { isStreamingOpenerReply } from './rpc-acceptance-policies'
+import {
+  buildGatewayBridgeUnsubscribe,
+  isGatewayBridgeStream,
+  terminalVehicleKind,
+  TerminalVehicleArbiter,
+  unwrapGatewayBridgeEvent
+} from './gateway-subscribe-envelope'
 import {
   isStreamEndResult,
   isStreamingSubscriptionReadyResult,
@@ -44,8 +58,8 @@ type StreamRegistryOptions = {
 export class RpcClientStreamRegistry {
   private readonly streams = new Map<string, StreamRequest>()
   private readonly terminalRouter = new RpcClientTerminalStreamRouter()
-  private activeBrowserRequestId: string | null = null
-  private pendingBrowserRequestId: string | null = null
+  private readonly terminalVehicles = new TerminalVehicleArbiter()
+  private readonly browserSlots = new BrowserScreencastSlots()
 
   constructor(private readonly options: StreamRegistryOptions) {}
 
@@ -63,6 +77,12 @@ export class RpcClientStreamRegistry {
       onBinaryFrame: subscribeOptions?.onBinaryFrame
     }
     this.streams.set(id, stream)
+    const vehicle = terminalVehicleKind(method, params)
+    if (vehicle) {
+      for (const evicted of this.terminalVehicles.claim(vehicle, id)) {
+        this.evictTerminalVehicle(evicted)
+      }
+    }
     if (method === 'browser.screencast') {
       this.replaceBrowserStream(id)
     }
@@ -91,8 +111,7 @@ export class RpcClientStreamRegistry {
         continue
       }
       if (stream.method === 'browser.screencast') {
-        this.pendingBrowserRequestId = id
-        this.activeBrowserRequestId = null
+        this.browserSlots.queueForReplay(id)
       }
       this.resetTerminalRouting(id)
       if (this.send(id, stream)) {
@@ -105,8 +124,7 @@ export class RpcClientStreamRegistry {
   }
 
   markForReplay(): void {
-    this.activeBrowserRequestId = null
-    this.pendingBrowserRequestId = null
+    this.browserSlots.reset()
     for (const [id, stream] of this.streams) {
       stream.sent = false
       stream.receivedSnapshot = false
@@ -147,7 +165,7 @@ export class RpcClientStreamRegistry {
   }
 
   handleBinary(bytes: Uint8Array): void {
-    const browserFrame = decodeBrowserScreencastFrame(bytes)
+    const browserFrame = decodeBrowserScreencast(bytes)
     if (browserFrame) {
       this.handleBrowserFrame(browserFrame)
       return
@@ -157,6 +175,7 @@ export class RpcClientStreamRegistry {
 
   updateTerminalViewport(terminal: string, viewport: { cols: number; rows: number }): void {
     updateTerminalSubscriptionViewport(this.streams.values(), terminal, viewport)
+    updateGatewayBridgeTerminalViewport(this.streams.values(), terminal, viewport)
   }
 
   size(): number {
@@ -168,7 +187,18 @@ export class RpcClientStreamRegistry {
     if (!stream) {
       return
     }
-    const result = response.result
+    let result = response.result
+    if (isGatewayBridgeStream(stream.method)) {
+      const unwrapped = unwrapGatewayBridgeEvent(result)
+      if (unwrapped.kind === 'keepalive') {
+        return
+      }
+      if (unwrapped.kind === 'error') {
+        this.finish(response.id, stream, { type: 'error', message: unwrapped.message })
+        return
+      }
+      result = unwrapped.result
+    }
     if (isStreamEndResult(result)) {
       this.finish(response.id, stream, result)
       return
@@ -180,21 +210,16 @@ export class RpcClientStreamRegistry {
     if (isStreamingSubscriptionReadyResult(result)) {
       stream.subscriptionId = result.subscriptionId
       if (stream.cancelled) {
-        this.sendServerSubscriptionUnsubscribe(stream)
+        sendServerSubscriptionUnsubscribe(stream, (method, params) => this.sendRpc(method, params))
         this.remove(response.id)
         return
       }
       if (stream.method === 'browser.screencast') {
-        if (
-          this.pendingBrowserRequestId !== response.id &&
-          this.activeBrowserRequestId !== response.id
-        ) {
-          this.sendBrowserUnsubscribe(result.subscriptionId)
+        if (!this.browserSlots.acceptReady(response.id)) {
+          this.sendRpc('browser.screencast.unsubscribe', { subscriptionId: result.subscriptionId })
           this.remove(response.id)
           return
         }
-        this.pendingBrowserRequestId = null
-        this.activeBrowserRequestId = response.id
       }
     }
     if (isTerminalSubscribedResult(result) && stream.listener) {
@@ -214,12 +239,27 @@ export class RpcClientStreamRegistry {
     }
     if (stream && isReadyIdStream(stream.method)) {
       if (stream.method === 'browser.screencast') {
-        this.clearBrowserRequest(id)
+        this.browserSlots.release(id)
       }
-      this.disposeServerSubscription(id, stream)
+      disposeServerSubscription(
+        stream,
+        (method, params) => this.sendRpc(method, params),
+        () => this.remove(id)
+      )
       return
     }
     if (stream && sessionTabsStream.holdUnsubscribe(stream)) {
+      return
+    }
+    if (isGatewayBridgeStream(stream?.method)) {
+      // The shared socket cannot close its way out of a bridge; the gateway
+      // releases it by the request id that opened it. An old gateway answers
+      // method_not_found, which the stream drops like any lost reply.
+      const release = buildGatewayBridgeUnsubscribe(stream?.method, id)
+      if (release) {
+        this.sendRpc(release.method, release.params)
+      }
+      this.remove(id)
       return
     }
     const unsubscribe = buildRequestStreamUnsubscribe(stream?.method, stream?.params, id)
@@ -230,74 +270,46 @@ export class RpcClientStreamRegistry {
   }
 
   private replaceBrowserStream(id: string): void {
-    if (this.activeBrowserRequestId && this.activeBrowserRequestId !== id) {
-      this.dispose(this.activeBrowserRequestId)
+    for (const stale of this.browserSlots.claim(id)) {
+      this.dispose(stale)
     }
-    if (this.pendingBrowserRequestId && this.pendingBrowserRequestId !== id) {
-      this.dispose(this.pendingBrowserRequestId)
-    }
-    this.pendingBrowserRequestId = id
-    this.activeBrowserRequestId = null
-  }
-
-  private disposeServerSubscription(id: string, stream: StreamRequest): void {
-    stream.cancelled = true
-    if (stream.subscriptionId) {
-      this.sendServerSubscriptionUnsubscribe(stream)
-      this.remove(id)
-    } else if (!stream.sent) {
-      this.remove(id)
-    }
-  }
-
-  private sendServerSubscriptionUnsubscribe(stream: StreamRequest): void {
-    if (!stream.subscriptionId) {
-      return
-    }
-    const unsubscribe = buildReadyStreamUnsubscribe(stream.method, stream.subscriptionId)
-    if (unsubscribe) {
-      this.sendRpc(unsubscribe.method, unsubscribe.params)
-    }
-  }
-
-  private sendBrowserUnsubscribe(subscriptionId: string): void {
-    this.sendRpc('browser.screencast.unsubscribe', { subscriptionId })
   }
 
   private sendRpc(method: string, params: unknown): boolean {
+    return this.sendFrame(this.options.nextId(), method, params)
+  }
+
+  private send(id: string, stream: StreamRequest): boolean {
+    return this.sendFrame(id, stream.method, stream.params)
+  }
+
+  private sendFrame(id: string, method: string, params: unknown): boolean {
     return this.options.sendEncrypted({
-      id: this.options.nextId(),
+      id,
       deviceToken: this.options.deviceToken,
       method,
       params
     })
   }
 
-  private send(id: string, stream: StreamRequest): boolean {
-    return this.options.sendEncrypted({
-      id,
-      deviceToken: this.options.deviceToken,
-      method: stream.method,
-      params: stream.params
-    })
-  }
-
   private remove(id: string): void {
     const stream = this.streams.get(id)
     this.streams.delete(id)
-    this.clearBrowserRequest(id)
+    this.browserSlots.release(id)
     this.resetTerminalRouting(id)
+    this.terminalVehicles.forget(id)
     if (stream?.method === 'browser.screencast') {
       stream.cancelled = true
     }
   }
 
-  private clearBrowserRequest(id: string): void {
-    if (this.activeBrowserRequestId === id) {
-      this.activeBrowserRequestId = null
-    }
-    if (this.pendingBrowserRequestId === id) {
-      this.pendingBrowserRequestId = null
+  /** The arbiter replaced this stream's binary vehicle: end it like a host-ended
+   *  stream so the session layer's `end` path (unsubscribe + inventory recovery)
+   *  runs and the screen can re-subscribe when it regains focus. */
+  private evictTerminalVehicle(id: string): void {
+    const stream = this.streams.get(id)
+    if (stream && !stream.cancelled) {
+      this.finish(id, stream, { type: 'end' })
     }
   }
 
@@ -306,14 +318,10 @@ export class RpcClientStreamRegistry {
   }
 
   private handleBrowserFrame(frame: BrowserScreencastFrame): void {
-    if (!this.activeBrowserRequestId) {
+    if (!this.browserSlots.active) {
       return
     }
-    const stream = this.streams.get(this.activeBrowserRequestId)
-    if (!stream || stream.cancelled || stream.method !== 'browser.screencast') {
-      return
-    }
-    stream.onBinaryFrame?.(frame)
+    routeBrowserScreencastFrame(this.streams.get(this.browserSlots.active), frame)
   }
 
   /** Removed first, so neither the listener's dispose nor a replay can name a host-ended stream. */

@@ -13,6 +13,7 @@ export function useMobileSessionAttachments(scope: MobileSessionAccessorySelecti
     worktreeId,
     client,
     connState,
+    sessionRelay,
     activeHandle,
     pendingDiffNotesDelivery,
     showCreateTabDrawer,
@@ -61,7 +62,8 @@ export function useMobileSessionAttachments(scope: MobileSessionAccessorySelecti
     onSuccess: triggerSelection,
     ptyModesRef,
     refreshCanPaste,
-    showToast
+    showToast,
+    sessionRelay
   })
 
   const flushPendingLiveInputBeforeAttachmentSend = useMobileAttachmentInputLeaseGate({
