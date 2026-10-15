@@ -14,6 +14,7 @@ import {
   assertRelayScopeClient,
   resolveGatewayEnvironment
 } from './runtime-environment-gateway-relay-scope'
+import type { ActiveSpan } from '../../../observability/tracer'
 
 /**
  * Phase-2 attached terminal streams over the chassis: `terminal.multiplex` and
@@ -28,7 +29,8 @@ import {
 export async function relayRuntimeEnvironmentSubscribe(
   params: RuntimeEnvironmentGatewaySubscribeParams,
   ctx: RpcContext,
-  emit: (result: unknown) => void
+  emit: (result: unknown) => void,
+  span?: ActiveSpan
 ): Promise<void> {
   assertRelayScopeClient(ctx, RUNTIME_ENVIRONMENT_RELAY_ATTACH_SUBSCRIBE_METHOD)
   // Same pre-store gate as the call method: a junk method on a junk id must not
@@ -81,6 +83,7 @@ export async function relayRuntimeEnvironmentSubscribe(
       return
     }
     unregistered = true
+    span?.addEvent('cleanup')
     try {
       unregisterBinary()
     } finally {
@@ -106,12 +109,14 @@ export async function relayRuntimeEnvironmentSubscribe(
             return
           }
           if (payload.type === 'error') {
+            span?.addEvent('upstream-error', { code: payload.code })
             emit({ type: 'error', code: payload.code, message: payload.message })
             return
           }
           if (payload.type === 'close') {
             // Corridor end: the forwarded close releases the guest's socket so
             // it re-attaches (the same recovery it runs for a direct stream).
+            span?.addEvent('upstream-close')
             emit({ type: 'end' })
             resolveClosed()
             return
@@ -124,6 +129,8 @@ export async function relayRuntimeEnvironmentSubscribe(
     if (signal?.aborted) {
       return
     }
+    span?.setAttribute('environmentId', environment.id)
+    span?.addEvent('upstream-subscribed')
     if (registerRawHandler) {
       // Raw bytes, no header stripping: the upstream host's binary router
       // parses TerminalStreamFrame headers exactly as it does for a local

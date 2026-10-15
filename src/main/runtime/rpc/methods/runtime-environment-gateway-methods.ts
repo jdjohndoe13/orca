@@ -29,6 +29,7 @@ import { getAppEnvironment } from '../../../../shared/app-environment'
 import { isEphemeralVmRuntimeEnvironment } from '../../../../shared/runtime-environments'
 import { listEnvironments } from '../../../../shared/runtime-environment-store'
 import { defineMethod, defineStreamingMethod, type RpcContext } from '../core'
+import { withSpan, type ActiveSpan } from '../../../observability/tracer'
 import { getRuntimeEnvironmentStatusSnapshots } from '../../../ipc/runtime-environment-request-connections'
 import type { OrchestrationEnvironmentTransport } from '../../orchestration/environment-transport'
 import {
@@ -43,35 +44,76 @@ export const RUNTIME_ENVIRONMENT_GATEWAY_DOWNSTREAM_LIST_METHOD_DEF = defineMeth
   name: RUNTIME_ENVIRONMENT_RELAY_DOWNSTREAM_LIST_METHOD,
   permission: 'workspace',
   params: RuntimeEnvironmentDownstreamListParamsSchema,
-  handler: (_params, ctx) => listGatewayDownstreamEnvironments(ctx)
+  handler: (_params, ctx) =>
+    withSpan(
+      'runtime-environment.gateway.downstream-list',
+      (span) =>
+        listGatewayDownstreamEnvironments(ctx).then((result) => {
+          span.setAttribute('environmentCount', result.environments.length)
+          return result
+        }),
+      { attributes: { connectionId: ctx.connectionId ?? null } }
+    )
 })
 
 export const RUNTIME_ENVIRONMENT_GATEWAY_CALL_METHOD_DEF = defineMethod({
   name: RUNTIME_ENVIRONMENT_RELAY_METHOD,
   permission: 'workspace',
   params: RuntimeEnvironmentGatewayCallParamsSchema,
-  handler: async (params, ctx) => relayRuntimeEnvironmentCall(params, ctx)
+  handler: (params, ctx) =>
+    withSpan(
+      'runtime-environment.gateway.call',
+      (span) => relayRuntimeEnvironmentCall(params, ctx, span),
+      {
+        attributes: {
+          gatewayEnvironmentId: params.gatewayEnvironmentId,
+          method: params.method,
+          connectionId: ctx.connectionId ?? null
+        }
+      }
+    )
 })
 
 export const RUNTIME_ENVIRONMENT_GATEWAY_SUBSCRIBE_METHOD_DEF = defineStreamingMethod({
   name: RUNTIME_ENVIRONMENT_RELAY_ATTACH_SUBSCRIBE_METHOD,
   permission: 'workspace',
   params: RuntimeEnvironmentGatewaySubscribeParamsSchema,
-  handler: (params, ctx, emit) => relayRuntimeEnvironmentSubscribe(params, ctx, emit)
+  handler: (params, ctx, emit) =>
+    withSpan(
+      'runtime-environment.gateway.downstream-subscribe',
+      (span) => relayRuntimeEnvironmentSubscribe(params, ctx, emit, span),
+      {
+        attributes: {
+          gatewayEnvironmentId: params.gatewayEnvironmentId,
+          method: params.method,
+          connectionId: ctx.connectionId ?? null
+        }
+      }
+    )
 })
 
 export const RUNTIME_ENVIRONMENT_GATEWAY_UNSUBSCRIBE_METHOD_DEF = defineMethod({
   name: RUNTIME_ENVIRONMENT_RELAY_DOWNSTREAM_UNSUBSCRIBE_METHOD,
   permission: 'workspace',
   params: RuntimeEnvironmentGatewayUnsubscribeParamsSchema,
-  handler: (params, ctx) => {
-    assertRelayScopeClient(ctx, RUNTIME_ENVIRONMENT_RELAY_DOWNSTREAM_UNSUBSCRIBE_METHOD)
-    // The phone's socket is shared, so it cannot close its way out of a bridge;
-    // the request id that opened the bridge is the only safe address. An
-    // unknown or already-ended request is a no-op, never a slot eviction.
-    ctx.runtime.releaseSubscriptionByRequest(ctx.connectionId, params.requestId)
-    return { released: true }
-  }
+  handler: (params, ctx) =>
+    withSpan(
+      'runtime-environment.gateway.downstream-unsubscribe',
+      () => {
+        assertRelayScopeClient(ctx, RUNTIME_ENVIRONMENT_RELAY_DOWNSTREAM_UNSUBSCRIBE_METHOD)
+        // The phone's socket is shared, so it cannot close its way out of a bridge;
+        // the request id that opened the bridge is the only safe address. An
+        // unknown or already-ended request is a no-op, never a slot eviction.
+        ctx.runtime.releaseSubscriptionByRequest(ctx.connectionId, params.requestId)
+        return { released: true }
+      },
+      {
+        attributes: {
+          requestId: params.requestId,
+          connectionId: ctx.connectionId ?? null
+        }
+      }
+    )
 })
 
 /**
@@ -125,7 +167,8 @@ async function listGatewayDownstreamEnvironments(
 
 async function relayRuntimeEnvironmentCall(
   params: RuntimeEnvironmentGatewayCallParams,
-  ctx: RpcContext
+  ctx: RpcContext,
+  span?: ActiveSpan
 ): Promise<RuntimeEnvironmentGatewayCallResult> {
   assertRelayScopeClient(ctx, RUNTIME_ENVIRONMENT_RELAY_METHOD)
   // Why the allowlist gates before the store lookup: junk ids carrying junk
@@ -153,6 +196,10 @@ async function relayRuntimeEnvironmentCall(
     )
   } catch (error) {
     response = relayUnavailableResponse(params.method, error)
+  }
+  span?.setAttribute('forwardedOk', response.ok)
+  if (!response.ok) {
+    span?.setAttribute('forwardedErrorCode', response.error.code)
   }
   return RuntimeEnvironmentGatewayCallResultSchema.parse({
     response,

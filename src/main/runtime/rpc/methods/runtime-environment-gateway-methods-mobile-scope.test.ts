@@ -283,7 +283,7 @@ describe('runtime environment gateway mobile scope', () => {
     expect(registrations).toHaveLength(1)
     expect(registrations[0]?.requestId).toBe('req-bridge')
     expect(registrations[0]?.connectionId).toBe(Conn_ID)
-    const release = unsubscribeMethod!.handler(
+    const release = await unsubscribeMethod!.handler(
       RuntimeEnvironmentGatewayUnsubscribeParamsSchema.parse({ requestId: 'req-bridge' }),
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the release handler only reads releaseSubscriptionByRequest.
       {
