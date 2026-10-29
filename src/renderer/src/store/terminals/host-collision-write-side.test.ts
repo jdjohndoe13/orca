@@ -13,6 +13,9 @@ const REPO_ID = 'repo1'
 const CONTESTED = `${REPO_ID}::C:\\vmd`
 const SSH = 'ssh:paired-box'
 const LOCAL = 'local'
+// The session key is the id byte-for-byte — the host compares the key against the row id it
+// published, so the id part never re-spells. (The contested GATE folds the separator spelling
+// so the two spellings of one checkout count as one contested id.)
 const sshKey = `${SSH}|${CONTESTED}`
 
 describe('contested id write side', () => {

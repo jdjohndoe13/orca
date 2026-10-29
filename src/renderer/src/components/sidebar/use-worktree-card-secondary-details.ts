@@ -92,7 +92,8 @@ export function useWorktreeCardSecondaryDetails({
   const showInlineAgentList = cardProps.includes('inline-agents') && (newCardStyle || !compactCards)
   const compactInlineAgentRows = useWorktreeAgentRows(
     worktree.id,
-    showInlineAgentList && agentActivityDisplayMode === 'compact'
+    showInlineAgentList && agentActivityDisplayMode === 'compact',
+    worktree.hostId
   )
   const compactInlineAgentRowsVisible =
     showInlineAgentList &&

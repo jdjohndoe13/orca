@@ -14,6 +14,9 @@ import {
 } from './worktree-agent-live-index-patch'
 import { selectWorktreeAgentOrchestration } from './worktree-agent-orchestration-index'
 import { createWorktreeRecordSelector } from '@/store/worktree-record-selector-cache'
+import { getContestedWorktreeIds } from '@/store/worktree-repo-index'
+import { agentRowBucketKey } from './worktree-agent-row-bucket-key'
+import { getLiveTabIdToWorktreeId, getTabIdToWorktreeId } from './worktree-agent-tab-index'
 import type { TerminalLayoutSnapshot } from '../../../../shared/terminal-tab-types'
 
 // Why frozen and exported: card hooks return these from their inactive branch,
@@ -37,15 +40,8 @@ type WorktreeAgentRowsState = Pick<
   | 'tabsByWorktree'
 > & {
   unifiedTabsByWorktree?: AppState['unifiedTabsByWorktree']
-}
-
-type TabWorktreeIndexCache = {
-  tabsByWorktree: WorktreeAgentRowsState['tabsByWorktree']
-  tabIdToWorktreeId: Map<string, string>
-}
-
-type LiveTabWorktreeIndexCache = TabWorktreeIndexCache & {
-  unifiedTabsByWorktree: WorktreeAgentRowsState['unifiedTabsByWorktree']
+  /** Only the contested-id set is read from it; a slice-level mock without a catalog has no collision. */
+  worktreesByRepo?: AppState['worktreesByRepo']
 }
 
 type MigrationUnsupportedByWorktreeCache = {
@@ -56,11 +52,11 @@ type MigrationUnsupportedByWorktreeCache = {
 
 type RetainedEntriesByWorktreeCache = {
   retainedAgentsByPaneKey: WorktreeAgentRowsState['retainedAgentsByPaneKey']
+  tabsByWorktree: WorktreeAgentRowsState['tabsByWorktree']
+  worktreesByRepo: WorktreeAgentRowsState['worktreesByRepo']
   entriesByWorktree: Map<string, RetainedAgentEntry[]>
 }
 
-let tabWorktreeIndexCache: TabWorktreeIndexCache | null = null
-let liveTabWorktreeIndexCache: LiveTabWorktreeIndexCache | null = null
 let liveEntriesByWorktreeCache: LiveEntriesByWorktreeCache | null = null
 let migrationUnsupportedByWorktreeCache: MigrationUnsupportedByWorktreeCache | null = null
 let retainedEntriesByWorktreeCache: RetainedEntriesByWorktreeCache | null = null
@@ -80,74 +76,39 @@ export function reuseArrayIfEqual<T>(previous: T[] | undefined, next: T[]): T[] 
   return previous
 }
 
-// Why exported: the Settings -> Repositories runtime summary needs the same
-// tab -> worktree index, and rebuilding it there would re-walk every tab bucket
-// on each store write.
-export function getTabIdToWorktreeId(
-  tabsByWorktree: WorktreeAgentRowsState['tabsByWorktree']
-): Map<string, string> {
-  if (tabWorktreeIndexCache?.tabsByWorktree === tabsByWorktree) {
-    return tabWorktreeIndexCache.tabIdToWorktreeId
-  }
-  const tabIdToWorktreeId = new Map<string, string>()
-  for (const [worktreeId, tabs] of Object.entries(tabsByWorktree)) {
-    for (const tab of tabs) {
-      tabIdToWorktreeId.set(tab.id, worktreeId)
-    }
-  }
-  tabWorktreeIndexCache = { tabsByWorktree, tabIdToWorktreeId }
-  return tabIdToWorktreeId
-}
-
-function getLiveTabIdToWorktreeId(
-  tabsByWorktree: WorktreeAgentRowsState['tabsByWorktree'],
-  unifiedTabsByWorktree: WorktreeAgentRowsState['unifiedTabsByWorktree']
-): Map<string, string> {
-  if (
-    liveTabWorktreeIndexCache?.tabsByWorktree === tabsByWorktree &&
-    liveTabWorktreeIndexCache.unifiedTabsByWorktree === unifiedTabsByWorktree
-  ) {
-    return liveTabWorktreeIndexCache.tabIdToWorktreeId
-  }
-  const tabIdToWorktreeId = new Map(getTabIdToWorktreeId(tabsByWorktree))
-  for (const [worktreeId, tabs] of Object.entries(unifiedTabsByWorktree ?? {})) {
-    for (const tab of tabs) {
-      if (tab.contentType === 'agent-session') {
-        tabIdToWorktreeId.set(tab.id, worktreeId)
-      }
-    }
-  }
-  liveTabWorktreeIndexCache = { tabsByWorktree, unifiedTabsByWorktree, tabIdToWorktreeId }
-  return tabIdToWorktreeId
-}
-
 function getLiveEntriesByWorktree(state: WorktreeAgentRowsState): Map<string, AgentStatusEntry[]> {
   const agentStatusByPaneKey = state.agentStatusByPaneKey ?? EMPTY_RECORD
   const tabsByWorktree = state.tabsByWorktree ?? EMPTY_RECORD
   const unifiedTabsByWorktree = state.unifiedTabsByWorktree
+  const worktreesByRepo = state.worktreesByRepo
   if (
     liveEntriesByWorktreeCache?.tabsByWorktree === tabsByWorktree &&
     liveEntriesByWorktreeCache.unifiedTabsByWorktree === unifiedTabsByWorktree &&
-    liveEntriesByWorktreeCache.agentStatusByPaneKey === agentStatusByPaneKey
+    liveEntriesByWorktreeCache.agentStatusByPaneKey === agentStatusByPaneKey &&
+    liveEntriesByWorktreeCache.worktreesByRepo === worktreesByRepo
   ) {
     return liveEntriesByWorktreeCache.entriesByWorktree
   }
 
+  const contested = getContestedWorktreeIds(worktreesByRepo)
   const tabIdToWorktreeId = getLiveTabIdToWorktreeId(tabsByWorktree, unifiedTabsByWorktree)
   if (
     liveEntriesByWorktreeCache?.tabsByWorktree === tabsByWorktree &&
-    liveEntriesByWorktreeCache.unifiedTabsByWorktree === unifiedTabsByWorktree
+    liveEntriesByWorktreeCache.unifiedTabsByWorktree === unifiedTabsByWorktree &&
+    liveEntriesByWorktreeCache.worktreesByRepo === worktreesByRepo
   ) {
     const patched = patchLiveEntriesByWorktree(
       liveEntriesByWorktreeCache,
       agentStatusByPaneKey,
-      tabIdToWorktreeId
+      tabIdToWorktreeId,
+      contested
     )
     if (patched) {
       liveEntriesByWorktreeCache = {
         tabsByWorktree,
         unifiedTabsByWorktree,
         agentStatusByPaneKey,
+        worktreesByRepo,
         entriesByWorktree: patched
       }
       return patched
@@ -157,7 +118,7 @@ function getLiveEntriesByWorktree(state: WorktreeAgentRowsState): Map<string, Ag
   const previous = liveEntriesByWorktreeCache?.entriesByWorktree
   const entriesByWorktree = new Map<string, AgentStatusEntry[]>()
   for (const [paneKey, entry] of Object.entries(agentStatusByPaneKey)) {
-    const worktreeId = liveEntryWorktreeId(paneKey, entry, tabIdToWorktreeId)
+    const worktreeId = liveEntryWorktreeId(paneKey, entry, tabIdToWorktreeId, contested)
     if (!worktreeId) {
       continue
     }
@@ -175,6 +136,7 @@ function getLiveEntriesByWorktree(state: WorktreeAgentRowsState): Map<string, Ag
     tabsByWorktree,
     unifiedTabsByWorktree,
     agentStatusByPaneKey,
+    worktreesByRepo,
     entriesByWorktree
   }
   return entriesByWorktree
@@ -226,18 +188,36 @@ function getRetainedEntriesByWorktree(
   state: WorktreeAgentRowsState
 ): Map<string, RetainedAgentEntry[]> {
   const retainedAgentsByPaneKey = state.retainedAgentsByPaneKey ?? EMPTY_RECORD
-  if (retainedEntriesByWorktreeCache?.retainedAgentsByPaneKey === retainedAgentsByPaneKey) {
+  const tabsByWorktree = state.tabsByWorktree ?? EMPTY_RECORD
+  const worktreesByRepo = state.worktreesByRepo
+  if (
+    retainedEntriesByWorktreeCache?.retainedAgentsByPaneKey === retainedAgentsByPaneKey &&
+    retainedEntriesByWorktreeCache.tabsByWorktree === tabsByWorktree &&
+    retainedEntriesByWorktreeCache.worktreesByRepo === worktreesByRepo
+  ) {
     return retainedEntriesByWorktreeCache.entriesByWorktree
   }
 
+  const contested = getContestedWorktreeIds(worktreesByRepo)
+  const tabIdToWorktreeId = getTabIdToWorktreeId(tabsByWorktree)
   const previous = retainedEntriesByWorktreeCache?.entriesByWorktree
   const entriesByWorktree = new Map<string, RetainedAgentEntry[]>()
   for (const retained of Object.values(retainedAgentsByPaneKey)) {
-    const bucket = entriesByWorktree.get(retained.worktreeId)
+    // The retained row's own worktreeId stays bare by design; the bucket is the
+    // card's row key, so a contested id splits per host like the live rows.
+    const worktreeId =
+      agentRowBucketKey({
+        worktreeId: retained.worktreeId,
+        tabRowKey: tabIdToWorktreeId.get(retained.tab.id),
+        tabId: retained.tab.id,
+        entry: retained.entry,
+        contested
+      }) ?? retained.worktreeId
+    const bucket = entriesByWorktree.get(worktreeId)
     if (bucket) {
       bucket.push(retained)
     } else {
-      entriesByWorktree.set(retained.worktreeId, [retained])
+      entriesByWorktree.set(worktreeId, [retained])
     }
   }
   for (const [worktreeId, entries] of entriesByWorktree) {
@@ -245,6 +225,8 @@ function getRetainedEntriesByWorktree(
   }
   retainedEntriesByWorktreeCache = {
     retainedAgentsByPaneKey,
+    tabsByWorktree,
+    worktreesByRepo,
     entriesByWorktree
   }
   return entriesByWorktree

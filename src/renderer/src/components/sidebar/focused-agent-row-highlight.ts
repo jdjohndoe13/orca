@@ -16,8 +16,10 @@ export type FocusedAgentRowHighlightState = Pick<
 
 export function getFocusedAgentPaneKeyForWorktree(
   state: FocusedAgentRowHighlightState,
-  worktreeId: string
+  worktreeId: string,
+  rowKey?: string
 ): string | null {
+  // The focus fields stay bare; the tabs record is keyed by the session row key.
   if (state.activeWorktreeId !== worktreeId || state.activeTabType !== 'terminal') {
     return null
   }
@@ -27,7 +29,7 @@ export function getFocusedAgentPaneKeyForWorktree(
     return null
   }
 
-  const activeTabBelongsToWorktree = (state.tabsByWorktree[worktreeId] ?? []).some(
+  const activeTabBelongsToWorktree = (state.tabsByWorktree[rowKey ?? worktreeId] ?? []).some(
     (tab) => tab.id === activeTabId
   )
   if (!activeTabBelongsToWorktree) {
@@ -58,6 +60,6 @@ export function getFocusedAgentPaneKeyForWorktree(
   return hasMigrationUnsupportedRow ? activePaneKey : null
 }
 
-export function useFocusedAgentPaneKey(worktreeId: string): string | null {
-  return useAppStore((state) => getFocusedAgentPaneKeyForWorktree(state, worktreeId))
+export function useFocusedAgentPaneKey(worktreeId: string, rowKey?: string): string | null {
+  return useAppStore((state) => getFocusedAgentPaneKeyForWorktree(state, worktreeId, rowKey))
 }

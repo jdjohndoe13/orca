@@ -4,6 +4,8 @@ import type { DashboardAgentRow } from '@/components/dashboard/useDashboardData'
 import { applyAgentRowLineage } from '@/components/dashboard/agent-row-lineage'
 import { migrationUnsupportedToAgentStatusEntry } from '@/lib/migration-unsupported-agent-entry'
 import { useAppStore } from '@/store'
+import { resolveWorkspaceSessionKey } from '@/store/workspace-session-key'
+import type { ExecutionHostId } from '../../../../shared/execution-host'
 import {
   EMPTY_LIVE_PTY_IDS,
   EMPTY_PANE_FOREGROUND_AGENTS,
@@ -47,17 +49,29 @@ export {
  * list. Produces live hook-reported agents plus retained "done" snapshots,
  * stale-decayed to 'idle' when the hook stream has gone quiet.
  *
+ * Rows are read by the workspace's SESSION ROW KEY, not the bare worktree id:
+ * when several hosts publish one id, every claimant card would otherwise show
+ * the same bucket. An uncontested id keeps the bare key, so `executionHostId`
+ * only matters for a contested one.
+ *
  * Uses indexed per-worktree selectors rather than reusing useDashboardData's
  * cross-worktree aggregate. The index is rebuilt once per relevant immutable
  * store slice and then shared by every visible card, avoiding O(cards × agents)
  * selector work on high-frequency agent status pings.
  */
-export function useWorktreeAgentRows(worktreeId: string, active = true): DashboardAgentRow[] {
-  const selectAgentFreshness = useMemo(
-    () => createWorktreeAgentFreshnessSelector(worktreeId),
-    [worktreeId]
+export function useWorktreeAgentRows(
+  worktreeId: string,
+  active = true,
+  executionHostId?: ExecutionHostId | null
+): DashboardAgentRow[] {
+  // Why a subscription and not getState: the contested set flips while the app
+  // runs (a second host registers the path, or one drops out), and every
+  // selector below must move to the new key on the same publication.
+  const rowKey = useAppStore((s) =>
+    active ? resolveWorkspaceSessionKey(s, worktreeId, executionHostId) : worktreeId
   )
-  const tabs = useAppStore((s) => (active ? s.tabsByWorktree[worktreeId] : EMPTY_TABS))
+  const selectAgentFreshness = useMemo(() => createWorktreeAgentFreshnessSelector(rowKey), [rowKey])
+  const tabs = useAppStore((s) => (active ? s.tabsByWorktree[rowKey] : EMPTY_TABS))
   // Why: narrow the subscriptions to only THIS worktree's entries via
   // useShallow. Subscribing to the whole agentStatusByPaneKey map would make
   // every on-screen card re-render on any agent-status update anywhere —
@@ -65,7 +79,7 @@ export function useWorktreeAgentRows(worktreeId: string, active = true): Dashboa
   // only re-renders when something relevant to THIS worktree changes.
   const liveEntries = useAppStore(
     useShallow((s) =>
-      active ? selectLiveAgentStatusEntriesForWorktree(s, worktreeId) : EMPTY_LIVE_ENTRIES
+      active ? selectLiveAgentStatusEntriesForWorktree(s, rowKey) : EMPTY_LIVE_ENTRIES
     )
   )
   // Why: keep the store selector limited to stable raw records. Converting
@@ -74,28 +88,30 @@ export function useWorktreeAgentRows(worktreeId: string, active = true): Dashboa
   const migrationUnsupported = useAppStore(
     useShallow((s) =>
       active
-        ? selectMigrationUnsupportedEntriesForWorktree(s, worktreeId)
+        ? selectMigrationUnsupportedEntriesForWorktree(s, rowKey)
         : EMPTY_MIGRATION_UNSUPPORTED_ENTRIES
     )
   )
   const retained = useAppStore(
-    useShallow((s) =>
-      active ? selectRetainedAgentEntriesForWorktree(s, worktreeId) : EMPTY_RETAINED
-    )
+    useShallow((s) => (active ? selectRetainedAgentEntriesForWorktree(s, rowKey) : EMPTY_RETAINED))
   )
   const runtimePaneTitlesByTabId = useAppStore(
     useShallow((s) =>
-      active ? selectRuntimePaneTitlesForWorktree(s, worktreeId) : EMPTY_RUNTIME_PANE_TITLES
+      active ? selectRuntimePaneTitlesForWorktree(s, rowKey) : EMPTY_RUNTIME_PANE_TITLES
     )
   )
   const ptyIdsByTabId = useAppStore(
-    useShallow((s) => (active ? selectLivePtyIdsForWorktree(s, worktreeId) : EMPTY_LIVE_PTY_IDS))
+    useShallow((s) => (active ? selectLivePtyIdsForWorktree(s, rowKey) : EMPTY_LIVE_PTY_IDS))
   )
   const terminalLayoutsByTabId = useAppStore(
     useShallow((s) =>
-      active ? selectTerminalLayoutsForWorktree(s, worktreeId) : EMPTY_TERMINAL_LAYOUTS
+      active ? selectTerminalLayoutsForWorktree(s, rowKey) : EMPTY_TERMINAL_LAYOUTS
     )
   )
+  // Why the bare id and not the row key: the index files every pane under the
+  // host-reported worktreeId too, so a worker attributed before its tab exists
+  // stays reachable; rows only look up their own pane keys, so a coarser
+  // bucket cannot paint another host's lineage into this card.
   const runtimeAgentOrchestrationByPaneKey = useAppStore(
     useShallow((s) =>
       active
@@ -105,7 +121,7 @@ export function useWorktreeAgentRows(worktreeId: string, active = true): Dashboa
   )
   const paneForegroundAgentByPaneKey = useAppStore(
     useShallow((s) =>
-      active ? selectPaneForegroundAgentsForWorktree(s, worktreeId) : EMPTY_PANE_FOREGROUND_AGENTS
+      active ? selectPaneForegroundAgentsForWorktree(s, rowKey) : EMPTY_PANE_FOREGROUND_AGENTS
     )
   )
   const agentFreshnessSignature = useAppStore((s) =>

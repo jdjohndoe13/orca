@@ -15,6 +15,7 @@ import { describe, expect, it } from 'vitest'
 import type { Worktree } from '../../../shared/worktree/types'
 import type { AppState } from './types'
 import {
+  getContestedWorktreeIds,
   getIndexedAllWorktrees,
   getIndexedWorktreeMap,
   getIndexedWorktreesById
@@ -89,5 +90,43 @@ describe('id-keyed worktree projections keep distinct hosts distinct', () => {
     expect(getIndexedWorktreeMap(worktreesByRepo).get(SHARED_ID)).toBe(
       buildWorktreeByIdIndex(worktreesByRepo).get(SHARED_ID)
     )
+  })
+})
+
+/**
+ * The same Windows checkout reaches the client through two separator spellings — the host's
+ * git scan emits `C:/vmd`, an id built from a persisted `repo.path` yields `C:\vmd`. The
+ * contested gate and every id index key byte-exactly, so the two spellings must converge onto
+ * the canonical id: one entry, one contested verdict, one lookup.
+ */
+describe('id-keyed projections fold the two Windows separator spellings', () => {
+  const WINDOWS_ID = 'repo-1::C:/vmd'
+  const RAW_ID = 'repo-1::C:\\vmd'
+
+  const slashRow: Worktree = { ...baseWorktree, id: WINDOWS_ID, path: 'C:/vmd' }
+  const backslashRow: Worktree = { ...baseWorktree, id: RAW_ID, path: 'C:\\vmd' }
+
+  it('collapses the two spellings on one host to one canonical row', () => {
+    const all = getIndexedAllWorktrees(byRepo(slashRow, backslashRow))
+
+    expect(all).toHaveLength(1)
+  })
+
+  it('keeps the two spellings as ONE contested id when two hosts publish them', () => {
+    const local: Worktree = { ...slashRow, hostId: 'local' }
+    const ssh: Worktree = { ...backslashRow, hostId: 'ssh:build-box' }
+    const contested = getContestedWorktreeIds(byRepo(local, ssh))
+
+    // The gate must fire on the canonical id — with the old byte-exact key the two spellings
+    // never deduped, the id never became contested, and the session keys stayed bare.
+    expect(contested).toEqual(new Set([WINDOWS_ID]))
+    expect(getIndexedWorktreesById(byRepo(local, ssh), RAW_ID)).toHaveLength(2)
+  })
+
+  it('finds a row by either spelling of the id', () => {
+    const worktreesByRepo = byRepo(slashRow)
+
+    expect(getIndexedWorktreesById(worktreesByRepo, RAW_ID)).toHaveLength(1)
+    expect(getIndexedWorktreesById(worktreesByRepo, WINDOWS_ID)).toHaveLength(1)
   })
 })

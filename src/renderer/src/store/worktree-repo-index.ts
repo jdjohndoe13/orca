@@ -4,6 +4,7 @@ import {
   composeWorktreeHostIdentity,
   getWorktreeIdFromHostIdentity
 } from '../../../shared/worktree/host-qualified-identity'
+import { canonicalizeWorktreeId } from '../../../shared/worktree/id'
 import type { AppState } from './types'
 
 type WorktreeSnapshot = {
@@ -35,10 +36,19 @@ function getWorktreeSnapshot(worktreesByRepo: AppState['worktreesByRepo']): Work
   // two genuinely different workspaces, and collapsing those hides one of them
   // from the sidebar entirely. Last wins within a host: fetchWorktrees replaces,
   // so the later entry is the current one.
+  // Why canonicalize the id here: the same Windows checkout reaches the client through two
+  // separator spellings (`C:/vmd` from the host's git scan, `C:\vmd` from a persisted
+  // `repo.path` join). Keyed byte-exactly, the two spellings never dedupe — neither on one host
+  // nor across hosts — so the contested gate never fires, every session key stays bare, and one
+  // workspace's rows split across two buckets. Canonicalizing here covers both the same-host
+  // dedup and the cross-host gate below.
   const byHostAndId = new Map<string, Worktree>()
   for (const worktrees of Object.values(worktreesByRepo)) {
     for (const worktree of worktrees) {
-      byHostAndId.set(composeWorktreeHostIdentity(worktree.hostId, worktree.id), worktree)
+      byHostAndId.set(
+        composeWorktreeHostIdentity(worktree.hostId, canonicalizeWorktreeId(worktree.id)),
+        worktree
+      )
     }
   }
   const allWorktrees: Worktree[] = []
@@ -95,12 +105,19 @@ export function getIndexedWorktreeMap(
   return getWorktreeSnapshot(worktreesByRepo).worktreeMap
 }
 
-/** Every host's row for one id, in `worktreesByRepo` order. */
+/**
+ * Every host's row for one id, in `worktreesByRepo` order.
+ *
+ * The query is canonicalized so a caller holding a raw persisted spelling still finds the row —
+ * the index is keyed canonically. Canonicalization is idempotent and cheap.
+ */
 export function getIndexedWorktreesById(
   worktreesByRepo: AppState['worktreesByRepo'],
   worktreeId: string
 ): Worktree[] {
-  return getWorktreeSnapshot(worktreesByRepo).worktreesById.get(worktreeId) ?? []
+  return (
+    getWorktreeSnapshot(worktreesByRepo).worktreesById.get(canonicalizeWorktreeId(worktreeId)) ?? []
+  )
 }
 
 /**
@@ -111,7 +128,7 @@ export function getIndexedWorktreesById(
  * unchanged for every install without a collision. Only these ids may hold one bucket per host.
  */
 export function getContestedWorktreeIds(
-  worktreesByRepo: AppState['worktreesByRepo']
+  worktreesByRepo: AppState['worktreesByRepo'] | undefined
 ): ReadonlySet<string> {
   // Why the guard: slice-level tests build partial stores without a catalog, and an absent
   // catalog is the faithful stand-in for "no collision observed" — the same empty set an
@@ -126,7 +143,7 @@ export function getIndexedWorktreeById(
   worktreesByRepo: AppState['worktreesByRepo'],
   worktreeId: string
 ): Worktree | undefined {
-  return getWorktreeSnapshot(worktreesByRepo).worktreeMap.get(worktreeId)
+  return getWorktreeSnapshot(worktreesByRepo).worktreeMap.get(canonicalizeWorktreeId(worktreeId))
 }
 
 export function getIndexedRepoMap(repos: AppState['repos']): Map<string, Repo> {

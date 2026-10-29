@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
   WORKTREE_ID_SEPARATOR,
+  canonicalizeWorktreeId,
   getRepoIdFromWorktreeId,
   getRepoMainWorktreeId,
   getWorktreePathBasenameFromId,
+  normalizeWorktreePathForId,
   splitWorktreeId,
   splitWorktreeIdForFilesystem,
+  swapWorktreeIdPathSpelling,
   worktreeIdComparisonKey
 } from './id'
 
@@ -16,15 +19,87 @@ describe('WORKTREE_ID_SEPARATOR', () => {
 })
 
 describe('getRepoMainWorktreeId', () => {
-  it('round-trips through the id parsers on posix and Windows paths', () => {
-    for (const repo of [
-      { id: 'repo-123', path: '/abs/path' },
-      { id: 'repo-123', path: 'C:\\Users\\me\\repo' }
-    ]) {
+  it('round-trips through the id parsers on posix paths', () => {
+    for (const repo of [{ id: 'repo-123', path: '/abs/path' }]) {
       const worktreeId = getRepoMainWorktreeId(repo)
       expect(worktreeId).toBe(`${repo.id}${WORKTREE_ID_SEPARATOR}${repo.path}`)
       expect(splitWorktreeId(worktreeId)).toEqual({ repoId: repo.id, worktreePath: repo.path })
     }
+  })
+
+  it('keeps the repo path byte-faithful — the host compares this id byte-exactly', () => {
+    const repo = { id: 'repo-123', path: 'C:\\Users\\me\\repo' }
+    const worktreeId = getRepoMainWorktreeId(repo)
+    expect(worktreeId).toBe(`${repo.id}${WORKTREE_ID_SEPARATOR}C:\\Users\\me\\repo`)
+    expect(splitWorktreeId(worktreeId)?.worktreePath).toBe('C:\\Users\\me\\repo')
+  })
+})
+
+describe('canonicalizeWorktreeId', () => {
+  it('normalizes only the separator spelling of a Windows path', () => {
+    expect(normalizeWorktreePathForId('C:\\vmd')).toBe('C:/vmd')
+    expect(normalizeWorktreePathForId('C:/vmd')).toBe('C:/vmd')
+    expect(normalizeWorktreePathForId('\\\\server\\share\\wt')).toBe('//server/share/wt')
+    // A POSIX path keeps its own identity — a backslash is a filename character.
+    expect(normalizeWorktreePathForId('/a\\b')).toBe('/a\\b')
+  })
+
+  it('folds the Windows separator spelling onto the canonical one', () => {
+    expect(canonicalizeWorktreeId('repo-123::C:\\vmd')).toBe('repo-123::C:/vmd')
+    expect(canonicalizeWorktreeId('repo-123::C:/vmd')).toBe('repo-123::C:/vmd')
+    expect(canonicalizeWorktreeId('repo-123::\\\\server\\share\\wt')).toBe(
+      'repo-123:://server/share/wt'
+    )
+  })
+
+  it('keeps POSIX paths byte-faithful — a backslash is a valid filename character', () => {
+    expect(canonicalizeWorktreeId('repo-123::/a\\b')).toBe('repo-123::/a\\b')
+    expect(canonicalizeWorktreeId('repo-123::/srv/workspaces')).toBe('repo-123::/srv/workspaces')
+  })
+
+  it('preserves case — the fold is separators only, never case', () => {
+    expect(canonicalizeWorktreeId('repo-123::C:\\Vmd')).toBe('repo-123::C:/Vmd')
+  })
+
+  it('preserves a folder workspace instance suffix', () => {
+    expect(
+      canonicalizeWorktreeId('repo-123::C:\\folder::workspace:123e4567-e89b-12d3-a456-426614174000')
+    ).toBe('repo-123::C:/folder::workspace:123e4567-e89b-12d3-a456-426614174000')
+  })
+
+  it('leaves ids without a repo boundary unchanged', () => {
+    expect(canonicalizeWorktreeId('repo-a')).toBe('repo-a')
+    expect(canonicalizeWorktreeId('')).toBe('')
+  })
+
+  it('is idempotent', () => {
+    const once = canonicalizeWorktreeId('repo-123::C:\\vmd')
+    expect(canonicalizeWorktreeId(once)).toBe(once)
+  })
+
+  it('swaps a Windows id to the other spelling and back', () => {
+    expect(swapWorktreeIdPathSpelling('repo-123::C:\\vmd')).toBe('repo-123::C:/vmd')
+    expect(swapWorktreeIdPathSpelling('repo-123::C:/vmd')).toBe('repo-123::C:\\vmd')
+    expect(swapWorktreeIdPathSpelling(swapWorktreeIdPathSpelling('repo-123::C:\\vmd'))).toBe(
+      'repo-123::C:\\vmd'
+    )
+  })
+
+  it('never swaps a POSIX path — a backslash there is a filename character', () => {
+    expect(swapWorktreeIdPathSpelling('repo-123::/a\\b')).toBe('repo-123::/a\\b')
+    expect(swapWorktreeIdPathSpelling('repo-123::/srv/workspaces')).toBe(
+      'repo-123::/srv/workspaces'
+    )
+    expect(swapWorktreeIdPathSpelling('repo-a')).toBe('repo-a')
+  })
+
+  it('agrees with the comparison key so both spellings address one workspace', () => {
+    expect(worktreeIdComparisonKey('repo-123::C:\\vmd')).toBe(
+      worktreeIdComparisonKey('repo-123::C:/vmd')
+    )
+    // The canonical id is the id the comparison key folds TO (minus case), so a canonical id
+    // never needs folding to match itself.
+    expect(canonicalizeWorktreeId('repo-123::C:\\vmd')).toBe('repo-123::C:/vmd')
   })
 })
 

@@ -11,6 +11,8 @@ import {
   selectSendTargetInputs
 } from './worktree-card-send-target-inputs'
 import { useWorktreeAgentRows } from './useWorktreeAgentRows'
+import { resolveWorkspaceSessionKey } from '@/store/workspace-session-key'
+import type { ExecutionHostId } from '../../../../shared/execution-host'
 import { cn } from '@/lib/utils'
 import type { DashboardAgentRow as DashboardAgentRowData } from '@/components/dashboard/useDashboardData'
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
@@ -47,6 +49,8 @@ function revealCompactAgentCard(agentListRoot: HTMLElement | null): void {
 
 type Props = {
   worktreeId: string
+  /** The host whose row this card renders; only matters for a contested id. */
+  executionHostId?: ExecutionHostId | null
   agents?: DashboardAgentRowData[]
   /** Spacing from the card body above; parent decides whether a divider is appropriate. */
   className?: string
@@ -55,29 +59,46 @@ type Props = {
 /** Inline agent list rendered inside WorktreeCard when 'inline-agents' is enabled. */
 const WorktreeCardAgents = React.memo(function WorktreeCardAgents({
   worktreeId,
+  executionHostId,
   agents: precomputedAgents,
   className
 }: Props) {
-  const selectedAgents = useWorktreeAgentRows(worktreeId, precomputedAgents === undefined)
+  const selectedAgents = useWorktreeAgentRows(
+    worktreeId,
+    precomputedAgents === undefined,
+    executionHostId
+  )
   const agents = precomputedAgents ?? selectedAgents
   if (agents.length === 0) {
     return null
   }
   // Why: mount the inner body (owns the 30s useNow tick) only for non-empty rows, so idle worktrees pay no timer cost.
-  return <WorktreeCardAgentsBody worktreeId={worktreeId} agents={agents} className={className} />
+  return (
+    <WorktreeCardAgentsBody
+      worktreeId={worktreeId}
+      executionHostId={executionHostId}
+      agents={agents}
+      className={className}
+    />
+  )
 })
 
 type BodyProps = {
   worktreeId: string
+  executionHostId?: ExecutionHostId | null
   agents: DashboardAgentRowData[]
   className?: string
 }
 
 const WorktreeCardAgentsBody = React.memo(function WorktreeCardAgentsBody({
   worktreeId,
+  executionHostId,
   agents,
   className
 }: BodyProps) {
+  // Why a subscription: the contested set flips while the app runs, and every
+  // tab/row read below must move to the new key on the same publication.
+  const rowKey = useAppStore((s) => resolveWorkspaceSessionKey(s, worktreeId, executionHostId))
   const agentActivityDisplayMode =
     useAppStore((s) => s.agentActivityDisplayMode) ?? DEFAULT_AGENT_ACTIVITY_DISPLAY_MODE
   const dropAgentStatus = useAppStore((s) => s.dropAgentStatus)
@@ -88,7 +109,7 @@ const WorktreeCardAgentsBody = React.memo(function WorktreeCardAgentsBody({
   // Why: return a stable empty constant unless the send-target popover is ours, so churny pane-title/agent-status maps don't re-render idle bodies.
   const sendTargetInputs = useAppStore(useShallow((s) => selectSendTargetInputs(s, worktreeId)))
   const sendPromptToSidebarAgentTarget = useAppStore((s) => s.sendPromptToSidebarAgentTarget)
-  const focusedAgentPaneKey = useFocusedAgentPaneKey(worktreeId)
+  const focusedAgentPaneKey = useFocusedAgentPaneKey(worktreeId, rowKey)
   const compactAgentListRootRef = useRef<HTMLDivElement | null>(null)
 
   // Why: acknowledgement writes are app-global; project only this card's rows
@@ -123,8 +144,10 @@ const WorktreeCardAgentsBody = React.memo(function WorktreeCardAgentsBody({
       >()
     }
 
+    // The picker mode is keyed by the bare id; the card's own tabs live at the
+    // session row key, so a contested card only lights rows on its host.
     return new Map(
-      deriveRunningAgentSendTargets(sendTargetInputs, worktreeId).map((target) => [
+      deriveRunningAgentSendTargets(sendTargetInputs, rowKey).map((target) => [
         target.paneKey,
         agentSendPopoverTargetMode?.status === 'sending' &&
         agentSendPopoverTargetMode.sendingPaneKey === target.paneKey
@@ -142,7 +165,7 @@ const WorktreeCardAgentsBody = React.memo(function WorktreeCardAgentsBody({
     isAgentSendTargetModeActive,
     // sendTargetInputs: stable empty when inactive, shallow bundle of the target maps when active — one ref covers them all.
     sendTargetInputs,
-    worktreeId
+    rowKey
   ])
 
   const handleSendTargetClick = useCallback(
@@ -170,8 +193,13 @@ const WorktreeCardAgentsBody = React.memo(function WorktreeCardAgentsBody({
         return
       }
       // Why: design-doc rule — every user-initiated worktree switch must route through activateAndRevealWorktree (cross-repo activation + nav history).
-      activateAndRevealWorktree(worktreeId)
-      const tabs = useAppStore.getState().tabsByWorktree[worktreeId] ?? []
+      // The host rides along only when known, so an uncontested activation is byte-identical.
+      if (executionHostId) {
+        activateAndRevealWorktree(worktreeId, { executionHostId })
+      } else {
+        activateAndRevealWorktree(worktreeId)
+      }
+      const tabs = useAppStore.getState().tabsByWorktree[rowKey] ?? []
       if (tabs.some((t) => t.id === tabId)) {
         activateTabAndFocusPane(tabId, parsed.leafId, {
           ackPaneKeyOnSuccess: paneKey,
@@ -187,7 +215,7 @@ const WorktreeCardAgentsBody = React.memo(function WorktreeCardAgentsBody({
         dismissStaleAgentRowByKey(paneKey)
       }
     },
-    [worktreeId]
+    [executionHostId, rowKey, worktreeId]
   )
   const handleActivateRetainedAgent = useCallback(() => {
     // Why: hibernation-retained rows are passive completion evidence; activating would resume sleeping sessions, so the row is inert.

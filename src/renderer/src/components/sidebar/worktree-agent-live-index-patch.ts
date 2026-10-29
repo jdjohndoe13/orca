@@ -3,11 +3,14 @@ import type { AppState } from '@/store/types'
 import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import { isWebTerminalSurfaceTabId } from '../../../../shared/terminal-surface-id'
+import type { ContestedWorkspaceIds } from '../../../../shared/workspace-session-worktree-key'
+import { agentRowBucketKey } from './worktree-agent-row-bucket-key'
 
 export type LiveEntriesByWorktreeCache = {
   tabsByWorktree: AppState['tabsByWorktree']
   unifiedTabsByWorktree: AppState['unifiedTabsByWorktree'] | undefined
   agentStatusByPaneKey: AppState['agentStatusByPaneKey']
+  worktreesByRepo: AppState['worktreesByRepo'] | undefined
   entriesByWorktree: Map<string, AgentStatusEntry[]>
 }
 
@@ -25,7 +28,8 @@ export function recordLiveEntriesFullRebuild(): void {
 export function liveEntryWorktreeId(
   paneKey: string,
   entry: AgentStatusEntry,
-  tabIdToWorktreeId: Map<string, string>
+  tabIdToWorktreeId: Map<string, string>,
+  contested: ContestedWorkspaceIds | undefined
 ): string | undefined {
   const parsed = parsePaneKey(paneKey)
   if (!parsed) {
@@ -34,9 +38,31 @@ export function liveEntryWorktreeId(
   const tabWorktreeId = tabIdToWorktreeId.get(parsed.tabId)
   const remote = Boolean(entry.connectionId) || isWebTerminalSurfaceTabId(parsed.tabId)
   if (remote) {
-    return resolveAgentStatusWorktreeId(entry, tabIdToWorktreeId) ?? undefined
+    // A mirrored tab id can collide, so the tab index is not evidence here —
+    // the host-reported worktreeId is, and the entry's own stamp names the
+    // host for a contested id.
+    return agentRowBucketKey({
+      worktreeId: resolveAgentStatusWorktreeId(entry, tabIdToWorktreeId) ?? undefined,
+      tabRowKey: undefined,
+      tabId: parsed.tabId,
+      entry,
+      contested
+    })
   }
-  return tabWorktreeId ?? (entry.state === 'done' && !remote ? undefined : entry.worktreeId)
+  const worktreeId = tabWorktreeId ?? (entry.state === 'done' ? undefined : entry.worktreeId)
+  if (!worktreeId) {
+    return undefined
+  }
+  // A local entry under a contested id belongs to the host its own hook stamp
+  // proves; the mirrored tab index still keys its rows bare, so the tab value
+  // alone cannot separate the claimants.
+  return agentRowBucketKey({
+    worktreeId,
+    tabRowKey: tabWorktreeId,
+    tabId: parsed.tabId,
+    entry,
+    contested
+  })
 }
 
 /**
@@ -60,7 +86,8 @@ export function liveEntryWorktreeId(
 export function patchLiveEntriesByWorktree(
   cache: LiveEntriesByWorktreeCache,
   agentStatusByPaneKey: AppState['agentStatusByPaneKey'],
-  tabIdToWorktreeId: Map<string, string>
+  tabIdToWorktreeId: Map<string, string>,
+  contested: ContestedWorkspaceIds | undefined
 ): Map<string, AgentStatusEntry[]> | null {
   const previousMap = cache.agentStatusByPaneKey
   const changed: { paneKey: string; entry: AgentStatusEntry }[] = []
@@ -74,11 +101,12 @@ export function patchLiveEntriesByWorktree(
     }
     // Why: bail on added keys or bucket-determinant changes — the bucket rule
     // depends only on paneKey, the (reference-equal) tab index, worktree
-    // attribution, remote connection presence, and done-ness.
+    // attribution, the connection stamp's value (a contested row composes its
+    // host from it), and done-ness.
     if (
       previous === undefined ||
       previous.worktreeId !== entry.worktreeId ||
-      Boolean(previous.connectionId) !== Boolean(entry.connectionId) ||
+      previous.connectionId !== entry.connectionId ||
       (previous.state === 'done') !== (entry.state === 'done')
     ) {
       return null
@@ -96,7 +124,7 @@ export function patchLiveEntriesByWorktree(
   const entriesByWorktree = new Map(cache.entriesByWorktree)
   const clonedBuckets = new Set<string>()
   for (const { paneKey, entry } of changed) {
-    const worktreeId = liveEntryWorktreeId(paneKey, entry, tabIdToWorktreeId)
+    const worktreeId = liveEntryWorktreeId(paneKey, entry, tabIdToWorktreeId, contested)
     if (!worktreeId) {
       continue
     }

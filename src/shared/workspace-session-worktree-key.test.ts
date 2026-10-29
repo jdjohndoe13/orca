@@ -71,6 +71,73 @@ describe('workspaceSessionKey', () => {
       `${SSH_HOST}|${SHARED_ID}`
     )
   })
+
+  it('keeps the id byte-faithful — the host compares the key against the row id verbatim', () => {
+    // The host reads `tabsByWorktree[worktreeId]` at the id the client sends and matches the
+    // tab's own `worktreeId`, so the key must equal the catalog row's id byte-for-byte. Folding
+    // the spelling here would orphan the folder-locator's OMP pane.
+    expect(workspaceSessionKey('repo-win::C:\\vmd', 'local', contested)).toBe('repo-win::C:\\vmd')
+    expect(workspaceSessionKey('repo-win::C:/vmd', 'local', contested)).toBe('repo-win::C:/vmd')
+  })
+
+  it('fires the contested gate for either separator spelling', () => {
+    // The gate is the comparison layer: the catalog may hold the raw spelling while the caller
+    // holds the canonical one (or vice versa), and the two spellings are one workspace, so the
+    // id must qualify either way or the two spellings split one bucket.
+    const windowsId = 'repo-win::C:/vmd'
+    const windowsContested: ContestedWorkspaceIds = new Set([windowsId])
+    expect(workspaceSessionKey('repo-win::C:\\vmd', 'local', windowsContested)).toBe(
+      `local|repo-win::C:\\vmd`
+    )
+    // A set built from the RAW spelling (a catalog that persisted the other form) still fires.
+    expect(workspaceSessionKey('repo-win::C:/vmd', 'local', new Set(['repo-win::C:\\vmd']))).toBe(
+      'local|repo-win::C:/vmd'
+    )
+    // POSIX paths never fold; a backslash is a valid filename character.
+    expect(workspaceSessionKey('repo-a::/a\\b', 'local', new Set(['repo-a::/a\\b']))).toBe(
+      `local|repo-a::/a\\b`
+    )
+  })
+})
+
+describe('workspaceSessionKeyCandidates', () => {
+  it('falls back to the other spelling of the SAME key, never another workspace', () => {
+    // The key the caller holds is tried first — it is the row the write side just wrote — and
+    // the other spelling is the fallback for a row the load reconciliation has not moved yet.
+    // The host prefix is preserved, so it can never land on another host's or workspace's row.
+    expect(workspaceSessionKeyCandidates('repo-win::C:\\vmd', 'local', contested)).toEqual([
+      'repo-win::C:\\vmd',
+      'repo-win::C:/vmd'
+    ])
+    const windowsContested: ContestedWorkspaceIds = new Set(['repo-win::C:/vmd'])
+    expect(workspaceSessionKeyCandidates('repo-win::C:\\vmd', SSH_HOST, windowsContested)).toEqual([
+      `${SSH_HOST}|repo-win::C:\\vmd`,
+      `${SSH_HOST}|repo-win::C:/vmd`
+    ])
+    // A canonical id gets the raw fallback too, so a pre-reconciliation row is still readable.
+    expect(workspaceSessionKeyCandidates('repo-win::C:/vmd', 'local', contested)).toEqual([
+      'repo-win::C:/vmd',
+      'repo-win::C:\\vmd'
+    ])
+  })
+
+  it('reads a row persisted under either spelling', () => {
+    // A caller holding the RAW id finds the canonical row the load reconciliation moved, and a
+    // row still under the raw spelling is found by the raw query too. The caller is told the key
+    // it landed on so the write-back goes to the same place.
+    const canonicalRow = { 'repo-win::C:/vmd': 'canonical-row' }
+    expect(
+      readWorkspaceSessionEntry(canonicalRow, 'repo-win::C:\\vmd', 'local', contested)
+    ).toEqual({
+      entry: 'canonical-row',
+      key: 'repo-win::C:/vmd'
+    })
+    const rawRow = { 'repo-win::C:\\vmd': 'raw-row' }
+    expect(readWorkspaceSessionEntry(rawRow, 'repo-win::C:\\vmd', 'local', contested)).toEqual({
+      entry: 'raw-row',
+      key: 'repo-win::C:\\vmd'
+    })
+  })
 })
 
 describe('readWorkspaceSessionEntry', () => {

@@ -1,4 +1,6 @@
 import type { DashboardBucket } from '../../../../shared/dashboard-snapshot'
+import { workspaceSessionKey } from '../../../../shared/workspace-session-worktree-key'
+import { getContestedWorktreeIds } from '@/store/worktree-repo-index'
 import type { DashboardSnapshotState } from './build-dashboard-snapshot'
 import {
   collectActiveDashboardWorkspaces,
@@ -175,9 +177,14 @@ export function buildDashboardBucketCounts(
 
   for (const { worktree } of activeWorktrees) {
     const worktreeId = worktree.id
+    const rowKey = workspaceSessionKey(
+      worktreeId,
+      worktree.hostId,
+      getContestedWorktreeIds(state.worktreesByRepo)
+    )
     const rows = selectWorktreeAgentRowsCached({
       state,
-      worktreeId,
+      worktreeId: rowKey,
       orchestration:
         singletonOrchestration ??
         orchestrationByWorktree?.get(worktreeId) ??
@@ -186,7 +193,7 @@ export function buildDashboardBucketCounts(
       generation,
       cache
     })
-    const tally = tallyWorktreeRows(rows, state.acknowledgedAgentsByPaneKey, worktreeId, cache)
+    const tally = tallyWorktreeRows(rows, state.acknowledgedAgentsByPaneKey, rowKey, cache)
     counts.attention += tally.attention
     counts.working += tally.working
     counts.done += tally.done

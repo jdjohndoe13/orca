@@ -1,6 +1,6 @@
 import type { AppState } from '../../store/types'
 import { getRepoIdFromWorktreeId } from '../../../../shared/worktree/id'
-import { getTabIdToWorktreeId } from '../sidebar/worktree-agent-row-selectors'
+import { getTabIdToWorktreeId } from '../sidebar/worktree-agent-tab-index'
 
 export type ProjectRuntimeSessionSummary = {
   liveTerminalCount: number

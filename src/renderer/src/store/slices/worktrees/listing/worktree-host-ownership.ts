@@ -4,6 +4,7 @@ import type { DetectedWorktreeListResult, Worktree } from '../../../../../../sha
 import { findRepoForHost } from '../../repo-host-identity'
 import { reuseEqualCatalogRows } from '../../worktree-catalog-reconciliation'
 import { getRepoIdFromWorktreeId } from '../../worktree-helpers'
+import { canonicalizeWorktreeId } from '../../../../../../shared/worktree/id'
 import {
   getRepoExecutionHostId,
   getSettingsFocusedExecutionHostId,
@@ -23,6 +24,11 @@ export function withRepoHostOwnership<
     projectHostSetupId?: string
   }
 >(worktree: T, hostId: ExecutionHostId, setup?: ProjectHostSetup): T {
+  // Why the id is NOT canonicalized here: the host compares worktree ids byte-exactly (the
+  // folder-locator's OMP meta is looked up under the raw id, and `resolveScopedWorktreeIdRow`
+  // exact-matches it), so the store's rows stay byte-faithful. Only the session-key layer
+  // (`workspaceSessionKey`) folds the separator spelling, so the two spellings share one bucket
+  // while the ids the host compares are unchanged.
   const parsedOwner = parseExecutionHostId(hostId)
   const runtimeOwnerEnvironmentId =
     parsedOwner?.kind === 'runtime' ? parsedOwner.environmentId : undefined
@@ -274,8 +280,15 @@ export function getRemovedWorktreeIdsAfterAuthoritativeScan(
   if (!detected.authoritative) {
     return []
   }
-  const detectedIds = new Set(detected.worktrees.map((worktree) => worktree.id))
-  return getKnownWorktreeIdsForPurge(state, repoId, hostId).filter((id) => !detectedIds.has(id))
+  // Why canonicalize: the known ids mix the store's rows with the hydrated session keys, and a
+  // persisted row that never reconciled (or a store that never restarted) can hold the other
+  // separator spelling — a byte-miss would purge a live workspace's session.
+  const detectedIds = new Set(
+    detected.worktrees.map((worktree) => canonicalizeWorktreeId(worktree.id))
+  )
+  return getKnownWorktreeIdsForPurge(state, repoId, hostId).filter(
+    (id) => !detectedIds.has(canonicalizeWorktreeId(id))
+  )
 }
 
 export function toLegacyDetectedWorktreeResult(

@@ -6,6 +6,9 @@ import type { WorktreeMeta } from '../../../shared/worktree/meta-types'
 import type { Worktree } from '../../../shared/worktree/types'
 
 export function getFolderWorkspaceRootId(repo: Repo): string {
+  // Why NOT canonicalized: the host persists the folder locator byte-faithfully on purpose
+  // (folder-to-Git upgrade keeps the raw id as the surviving identity — see the
+  // "preserves the live folder locator" contract). The id is a byte-exact key on the host.
   return `${repo.id}::${repo.path}`
 }
 
@@ -19,6 +22,9 @@ export function getFolderWorkspaceInstanceIdentity(repo: Repo, worktreeId: strin
 }
 
 export function isFolderWorkspaceIdForRepo(repo: Repo, worktreeId: string): boolean {
+  // Why byte-exact: both sides are the host's own folder locators, which are persisted
+  // byte-faithfully (see getFolderWorkspaceRootId). Canonicalizing one side would split the
+  // prefix match against the raw root id.
   const rootId = getFolderWorkspaceRootId(repo)
   return (
     worktreeId === rootId ||

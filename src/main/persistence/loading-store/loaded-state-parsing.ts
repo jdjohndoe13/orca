@@ -23,6 +23,7 @@ import {
   gcStaleWorktreeMeta,
   normalizeWorktreeLinkedItemMetadata
 } from '../tracking-repos/worktree-metadata-normalization'
+import { reconcilePersistedWorktreeIdPathSpellings } from '../../../shared/worktree/worktree-path-spelling-reconciliation'
 import { backfillLegacyAutomationContexts } from '../scheduling-automations/automation-context-migration'
 import { migrateAutomationOwners } from '../../automations/automation-owner-migration'
 import {
@@ -256,6 +257,14 @@ export class LoadedStateParsingOperations {
     result = folderScopeConnectionMigration.state
 
     if (normalizeWorktreeLinkedItemMetadata(result)) {
+      this.runtime.loadNeedsSave = true
+    }
+
+    // Why here: installs that persisted both Windows separator spellings of one worktree id
+    // (`C:/vmd` vs `C:\vmd`) must converge onto the canonical spelling before any reader keys
+    // off the id. The host's byte-exact ids (folder repos, folder-upgrade locators) are never
+    // folded — see `collectHostByteExactWorktreeIds`.
+    if (reconcilePersistedWorktreeIdPathSpellings(result)) {
       this.runtime.loadNeedsSave = true
     }
 

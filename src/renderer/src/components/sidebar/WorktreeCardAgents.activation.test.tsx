@@ -51,6 +51,7 @@ function mockAgent({
 let mockAgents: DashboardAgentRowData[] = []
 let mockAgentActivityDisplayMode: 'compact' | 'full' | undefined
 let mockTabsByWorktree: Record<string, { id: string }[]> = {}
+let mockWorktreesByRepo: Record<string, { id: string; hostId?: string }[]> = {}
 let mockStructuredTabIds = new Set<string>()
 let mockAgentStatusByPaneKey: Record<string, { worktreeId?: string }> = {}
 let mockActiveTabId: string | null = null
@@ -79,6 +80,9 @@ function buildMockStoreState(): Record<string, unknown> {
     agentStatusEpoch: 0,
     activeTabId: mockActiveTabId,
     activeTabType: mockActiveTabType,
+    activeWorktreeId: null,
+    activeWorkspaceExecutionHostId: null,
+    worktreesByRepo: mockWorktreesByRepo,
     setActiveTab: mockSetActiveTab,
     setActiveTabType: mockSetActiveTabType,
     tabsByWorktree: mockTabsByWorktree,
@@ -164,6 +168,7 @@ describe('WorktreeCardAgents activation', () => {
     mockAgents = []
     mockAgentActivityDisplayMode = undefined
     mockTabsByWorktree = {}
+    mockWorktreesByRepo = {}
     mockStructuredTabIds = new Set()
     mockAgentStatusByPaneKey = {}
     mockActiveTabId = null
@@ -459,5 +464,51 @@ describe('WorktreeCardAgents activation', () => {
     })
     act(() => root.unmount())
     host.remove()
+  })
+
+  it("activates the card host when a contested id's row is clicked", async () => {
+    mockAgentActivityDisplayMode = 'full'
+    const contestedId = 'repo-1::C:\\vmd'
+    const tabId = 'ssh-worker-tab'
+    const paneKey = makePaneKey(tabId, LEAF_A)
+    // Two hosts publish the same id, so the row lives at `host|id` — the bare
+    // key would activate without a host and light every claimant card.
+    mockWorktreesByRepo = {
+      'repo-1': [
+        { id: contestedId, hostId: 'local' },
+        { id: contestedId, hostId: 'ssh:paired-box' }
+      ]
+    }
+    mockAgents = [
+      mockAgent({
+        paneKey,
+        tabId,
+        agentType: 'claude',
+        prompt: 'Contested worker',
+        worktreeId: contestedId
+      })
+    ]
+    // Why the byte-faithful id: the store composes the row key from the id verbatim — the host
+    // compares the key against the row it published — so the tab index lives under the raw
+    // spelling the catalog row carries.
+    mockTabsByWorktree = { 'ssh:paired-box|repo-1::C:\\vmd': [{ id: tabId }] }
+    const { default: WorktreeCardAgents } = await import('./WorktreeCardAgents')
+
+    renderToStaticMarkup(
+      <WorktreeCardAgents worktreeId={contestedId} executionHostId="ssh:paired-box" />
+    )
+    expect(capturedRowActivations).toHaveLength(1)
+    capturedRowActivations[0].onActivate(tabId, paneKey)
+
+    expect(activationMocks.activateAndRevealWorktree).toHaveBeenCalledWith(contestedId, {
+      executionHostId: 'ssh:paired-box'
+    })
+    // The tab lives under the qualified key, so the row focuses its own pane.
+    expect(activationMocks.activateTabAndFocusPane).toHaveBeenCalledWith(tabId, LEAF_A, {
+      ackPaneKeyOnSuccess: paneKey,
+      flashFocusedPane: true,
+      scrollToBottomIfOutputSinceLastView: true
+    })
+    expect(staleAgentRowMocks.dismissStaleAgentRowByKey).not.toHaveBeenCalled()
   })
 })

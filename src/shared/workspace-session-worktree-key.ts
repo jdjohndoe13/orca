@@ -5,6 +5,7 @@ import {
   getWorktreeIdFromHostIdentity,
   isWorktreeHostIdentity
 } from './worktree/host-qualified-identity'
+import { canonicalizeWorktreeId, swapWorktreeIdPathSpelling } from './worktree/id'
 import { WORKSPACE_SESSION_FIELD_OWNERSHIP } from './workspace-session-host-field-ownership'
 import {
   isWorkspaceSessionRecord,
@@ -52,13 +53,20 @@ export const WORKTREE_KEYED_WORKSPACE_SESSION_FIELDS = (
  *
  * An already-qualified key passes through unchanged, so a legacy id that happens to contain `|`
  * is never turned into `host|host|id`.
+ *
+ * The id is NOT canonicalized here: the host compares the worktree id byte-exactly against the
+ * row it published (`stable-owner` reads `tabsByWorktree[worktreeId]` and matches the tab's
+ * `worktreeId`), so the key must equal the catalog row's id verbatim. The two Windows separator
+ * spellings of one checkout are reconciled at LOAD onto the canonical spelling, and the read
+ * candidates (`workspaceSessionKeyCandidates`) additionally accept the other spelling while a
+ * pre-reconciliation row is still on disk.
  */
 export function workspaceSessionKey(
   worktreeId: string,
   hostId: ExecutionHostId | null | undefined,
   contested: ContestedWorkspaceIds | undefined
 ): string {
-  if (!contested?.has(worktreeId) || isWorktreeHostIdentity(worktreeId)) {
+  if (isWorktreeHostIdentity(worktreeId) || !hasContestedClaim(contested, worktreeId)) {
     return worktreeId
   }
   // An unknown host on a contested id gets the canonical empty-prefix bucket, matching
@@ -68,17 +76,52 @@ export function workspaceSessionKey(
 }
 
 /**
- * The keys a row may live under, most specific first. A single-element list today: a contested id
- * is always qualified and an uncontested id is always bare, so there is no fallback between the
- * two. Kept as a list because a reader that guessed the wrong spelling must MISS rather than
- * silently read another host's row.
+ * Whether the contested set names this id, ignoring the path's separator spelling. The set is
+ * built from the catalog canonically (`worktree-repo-index`), so the exact check is the fast
+ * path and the folded check is the fallback for a caller holding the other spelling.
+ */
+export function hasContestedClaim(
+  contested: ContestedWorkspaceIds | undefined,
+  worktreeId: string
+): boolean {
+  if (!contested) {
+    return false
+  }
+  if (contested.has(worktreeId)) {
+    return true
+  }
+  const canonicalId = canonicalizeWorktreeId(worktreeId)
+  for (const contestedId of contested) {
+    if (canonicalizeWorktreeId(contestedId) === canonicalId) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * The keys a row may live under, most specific first.
+ *
+ * A contested id is always qualified and an uncontested id is always bare, so there is no
+ * fallback between the two — a reader that guessed the wrong spelling must MISS rather than
+ * silently read another host's row. There IS a second SEPARATOR spelling, though: a row
+ * persisted before the load reconciliation left it carries the raw Windows form, and the two
+ * spellings are the same workspace by definition (the fold is separator-only, case-preserving).
+ * So the key of the id the caller holds is tried first and the key with the id in the canonical
+ * spelling is the fallback — the host prefix is preserved, so it can never land on another
+ * host's or another workspace's row.
  */
 export function workspaceSessionKeyCandidates(
   worktreeId: string,
   hostId: ExecutionHostId | null | undefined,
   contested: ContestedWorkspaceIds | undefined
 ): readonly string[] {
-  return [workspaceSessionKey(worktreeId, hostId, contested)]
+  const key = workspaceSessionKey(worktreeId, hostId, contested)
+  // The two spellings are the same workspace by definition, so a reader may consult the other
+  // one without ever landing on a different workspace's row: `splitWorktreeId` splits on the
+  // first `::`, so a `host|` prefix stays intact and only the path segment re-spells.
+  const otherKey = swapWorktreeIdPathSpelling(key)
+  return otherKey === key ? [key] : [key, otherKey]
 }
 
 /**
