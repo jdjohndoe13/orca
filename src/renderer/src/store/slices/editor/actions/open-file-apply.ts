@@ -26,6 +26,7 @@ import {
   getReplaceablePreviewFileId,
   removeEditorStateForReplacedPreview
 } from '../tabs/workspace-editor-item'
+import { resolveWorkspaceSessionRowKey } from '../../../workspace-session-key'
 
 export type OpenFileApplyScratch = {
   editorItemFileId: string
@@ -52,6 +53,9 @@ export function applyOpenFileToState(
   scratch: OpenFileApplyScratch
 ): Partial<AppState> | AppState {
   const worktreeId = file.worktreeId
+  // The tab-bar order and the sibling records live under the session key, `host|id` for a
+  // contested workspace id (STA-4343); `openFiles[].worktreeId` stays bare.
+  const rowKey = resolveWorkspaceSessionRowKey(s, worktreeId)
   let operationProvenance = file.operationProvenance
   if (!operationProvenance && file.mode === 'edit' && file.readOnly !== true) {
     try {
@@ -208,12 +212,12 @@ export function applyOpenFileToState(
           : f
       )
       // Swap the old preview ID for the new one in the stored tab bar order
-      const prevOrder = s.tabBarOrderByWorktree?.[worktreeId]
+      const prevOrder = s.tabBarOrderByWorktree?.[rowKey]
       const previewTabBarUpdate = prevOrder
         ? {
             tabBarOrderByWorktree: {
               ...s.tabBarOrderByWorktree,
-              [worktreeId]: prevOrder.map((eid) => (eid === replacedPreview.id ? id : eid))
+              [rowKey]: prevOrder.map((eid) => (eid === replacedPreview.id ? id : eid))
             }
           }
         : {}
@@ -266,10 +270,10 @@ export function applyOpenFileToState(
   // Why: append to the persisted tab bar order, else TabBar's reconcileOrder falls back to type-grouped ordering (terminals first).
   const tabBarUpdate: Record<string, unknown> = {}
   if (s.tabBarOrderByWorktree) {
-    const currentOrder = s.tabBarOrderByWorktree[worktreeId] ?? []
-    const terminalIds = (s.tabsByWorktree?.[worktreeId] ?? []).map((t) => t.id)
+    const currentOrder = s.tabBarOrderByWorktree[rowKey] ?? []
+    const terminalIds = (s.tabsByWorktree?.[rowKey] ?? []).map((t) => t.id)
     const editorFileIds = s.openFiles.filter((f) => f.worktreeId === worktreeId).map((f) => f.id)
-    const browserIds = (s.browserTabsByWorktree?.[worktreeId] ?? []).map((t) => t.id)
+    const browserIds = (s.browserTabsByWorktree?.[rowKey] ?? []).map((t) => t.id)
     const allExisting = new Set([...terminalIds, ...editorFileIds, ...browserIds])
     const base = currentOrder.filter((eid) => allExisting.has(eid))
     const inBase = new Set(base)
@@ -280,7 +284,7 @@ export function applyOpenFileToState(
       }
     }
     base.push(id)
-    tabBarUpdate.tabBarOrderByWorktree = { ...s.tabBarOrderByWorktree, [worktreeId]: base }
+    tabBarUpdate.tabBarOrderByWorktree = { ...s.tabBarOrderByWorktree, [rowKey]: base }
   }
 
   return {

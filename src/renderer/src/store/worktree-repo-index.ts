@@ -13,6 +13,9 @@ type WorktreeSnapshot = {
   contestedIds: ReadonlySet<string>
 }
 
+/** Stand-in for a catalog that is absent, which is the same answer as one with no collision. */
+const EMPTY_CONTESTED_IDS: ReadonlySet<string> = new Set<string>()
+
 // Why: Zustand reruns selectors on every write, so identity projections need
 // cross-render caching without pinning replaced store snapshots in memory.
 const worktreeSnapshotCache = new WeakMap<AppState['worktreesByRepo'], WorktreeSnapshot>()
@@ -110,6 +113,12 @@ export function getIndexedWorktreesById(
 export function getContestedWorktreeIds(
   worktreesByRepo: AppState['worktreesByRepo']
 ): ReadonlySet<string> {
+  // Why the guard: slice-level tests build partial stores without a catalog, and an absent
+  // catalog is the faithful stand-in for "no collision observed" — the same empty set an
+  // install with no collision has, so every key stays bare exactly as before.
+  if (!worktreesByRepo) {
+    return EMPTY_CONTESTED_IDS
+  }
   return getWorktreeSnapshot(worktreesByRepo).contestedIds
 }
 

@@ -10,6 +10,7 @@ import {
   openWorkspaceEditorItem,
   removeEditorStateForReplacedPreview
 } from '../tabs/workspace-editor-item'
+import { resolveWorkspaceSessionRowKey } from '../../../workspace-session-key'
 
 export function createOpenConflictFile(
   set: EditorSet,
@@ -24,6 +25,9 @@ export function createOpenConflictFile(
       set((s) => {
         const id = absolutePath
         const conflict = toOpenConflictMetadata(entry)
+        // The per-worktree slot lives under the session key, `host|id` for a contested workspace
+        // id (STA-4343); the git-status caches and the open-file entity keep the bare id.
+        const rowKey = resolveWorkspaceSessionRowKey(s, worktreeId)
         const targetGroupId =
           resolveEditorOpenTargetGroupId(s, worktreeId, options?.targetGroupId) ?? undefined
         editorItemTargetGroupId = targetGroupId
@@ -62,8 +66,8 @@ export function createOpenConflictFile(
             ),
             activeFileId: id,
             activeTabType: 'editor',
-            activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [worktreeId]: id },
-            activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [worktreeId]: 'editor' },
+            activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [rowKey]: id },
+            activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [rowKey]: 'editor' },
             trackedConflictPathsByWorktree:
               nextTracked === s.trackedConflictPathsByWorktree[worktreeId]
                 ? s.trackedConflictPathsByWorktree
@@ -96,8 +100,8 @@ export function createOpenConflictFile(
               ...removeEditorStateForReplacedPreview(s, s.openFiles[replaceablePreviewIndex], id),
               activeFileId: id,
               activeTabType: 'editor',
-              activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [worktreeId]: id },
-              activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [worktreeId]: 'editor' },
+              activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [rowKey]: id },
+              activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [rowKey]: 'editor' },
               trackedConflictPathsByWorktree:
                 nextTracked === s.trackedConflictPathsByWorktree[worktreeId]
                   ? s.trackedConflictPathsByWorktree
@@ -110,8 +114,8 @@ export function createOpenConflictFile(
           openFiles: [...s.openFiles, newFile],
           activeFileId: id,
           activeTabType: 'editor',
-          activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [worktreeId]: id },
-          activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [worktreeId]: 'editor' },
+          activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [rowKey]: id },
+          activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [rowKey]: 'editor' },
           trackedConflictPathsByWorktree:
             nextTracked === s.trackedConflictPathsByWorktree[worktreeId]
               ? s.trackedConflictPathsByWorktree

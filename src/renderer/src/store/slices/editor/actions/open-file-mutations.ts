@@ -2,6 +2,7 @@ import type { EditorGet, EditorSet } from '../types/editor-set-get'
 import type { EditorSlice } from '../types/editor-slice'
 import type { OpenFile } from '../types/open-file'
 import { isEditorTabContentType } from '../tabs/editor-tab-content-type'
+import { resolveWorkspaceSessionRowKey } from '../../../workspace-session-key'
 
 export function createOpenFileMutations(
   set: EditorSet,
@@ -31,7 +32,10 @@ export function createOpenFileMutations(
         return {
           ...(scopeWorktreeId === s.activeWorktreeId ? { activeFileId: fileId } : {}),
           activeFileIdByWorktree: worktreeId
-            ? { ...s.activeFileIdByWorktree, [worktreeId]: fileId }
+            ? {
+                ...s.activeFileIdByWorktree,
+                [resolveWorkspaceSessionRowKey(s, worktreeId)]: fileId
+              }
             : s.activeFileIdByWorktree
         }
       })
@@ -43,8 +47,10 @@ export function createOpenFileMutations(
       if (!worktreeId) {
         return
       }
+      // The group slots live under the session key (STA-4343).
+      const rowKey = resolveWorkspaceSessionRowKey(state, worktreeId)
       const groupId =
-        state.activeGroupIdByWorktree?.[worktreeId] ?? state.groupsByWorktree?.[worktreeId]?.[0]?.id
+        state.activeGroupIdByWorktree?.[rowKey] ?? state.groupsByWorktree?.[rowKey]?.[0]?.id
       if (!groupId) {
         return
       }

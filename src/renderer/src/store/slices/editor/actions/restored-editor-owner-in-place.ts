@@ -21,22 +21,27 @@ export function rekeyRestoredEditorTabsInPlace(
   worktreeId: string,
   fileIdMigrations: ReadonlyMap<string, string>,
   tabIdMigrations: ReadonlyMap<string, string>,
-  executionHostId: ExecutionHostId
+  executionHostId: ExecutionHostId,
+  /**
+   * Where this workspace's rows live, `host|id` for a contested id (STA-4343). The tab's own
+   * `worktreeId` field keeps the bare id, so it is passed separately.
+   */
+  rowKey = worktreeId
 ): InPlaceTabState {
   const tabId = (id: string): string => tabIdMigrations.get(id) ?? id
   const fileId = (id: string): string => fileIdMigrations.get(id) ?? id
-  const activeFileId = s.activeFileIdByWorktree[worktreeId]
+  const activeFileId = s.activeFileIdByWorktree[rowKey]
   return {
     activeFileIdByWorktree: {
       ...s.activeFileIdByWorktree,
-      [worktreeId]: activeFileId ? fileId(activeFileId) : activeFileId
+      [rowKey]: activeFileId ? fileId(activeFileId) : activeFileId
     },
     activeGroupIdByWorktree: s.activeGroupIdByWorktree,
     activeTabTypeByWorktree: s.activeTabTypeByWorktree,
     layoutByWorktree: s.layoutByWorktree,
     groupsByWorktree: {
       ...s.groupsByWorktree,
-      [worktreeId]: (s.groupsByWorktree[worktreeId] ?? []).map((group) => ({
+      [rowKey]: (s.groupsByWorktree[rowKey] ?? []).map((group) => ({
         ...group,
         activeTabId: group.activeTabId ? tabId(group.activeTabId) : group.activeTabId,
         tabOrder: group.tabOrder.map(tabId),
@@ -45,7 +50,7 @@ export function rekeyRestoredEditorTabsInPlace(
     },
     unifiedTabsByWorktree: {
       ...s.unifiedTabsByWorktree,
-      [worktreeId]: (s.unifiedTabsByWorktree[worktreeId] ?? []).map((tab) =>
+      [rowKey]: (s.unifiedTabsByWorktree[rowKey] ?? []).map((tab) =>
         tabIdMigrations.has(tab.id) || fileIdMigrations.has(tab.entityId)
           ? {
               ...tab,
@@ -58,7 +63,7 @@ export function rekeyRestoredEditorTabsInPlace(
     },
     tabBarOrderByWorktree: {
       ...s.tabBarOrderByWorktree,
-      [worktreeId]: (s.tabBarOrderByWorktree[worktreeId] ?? []).map(fileId)
+      [rowKey]: (s.tabBarOrderByWorktree[rowKey] ?? []).map(fileId)
     }
   }
 }

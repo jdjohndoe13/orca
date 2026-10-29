@@ -12,6 +12,7 @@ import {
   openWorkspaceEditorItem,
   removeEditorStateForReplacedPreview
 } from '../tabs/workspace-editor-item'
+import { resolveWorkspaceSessionRowKey } from '../../../workspace-session-key'
 
 export function createOpenHistoryDiff(
   set: EditorSet,
@@ -24,6 +25,9 @@ export function createOpenHistoryDiff(
       const isPreview = resolveEditorPreviewIntent(get(), options?.preview)
       let editorItemTargetGroupId = options?.targetGroupId
       set((s) => {
+        // The per-worktree slot lives under the session key, `host|id` for a contested workspace
+        // id (STA-4343); the open-file entity keeps the bare id.
+        const rowKey = resolveWorkspaceSessionRowKey(s, worktreeId)
         const targetGroupId =
           resolveEditorOpenTargetGroupId(s, worktreeId, options?.targetGroupId) ?? undefined
         editorItemTargetGroupId = targetGroupId
@@ -51,8 +55,8 @@ export function createOpenHistoryDiff(
             openFiles: s.openFiles.map((f) => (f.id === id ? reopenedDiff : f)),
             activeFileId: id,
             activeTabType: 'editor',
-            activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [worktreeId]: id },
-            activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [worktreeId]: 'editor' }
+            activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [rowKey]: id },
+            activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [rowKey]: 'editor' }
           }
         }
         const newFile: OpenFile = {
@@ -85,8 +89,8 @@ export function createOpenHistoryDiff(
               ...removeEditorStateForReplacedPreview(s, s.openFiles[replaceablePreviewIndex], id),
               activeFileId: id,
               activeTabType: 'editor',
-              activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [worktreeId]: id },
-              activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [worktreeId]: 'editor' }
+              activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [rowKey]: id },
+              activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [rowKey]: 'editor' }
             }
           }
         }
@@ -94,8 +98,8 @@ export function createOpenHistoryDiff(
           openFiles: [...s.openFiles, newFile],
           activeFileId: id,
           activeTabType: 'editor',
-          activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [worktreeId]: id },
-          activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [worktreeId]: 'editor' }
+          activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [rowKey]: id },
+          activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [rowKey]: 'editor' }
         }
       })
       void openWorkspaceEditorItem(
@@ -115,6 +119,7 @@ export function createOpenHistoryDiff(
       const isPreview = resolveEditorPreviewIntent(get(), options?.preview)
       let editorItemTargetGroupId = options?.targetGroupId
       set((s) => {
+        const rowKey = resolveWorkspaceSessionRowKey(s, worktreeId)
         const targetGroupId =
           resolveEditorOpenTargetGroupId(s, worktreeId, options?.targetGroupId) ?? undefined
         editorItemTargetGroupId = targetGroupId
@@ -142,8 +147,8 @@ export function createOpenHistoryDiff(
             openFiles: s.openFiles.map((f) => (f.id === id ? reopenedDiff : f)),
             activeFileId: id,
             activeTabType: 'editor',
-            activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [worktreeId]: id },
-            activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [worktreeId]: 'editor' }
+            activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [rowKey]: id },
+            activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [rowKey]: 'editor' }
           }
         }
         const newFile: OpenFile = {
@@ -176,8 +181,8 @@ export function createOpenHistoryDiff(
               ...removeEditorStateForReplacedPreview(s, s.openFiles[replaceablePreviewIndex], id),
               activeFileId: id,
               activeTabType: 'editor',
-              activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [worktreeId]: id },
-              activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [worktreeId]: 'editor' }
+              activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [rowKey]: id },
+              activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [rowKey]: 'editor' }
             }
           }
         }
@@ -185,8 +190,8 @@ export function createOpenHistoryDiff(
           openFiles: [...s.openFiles, newFile],
           activeFileId: id,
           activeTabType: 'editor',
-          activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [worktreeId]: id },
-          activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [worktreeId]: 'editor' }
+          activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [rowKey]: id },
+          activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [rowKey]: 'editor' }
         }
       })
       void openWorkspaceEditorItem(

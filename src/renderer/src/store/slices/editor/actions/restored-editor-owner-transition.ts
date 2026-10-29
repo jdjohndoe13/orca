@@ -15,6 +15,7 @@ import type {
 } from '../types/restored-editor-owner'
 import { resolveRestoredEditorOwnerDestination } from './restored-editor-owner-destination'
 import { rekeyRestoredEditorTabsInPlace } from './restored-editor-owner-in-place'
+import { resolveWorkspaceSessionRowKey } from '../../../workspace-session-key'
 
 export function buildRestoredEditorOwnerTransition(
   args: RestoredEditorOwnerMigration,
@@ -38,7 +39,11 @@ export function buildRestoredEditorOwnerTransition(
     const movedFileIds = new Set(migrations.keys())
     const sourceWorktreeId = source.worktreeId
     const targetWorktreeId = args.targetWorktreeId
-    const movedTabs = (s.unifiedTabsByWorktree[sourceWorktreeId] ?? []).filter((tab) =>
+    // The records live under the session key, `host|id` for a contested workspace id
+    // (STA-4343); the open-file entities and the tab `worktreeId` fields keep the bare id.
+    const sourceRowKey = resolveWorkspaceSessionRowKey(s, sourceWorktreeId)
+    const targetRowKey = resolveWorkspaceSessionRowKey(s, targetWorktreeId)
+    const movedTabs = (s.unifiedTabsByWorktree[sourceRowKey] ?? []).filter((tab) =>
       movedFileIds.has(tab.entityId)
     )
     const movedTabIds = new Set(movedTabs.map((tab) => tab.id))
@@ -50,9 +55,9 @@ export function buildRestoredEditorOwnerTransition(
     const mappedMovedTabBarIds = movedTabs.map(
       (tab) => migrations.get(tab.entityId) ?? tab.entityId
     )
-    const targetGroups = s.groupsByWorktree[targetWorktreeId] ?? []
+    const targetGroups = s.groupsByWorktree[targetRowKey] ?? []
     const targetGroupId =
-      s.activeGroupIdByWorktree[targetWorktreeId] ?? targetGroups[0]?.id ?? createBrowserUuid()
+      s.activeGroupIdByWorktree[targetRowKey] ?? targetGroups[0]?.id ?? createBrowserUuid()
     const targetGroup = targetGroups.find((group) => group.id === targetGroupId) ?? {
       id: targetGroupId,
       worktreeId: targetWorktreeId,
@@ -60,7 +65,7 @@ export function buildRestoredEditorOwnerTransition(
       tabOrder: []
     }
 
-    const previousSourceGroups = s.groupsByWorktree[sourceWorktreeId] ?? []
+    const previousSourceGroups = s.groupsByWorktree[sourceRowKey] ?? []
     const updatedSourceGroups = previousSourceGroups.map((group) => {
       const tabOrder = group.tabOrder.filter((id) => !movedTabIds.has(id))
       const activeTabId =
@@ -81,7 +86,7 @@ export function buildRestoredEditorOwnerTransition(
       previousSourceGroups,
       updatedSourceGroups,
       movedTabIds,
-      s.layoutByWorktree[sourceWorktreeId]
+      s.layoutByWorktree[sourceRowKey]
     )
     const destinationOrder = [
       ...targetGroup.tabOrder.filter((id) => !mappedMovedTabIds.includes(id)),
@@ -109,12 +114,12 @@ export function buildRestoredEditorOwnerTransition(
         ]
 
     const nextUnifiedTabsByWorktree = { ...s.unifiedTabsByWorktree }
-    nextUnifiedTabsByWorktree[sourceWorktreeId] = (
-      nextUnifiedTabsByWorktree[sourceWorktreeId] ?? []
+    nextUnifiedTabsByWorktree[sourceRowKey] = (
+      nextUnifiedTabsByWorktree[sourceRowKey] ?? []
     ).filter((tab) => !movedTabIds.has(tab.id))
-    nextUnifiedTabsByWorktree[targetWorktreeId] = [
+    nextUnifiedTabsByWorktree[targetRowKey] = [
       // Why: a leftover target tab carrying a migrated id would duplicate the id that destinationOrder keeps only once.
-      ...(nextUnifiedTabsByWorktree[targetWorktreeId] ?? []).filter(
+      ...(nextUnifiedTabsByWorktree[targetRowKey] ?? []).filter(
         (tab) => !mappedMovedTabIdSet.has(tab.id)
       ),
       ...movedTabs.map((tab) => ({
@@ -127,50 +132,50 @@ export function buildRestoredEditorOwnerTransition(
 
     const nextGroupsByWorktree = {
       ...s.groupsByWorktree,
-      [sourceWorktreeId]: sourceGroupState.groups,
-      [targetWorktreeId]: nextTargetGroups
+      [sourceRowKey]: sourceGroupState.groups,
+      [targetRowKey]: nextTargetGroups
     }
     const nextLayoutByWorktree = { ...s.layoutByWorktree }
     if (sourceGroupState.layout) {
-      nextLayoutByWorktree[sourceWorktreeId] = sourceGroupState.layout
+      nextLayoutByWorktree[sourceRowKey] = sourceGroupState.layout
     } else {
-      delete nextLayoutByWorktree[sourceWorktreeId]
+      delete nextLayoutByWorktree[sourceRowKey]
     }
-    if (targetGroups.length === 0 || !nextLayoutByWorktree[targetWorktreeId]) {
-      nextLayoutByWorktree[targetWorktreeId] = { type: 'leaf', groupId: targetGroupId }
+    if (targetGroups.length === 0 || !nextLayoutByWorktree[targetRowKey]) {
+      nextLayoutByWorktree[targetRowKey] = { type: 'leaf', groupId: targetGroupId }
     }
 
     const nextActiveFileIdByWorktree = { ...s.activeFileIdByWorktree }
-    const sourceActiveFileId = nextActiveFileIdByWorktree[sourceWorktreeId]
+    const sourceActiveFileId = nextActiveFileIdByWorktree[sourceRowKey]
     if (sourceActiveFileId && movedFileIds.has(sourceActiveFileId)) {
-      nextActiveFileIdByWorktree[sourceWorktreeId] =
+      nextActiveFileIdByWorktree[sourceRowKey] =
         s.openFiles.find(
           (file) => !movedFileIds.has(file.id) && file.worktreeId === sourceWorktreeId
         )?.id ?? null
     }
-    nextActiveFileIdByWorktree[targetWorktreeId] = newFileId
+    nextActiveFileIdByWorktree[targetRowKey] = newFileId
     const nextTabBarOrderByWorktree = { ...s.tabBarOrderByWorktree }
-    nextTabBarOrderByWorktree[sourceWorktreeId] = (
-      nextTabBarOrderByWorktree[sourceWorktreeId] ?? []
+    nextTabBarOrderByWorktree[sourceRowKey] = (
+      nextTabBarOrderByWorktree[sourceRowKey] ?? []
     ).filter((id) => !movedFileIds.has(id) && !movedTabIds.has(id))
-    nextTabBarOrderByWorktree[targetWorktreeId] = [
-      ...(nextTabBarOrderByWorktree[targetWorktreeId] ?? []).filter(
+    nextTabBarOrderByWorktree[targetRowKey] = [
+      ...(nextTabBarOrderByWorktree[targetRowKey] ?? []).filter(
         (id) => !mappedMovedTabBarIds.includes(id)
       ),
       ...mappedMovedTabBarIds
     ]
     const nextActiveGroupIdByWorktree = { ...s.activeGroupIdByWorktree }
     if (sourceGroupState.groups.length > 0) {
-      const previousActiveGroupId = nextActiveGroupIdByWorktree[sourceWorktreeId]
-      nextActiveGroupIdByWorktree[sourceWorktreeId] = sourceGroupState.groups.some(
+      const previousActiveGroupId = nextActiveGroupIdByWorktree[sourceRowKey]
+      nextActiveGroupIdByWorktree[sourceRowKey] = sourceGroupState.groups.some(
         (group) => group.id === previousActiveGroupId
       )
         ? previousActiveGroupId
         : sourceGroupState.groups[0].id
     } else {
-      delete nextActiveGroupIdByWorktree[sourceWorktreeId]
+      delete nextActiveGroupIdByWorktree[sourceRowKey]
     }
-    nextActiveGroupIdByWorktree[targetWorktreeId] = targetGroupId
+    nextActiveGroupIdByWorktree[targetRowKey] = targetGroupId
     const tabState =
       sourceWorktreeId === targetWorktreeId
         ? rekeyRestoredEditorTabsInPlace(
@@ -178,14 +183,15 @@ export function buildRestoredEditorOwnerTransition(
             targetWorktreeId,
             migrations,
             tabIdMigration,
-            args.targetExecutionHostId
+            args.targetExecutionHostId,
+            targetRowKey
           )
         : {
             activeFileIdByWorktree: nextActiveFileIdByWorktree,
             activeGroupIdByWorktree: nextActiveGroupIdByWorktree,
             activeTabTypeByWorktree: {
               ...s.activeTabTypeByWorktree,
-              [targetWorktreeId]: 'editor' as const
+              [targetRowKey]: 'editor' as const
             },
             groupsByWorktree: nextGroupsByWorktree,
             layoutByWorktree: nextLayoutByWorktree,

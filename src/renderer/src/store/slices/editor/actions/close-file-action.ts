@@ -14,6 +14,7 @@ import {
 } from '../tabs/untitled-file-cleanup'
 import { unifiedTabsKeepWorktreeSelected } from './unified-tabs-keep-worktree-selected'
 import { isSameEditorOwner, mayShareEditorBackingFile } from '../file-ids/editor-file-ids'
+import { resolveWorkspaceSessionRowKey } from '../../../workspace-session-key'
 
 function isSameDocumentOwner(candidate: OpenFile, closedFile: OpenFile): boolean {
   const expectedRoute = closedFile.operationProvenance?.generation.route
@@ -170,32 +171,37 @@ export function createCloseFileAction(
         const closedWorktreeId = closedFile?.worktreeId
         if (closedWorktreeId) {
           const worktreeFiles = s.openFiles.filter((file) => file.worktreeId === closedWorktreeId)
-          const worktreeActiveFileId = s.activeFileIdByWorktree[closedWorktreeId]
+          // The per-worktree slot lives under the session key, `host|id` for a contested
+          // workspace id (STA-4343); the open-file entity keeps the bare id.
+          const closedRowKey = resolveWorkspaceSessionRowKey(s, closedWorktreeId)
+          const worktreeActiveFileId = s.activeFileIdByWorktree[closedRowKey]
           if (worktreeActiveFileId && fileIdsToClose.has(worktreeActiveFileId)) {
-            newActiveFileIdByWorktree[closedWorktreeId] = findAdjacentOpenFileId(
+            newActiveFileIdByWorktree[closedRowKey] = findAdjacentOpenFileId(
               worktreeFiles,
               fileIdsToClose,
               worktreeActiveFileId
             )
           } else if (s.activeFileId && fileIdsToClose.has(s.activeFileId)) {
-            newActiveFileIdByWorktree[closedWorktreeId] = newActiveId
+            newActiveFileIdByWorktree[closedRowKey] = newActiveId
           }
         }
 
         // Why: editors share a mixed tab strip with browser tabs; closing the last editor should reveal a browser tab before falling back to a terminal.
         const activeWorktreeId = s.activeWorktreeId
+        // The active workspace's own row: stamped host for a contested id (STA-4343).
+        const activeRowKey = activeWorktreeId
+          ? resolveWorkspaceSessionRowKey(s, activeWorktreeId)
+          : null
         const remainingForWorktree = activeWorktreeId
           ? newFiles.filter((f) => f.worktreeId === activeWorktreeId)
           : newFiles
-        const browserTabsForWorktree = activeWorktreeId
-          ? (s.browserTabsByWorktree[activeWorktreeId] ?? [])
+        const browserTabsForWorktree = activeRowKey
+          ? (s.browserTabsByWorktree[activeRowKey] ?? [])
           : []
-        const terminalTabsForWorktree = activeWorktreeId
-          ? (s.tabsByWorktree[activeWorktreeId] ?? [])
-          : []
+        const terminalTabsForWorktree = activeRowKey ? (s.tabsByWorktree[activeRowKey] ?? []) : []
         const fallbackBrowserTabId =
-          activeWorktreeId && browserTabsForWorktree.length > 0
-            ? (s.activeBrowserTabIdByWorktree[activeWorktreeId] ??
+          activeRowKey && browserTabsForWorktree.length > 0
+            ? (s.activeBrowserTabIdByWorktree[activeRowKey] ??
               browserTabsForWorktree[0]?.id ??
               null)
             : s.activeBrowserTabId
@@ -206,15 +212,15 @@ export function createCloseFileAction(
               ? 'browser'
               : 'terminal'
         const newActiveTabTypeByWorktree = { ...s.activeTabTypeByWorktree }
-        if (activeWorktreeId && remainingForWorktree.length === 0) {
-          newActiveTabTypeByWorktree[activeWorktreeId] =
+        if (activeRowKey && remainingForWorktree.length === 0) {
+          newActiveTabTypeByWorktree[activeRowKey] =
             browserTabsForWorktree.length > 0 ? 'browser' : 'terminal'
         }
         // Structured chats have no legacy terminal row to keep their workspace selected.
         const hasRemainingUnifiedTabs =
-          activeWorktreeId !== null &&
+          activeRowKey !== null &&
           unifiedTabsKeepWorktreeSelected(
-            s.unifiedTabsByWorktree?.[activeWorktreeId],
+            s.unifiedTabsByWorktree?.[activeRowKey],
             fileIdsToClose
           )
         const shouldDeactivateWorktree =
@@ -226,11 +232,12 @@ export function createCloseFileAction(
 
         // Why: prune the closed id from tabBarOrderByWorktree so stale ids don't shift positions on the next reconcile.
         const worktreeId = closedFile?.worktreeId ?? activeWorktreeId
+        const tabBarRowKey = worktreeId ? resolveWorkspaceSessionRowKey(s, worktreeId) : null
         const nextTabBarOrderByWorktree =
-          worktreeId && s.tabBarOrderByWorktree
+          tabBarRowKey && s.tabBarOrderByWorktree
             ? {
                 ...s.tabBarOrderByWorktree,
-                [worktreeId]: (s.tabBarOrderByWorktree[worktreeId] ?? []).filter(
+                [tabBarRowKey]: (s.tabBarOrderByWorktree[tabBarRowKey] ?? []).filter(
                   (entryId) => !closedTabOrderIds.has(entryId)
                 )
               }

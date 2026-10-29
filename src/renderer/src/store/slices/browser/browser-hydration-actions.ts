@@ -5,6 +5,7 @@ import {
   ORCA_BROWSER_BLANK_URL
 } from '../../../../../shared/constants'
 import { folderWorkspaceKey } from '../../../../../shared/workspace-scope'
+import { getWorkspaceIdFromSessionKey } from '../../../../../shared/workspace-session-worktree-key'
 import type { BrowserSlice, BrowserSliceGet, BrowserSliceSet } from './browser-slice-contract'
 import { addAdditionalValidWorkspaceKeys } from '@/lib/workspace-session-hydration-keys'
 import { buildValidWorktreeIdsForSessionHydration } from '../degraded-repo-worktree-validity'
@@ -223,9 +224,12 @@ export function createBrowserHydrationActions(
       // Why here and not in the startup chain: the seeded handles are the only record that this
       // desktop was hosting pages, and the runtime only hands them back once it sees an attach.
       void ensureBrowserClientHostsForRestoredPages(state)
-      for (const [worktreeId, browserTabs] of Object.entries(state.browserTabsByWorktree)) {
+      for (const [rowKey, browserTabs] of Object.entries(state.browserTabsByWorktree)) {
+        // The record key is `host|id` for a contested workspace (STA-4343), but the action and
+        // the tab's own `worktreeId` field both speak the bare id.
+        const worktreeId = getWorkspaceIdFromSessionKey(rowKey)
         for (const bt of browserTabs) {
-          const exists = (state.unifiedTabsByWorktree[worktreeId] ?? []).some(
+          const exists = (state.unifiedTabsByWorktree[rowKey] ?? []).some(
             (t) => t.contentType === 'browser' && t.entityId === bt.id
           )
           if (!exists) {
@@ -241,7 +245,8 @@ export function createBrowserHydrationActions(
 
     switchBrowserTabProfile: (workspaceId, profileId, sessionPartition) => {
       set((s) => {
-        for (const [worktreeId, tabs] of Object.entries(s.browserTabsByWorktree)) {
+        // Iterating and writing back the same record key, so a qualified key round-trips.
+        for (const [rowKey, tabs] of Object.entries(s.browserTabsByWorktree)) {
           const tabIndex = tabs.findIndex((t) => t.id === workspaceId)
           if (tabIndex !== -1) {
             const updatedTabs = [...tabs]
@@ -253,7 +258,7 @@ export function createBrowserHydrationActions(
             return {
               browserTabsByWorktree: {
                 ...s.browserTabsByWorktree,
-                [worktreeId]: updatedTabs
+                [rowKey]: updatedTabs
               }
             }
           }

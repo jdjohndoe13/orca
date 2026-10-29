@@ -7,7 +7,12 @@ export function resolveActivatedWorktreeSurface(
   s: ActiveSurfaceSourceState & Pick<AppState, 'rightSidebarExplorerViewByWorktree'>,
   worktreeId: string,
   preferredActiveUnifiedTabId: string | undefined,
-  reconciledActiveTabId: string | null
+  reconciledActiveTabId: string | null,
+  /**
+   * Where this workspace's rows live. The activation caller knows the host it is activating
+   * FOR, so it resolves the key rather than having it re-derived here.
+   */
+  rowKey?: string
 ): {
   restoredRightSidebarExplorerView: NonNullable<
     AppState['rightSidebarExplorerViewByWorktree']
@@ -21,7 +26,8 @@ export function resolveActivatedWorktreeSurface(
     restoredRightSidebarExplorerView: s.rightSidebarExplorerViewByWorktree?.[worktreeId] ?? 'files',
     ...deriveActiveSurfaceForWorktree(s, worktreeId, undefined, {
       legacySelection: 'remembered-type',
-      preferredTabId: preferredActiveUnifiedTabId ?? reconciledActiveTabId ?? undefined
+      preferredTabId: preferredActiveUnifiedTabId ?? reconciledActiveTabId ?? undefined,
+      rowKey
     })
   }
 }

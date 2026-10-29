@@ -29,6 +29,7 @@ import {
   pendingActivationTerminalPrepCancels,
   shouldDeferActivationTerminalPrep
 } from './activation-terminal-prep'
+import { resolveWorkspaceSessionKey } from '../../../workspace-session-key'
 
 export function createSetActiveWorktree(
   set: WorktreeSliceSet,
@@ -60,8 +61,15 @@ export function createSetActiveWorktree(
       const transitioned = stateTransition
         ? ({ ...current, ...stateTransition.patch } as AppState)
         : current
+      // The activation carries the host it is activating FOR, so the row key is resolved from
+      // that rather than the (still stale) stamped one — a contested id lives at `host|id`.
+      // It must be the same key for the reconciliation and the surface read below, or the
+      // reconciliation rebuilds groups the surface then cannot see.
+      const rowKey = worktreeId
+        ? resolveWorkspaceSessionKey(transitioned, worktreeId, executionHostId)
+        : ''
       const reconciliation = worktreeId
-        ? projectWorktreeTabModelReconciliation(transitioned, worktreeId)
+        ? projectWorktreeTabModelReconciliation(transitioned, worktreeId, undefined, rowKey)
         : null
       const reconciliationChanged = Boolean(
         reconciliation && Object.keys(reconciliation.patch).length > 0
@@ -94,7 +102,8 @@ export function createSetActiveWorktree(
         s,
         worktreeId,
         stateTransition?.preferredActiveUnifiedTabId,
-        reconciledActiveTabId
+        reconciledActiveTabId,
+        rowKey
       )
 
       // Why: focus isn't smart-sort activity — writing lastActivityAt here caused the "jump after focus" bug; only clear unread.
@@ -104,7 +113,7 @@ export function createSetActiveWorktree(
       // Why first-activation guard, not tab.ptyId==null: reconnectPersistedTerminals repopulates ptyId before mount.
       // Tag every tab on FIRST activation so reattach/fresh-spawn updateTabPtyId suppresses activity + sortEpoch bumps.
       // Generation is only bumped when no tab has a live PTY — a live remount would kill the user's shell.
-      const tabs = s.tabsByWorktree[worktreeId ?? ''] ?? []
+      const tabs = s.tabsByWorktree[rowKey] ?? []
       const wakeable = tabs.filter(isWakeable)
       const allDead =
         worktreeId != null &&
@@ -145,7 +154,7 @@ export function createSetActiveWorktree(
           ? {
               tabsByWorktree: {
                 ...s.tabsByWorktree,
-                [worktreeId]: tabs.map((tab) =>
+                [rowKey]: tabs.map((tab) =>
                   !isWakeable(tab)
                     ? tab
                     : {
@@ -161,9 +170,9 @@ export function createSetActiveWorktree(
           : {}
 
       const nextActiveTabTypeByWorktree =
-        s.activeTabTypeByWorktree[worktreeId] === activeTabType
+        s.activeTabTypeByWorktree[rowKey] === activeTabType
           ? s.activeTabTypeByWorktree
-          : { ...s.activeTabTypeByWorktree, [worktreeId]: activeTabType }
+          : { ...s.activeTabTypeByWorktree, [rowKey]: activeTabType }
       const hasStateChange =
         s.activeWorktreeId !== worktreeId ||
         s.activeWorkspaceExecutionHostId !== (executionHostId ?? null) ||
@@ -227,7 +236,8 @@ export function createSetActiveWorktree(
           if (s.activeWorktreeId !== worktreeId) {
             return s
           }
-          const tabs = s.tabsByWorktree[worktreeId] ?? []
+          const rowKey = resolveWorkspaceSessionKey(s, worktreeId, s.activeWorkspaceExecutionHostId)
+          const tabs = s.tabsByWorktree[rowKey] ?? []
           const wakeable = tabs.filter(isWakeable)
           if (wakeable.length === 0) {
             return s
@@ -239,7 +249,7 @@ export function createSetActiveWorktree(
           return {
             tabsByWorktree: {
               ...s.tabsByWorktree,
-              [worktreeId]: tabs.map((tab) =>
+              [rowKey]: tabs.map((tab) =>
                 !isWakeable(tab)
                   ? tab
                   : {

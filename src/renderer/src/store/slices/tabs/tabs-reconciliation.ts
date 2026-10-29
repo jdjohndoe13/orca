@@ -12,6 +12,7 @@ import {
   writeBatchedWorkspaceRecordEntry,
   type WorktreeTabModelReconciliationBatch
 } from './tabs-reconciliation-batch'
+import { resolveWorkspaceSessionRowKey } from '../../workspace-session-key'
 
 export type WorktreeTabModelReconciliation = {
   patch: Partial<AppState>
@@ -27,11 +28,22 @@ export type WorktreeTabModelReconciliation = {
 export function projectWorktreeTabModelReconciliation(
   state: AppState,
   worktreeId: string,
-  batch?: WorktreeTabModelReconciliationBatch
+  batch?: WorktreeTabModelReconciliationBatch,
+  /**
+   * Overrides the row the rows live under. Activation carries the host it is activating FOR
+   * before the stamp lands in the store, so it resolves the key from that argument; the
+   * in-store fallback would name the wrong host for a contested id.
+   */
+  rowKeyOverride?: string
 ): WorktreeTabModelReconciliation {
-  const unifiedTabs = state.unifiedTabsByWorktree[worktreeId] ?? []
-  const groups = state.groupsByWorktree[worktreeId] ?? []
-  const runtimeTerminalTabs = state.tabsByWorktree[worktreeId] ?? []
+  // The rows live under the session key, `host|id` for a contested workspace id (STA-4343);
+  // the group/tab entities keep the bare `worktreeId` as their own field, and the batch's
+  // `liveEditorIdsByWorktree` index is built from `openFiles[].worktreeId`, so it stays bare.
+  const rowKey =
+    rowKeyOverride ?? resolveWorkspaceSessionRowKey(state, worktreeId)
+  const unifiedTabs = state.unifiedTabsByWorktree[rowKey] ?? []
+  const groups = state.groupsByWorktree[rowKey] ?? []
+  const runtimeTerminalTabs = state.tabsByWorktree[rowKey] ?? []
   const unifiedTerminalEntityIds = new Set(
     unifiedTabs.filter((tab) => tab.contentType === 'terminal').map((tab) => tab.entityId)
   )
@@ -48,14 +60,15 @@ export function projectWorktreeTabModelReconciliation(
       state.unverifiedPtyLossTabIds[tab.id] === true
     )
   })
-  const orphanTerminalIds = getOrphanTerminalIds(state, worktreeId)
+  const orphanTerminalIds = getOrphanTerminalIds(state, rowKey)
   const ensuredGroupState =
     legacyRuntimeTerminalTabs.length > 0
       ? ensureGroup(
           state.groupsByWorktree,
           state.activeGroupIdByWorktree,
           worktreeId,
-          state.activeGroupIdByWorktree[worktreeId]
+          state.activeGroupIdByWorktree[rowKey],
+          rowKey
         )
       : null
   const reconciliationGroup = ensuredGroupState?.group ?? groups[0] ?? null
@@ -83,7 +96,7 @@ export function projectWorktreeTabModelReconciliation(
           }))
   const reconciledUnifiedTabs =
     restoredLegacyTabs.length > 0 ? [...unifiedTabs, ...restoredLegacyTabs] : unifiedTabs
-  const rememberedLegacyActiveTabId = state.activeTabIdByWorktree[worktreeId]
+  const rememberedLegacyActiveTabId = state.activeTabIdByWorktree[rowKey]
   const restoredLegacyTabIds = new Set(restoredLegacyTabs.map((tab) => tab.id))
   const legacyFallbackActiveTabId =
     rememberedLegacyActiveTabId && restoredLegacyTabIds.has(rememberedLegacyActiveTabId)
@@ -91,7 +104,7 @@ export function projectWorktreeTabModelReconciliation(
       : (restoredLegacyTabs[0]?.id ?? null)
   const reconciledGroups =
     restoredLegacyTabs.length > 0 && reconciliationGroup
-      ? updateGroup(ensuredGroupState!.groupsByWorktree[worktreeId] ?? [], {
+      ? updateGroup(ensuredGroupState!.groupsByWorktree[rowKey] ?? [], {
           ...reconciliationGroup,
           // Why: restore runtime tabs into the active/root group so reattach cannot spawn a duplicate.
           activeTabId: reconciliationGroup.activeTabId ?? legacyFallbackActiveTabId,
@@ -112,7 +125,7 @@ export function projectWorktreeTabModelReconciliation(
         state.openFiles.filter((file) => file.worktreeId === worktreeId).map((file) => file.id)
       )
   const liveBrowserIds = new Set(
-    (state.browserTabsByWorktree[worktreeId] ?? []).map((browserTab) => browserTab.id)
+    (state.browserTabsByWorktree[rowKey] ?? []).map((browserTab) => browserTab.id)
   )
 
   const isRenderableTab = (tab: Tab): boolean => {
@@ -160,8 +173,8 @@ export function projectWorktreeTabModelReconciliation(
     prunedGroups.some((group, index) => group !== groups[index])
   const nextGroups = groupsChanged ? prunedGroups : groups
   const currentActiveGroupId =
-    state.activeGroupIdByWorktree[worktreeId] ??
-    ensuredGroupState?.activeGroupIdByWorktree[worktreeId]
+    state.activeGroupIdByWorktree[rowKey] ??
+    ensuredGroupState?.activeGroupIdByWorktree[rowKey]
   const activeGroupStillExists = nextGroups.some((group) => group.id === currentActiveGroupId)
   const nextActiveGroupId = activeGroupStillExists
     ? currentActiveGroupId
@@ -172,8 +185,8 @@ export function projectWorktreeTabModelReconciliation(
   const activeGroupChanged = nextActiveGroupId !== currentActiveGroupId
   const baseNextLayout =
     restoredLegacyTabs.length > 0 && reconciliationGroup
-      ? (state.layoutByWorktree[worktreeId] ?? { type: 'leaf', groupId: reconciliationGroup.id })
-      : state.layoutByWorktree[worktreeId]
+      ? (state.layoutByWorktree[rowKey] ?? { type: 'leaf', groupId: reconciliationGroup.id })
+      : state.layoutByWorktree[rowKey]
   const validGroupIds = new Set(nextGroups.map((group) => group.id))
   const prunedNextLayout =
     baseNextLayout && validGroupIds.size > 0
@@ -181,7 +194,7 @@ export function projectWorktreeTabModelReconciliation(
       : baseNextLayout
   const nextLayout =
     prunedNextLayout ?? (nextGroups[0] ? { type: 'leaf', groupId: nextGroups[0].id } : undefined)
-  const currentLayout = state.layoutByWorktree[worktreeId]
+  const currentLayout = state.layoutByWorktree[rowKey]
   const layoutChanged = nextLayout !== currentLayout
   let patch: Partial<AppState> = {}
 
@@ -217,21 +230,21 @@ export function projectWorktreeTabModelReconciliation(
       unifiedTabsByWorktree: writeBatchedWorkspaceRecordEntry(
         state.unifiedTabsByWorktree,
         'unifiedTabsByWorktree',
-        worktreeId,
+        rowKey,
         validTabs,
         batch
       ),
       groupsByWorktree: writeBatchedWorkspaceRecordEntry(
         state.groupsByWorktree,
         'groupsByWorktree',
-        worktreeId,
+        rowKey,
         nextGroups,
         batch
       ),
       activeGroupIdByWorktree: writeBatchedWorkspaceRecordEntry(
         state.activeGroupIdByWorktree,
         'activeGroupIdByWorktree',
-        worktreeId,
+        rowKey,
         nextActiveGroupId,
         batch
       ),
@@ -244,14 +257,14 @@ export function projectWorktreeTabModelReconciliation(
             layoutByWorktree: writeBatchedWorkspaceRecordEntry(
               state.layoutByWorktree,
               'layoutByWorktree',
-              worktreeId,
+              rowKey,
               nextLayout,
               batch
             )
           }
         : {}),
       ...(orphanTerminalIds.size > 0
-        ? buildOrphanTerminalCleanupPatch(state, worktreeId, orphanTerminalIds)
+        ? buildOrphanTerminalCleanupPatch(state, rowKey, orphanTerminalIds)
         : {})
     }
   }

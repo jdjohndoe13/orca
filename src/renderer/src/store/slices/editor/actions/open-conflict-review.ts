@@ -4,6 +4,7 @@ import { joinPath } from '@/lib/path'
 import type { ConflictReviewState, OpenFile } from '../types/open-file'
 import { toOpenConflictMetadata } from '../git/git-status-reconciliation'
 import { openWorkspaceEditorItem } from '../tabs/workspace-editor-item'
+import { resolveWorkspaceSessionRowKey } from '../../../workspace-session-key'
 
 export function createOpenConflictReview(
   set: EditorSet,
@@ -12,7 +13,10 @@ export function createOpenConflictReview(
   return {
     openConflictReviewFile: (reviewFileId, worktreeId, worktreePath, entry, language) => {
       const absolutePath = joinPath(worktreePath, entry.path)
-      const reviewTab = (get().unifiedTabsByWorktree?.[worktreeId] ?? []).find(
+      // The row lives under the session key (STA-4343); the review tab is a record entry, so the
+      // lookup is qualified while the tab's own `worktreeId` field stays bare.
+      const rowKey = resolveWorkspaceSessionRowKey(get(), worktreeId)
+      const reviewTab = (get().unifiedTabsByWorktree?.[rowKey] ?? []).find(
         (tab) => tab.entityId === reviewFileId && tab.contentType === 'conflict-review'
       )
       let openedConflictFile = true
@@ -84,8 +88,8 @@ export function createOpenConflictReview(
           openFiles: nextOpenFiles,
           activeFileId: reviewFileId,
           activeTabType: 'editor',
-          activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [worktreeId]: reviewFileId },
-          activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [worktreeId]: 'editor' },
+          activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [rowKey]: reviewFileId },
+          activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [rowKey]: 'editor' },
           trackedConflictPathsByWorktree:
             nextTracked === s.trackedConflictPathsByWorktree[worktreeId]
               ? s.trackedConflictPathsByWorktree
@@ -116,6 +120,7 @@ export function createOpenConflictReview(
     openConflictReview: (worktreeId, worktreePath, entries, source) => {
       const id = `${worktreeId}::conflict-review`
       set((s) => {
+        const rowKey = resolveWorkspaceSessionRowKey(s, worktreeId)
         const conflictReview: ConflictReviewState = {
           source,
           snapshotTimestamp: Date.now(),
@@ -141,8 +146,8 @@ export function createOpenConflictReview(
             ),
             activeFileId: id,
             activeTabType: 'editor',
-            activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [worktreeId]: id },
-            activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [worktreeId]: 'editor' }
+            activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [rowKey]: id },
+            activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [rowKey]: 'editor' }
           }
         }
 
@@ -161,8 +166,8 @@ export function createOpenConflictReview(
           openFiles: [...s.openFiles, newFile],
           activeFileId: id,
           activeTabType: 'editor',
-          activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [worktreeId]: id },
-          activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [worktreeId]: 'editor' }
+          activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [rowKey]: id },
+          activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [rowKey]: 'editor' }
         }
       })
       void openWorkspaceEditorItem(get(), id, worktreeId, 'Conflict Review', 'conflict-review')
