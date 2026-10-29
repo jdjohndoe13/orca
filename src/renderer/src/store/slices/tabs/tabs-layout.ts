@@ -93,17 +93,23 @@ function removeLeaf(root: TabGroupLayoutNode, targetGroupId: string): TabGroupLa
   return { ...root, first, second }
 }
 
+/**
+ * `rowKey` is where the layout/active-group rows live. It differs from `worktreeId` for a contested
+ * workspace id — one repo registered on several execution hosts, STA-4343 — whose rows are `host|id`
+ * qualified.
+ */
 export function collapseGroupLayout(
   layoutByWorktree: Record<string, TabGroupLayoutNode>,
   activeGroupIdByWorktree: Record<string, string>,
   worktreeId: string,
   groupId: string,
-  fallbackGroupId?: string | null
+  fallbackGroupId?: string | null,
+  rowKey: string = worktreeId
 ): {
   layoutByWorktree: Record<string, TabGroupLayoutNode>
   activeGroupIdByWorktree: Record<string, string>
 } {
-  const currentLayout = layoutByWorktree[worktreeId]
+  const currentLayout = layoutByWorktree[rowKey]
   if (!currentLayout) {
     return { layoutByWorktree, activeGroupIdByWorktree }
   }
@@ -111,15 +117,15 @@ export function collapseGroupLayout(
   const collapsed = removeLeaf(currentLayout, groupId)
   const nextLayoutByWorktree = { ...layoutByWorktree }
   if (collapsed) {
-    nextLayoutByWorktree[worktreeId] = collapsed
+    nextLayoutByWorktree[rowKey] = collapsed
   } else {
-    delete nextLayoutByWorktree[worktreeId]
+    delete nextLayoutByWorktree[rowKey]
   }
   return {
     layoutByWorktree: nextLayoutByWorktree,
     activeGroupIdByWorktree: {
       ...activeGroupIdByWorktree,
-      [worktreeId]: siblingId ?? fallbackGroupId ?? activeGroupIdByWorktree[worktreeId]
+      [rowKey]: siblingId ?? fallbackGroupId ?? activeGroupIdByWorktree[rowKey]
     }
   }
 }

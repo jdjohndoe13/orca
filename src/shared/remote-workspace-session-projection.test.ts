@@ -4,6 +4,7 @@ import {
   importRemoteWorkspaceSession
 } from './remote-workspace-session-projection'
 import { getDefaultWorkspaceSession } from './constants'
+import { toSshExecutionHostId } from './execution-host'
 import { TERMINAL_SCROLLBACK_SESSION_BUFFER_BYTE_LIMIT } from './terminal-scrollback-limits'
 
 describe('remote workspace session projection', () => {
@@ -113,6 +114,47 @@ describe('remote workspace session projection', () => {
     })
     expect(projected.remoteSessionIdsByTabId).toEqual({ 'tab-1': 'pty-1' })
     expect(projected.defaultTerminalTabsAppliedByWorktreePath).toEqual({ '/srv/app': true })
+  })
+
+  it('exports a host-qualified contested row under its bare repo id and names the host', () => {
+    // The unified renderer session holds one `host|id` row per claimant of a contested id
+    // (STA-4343). The export must resolve the BARE repo id (so the catalog can answer it) and
+    // pass the qualified host separately — otherwise the row is resolved against a repo id
+    // that exists nowhere and silently dropped from the publish.
+    const session = {
+      ...getDefaultWorkspaceSession(),
+      activeWorktreeId: 'ssh:build-box|repo-a::/srv/app',
+      tabsByWorktree: {
+        'ssh:build-box|repo-a::/srv/app': [
+          {
+            id: 'tab-ssh',
+            ptyId: 'pty-ssh',
+            worktreeId: 'repo-a::/srv/app',
+            title: 'On the build box',
+            customTitle: null,
+            color: null,
+            sortOrder: 0,
+            createdAt: 1
+          }
+        ]
+      },
+      terminalLayoutsByTabId: {},
+      defaultTerminalTabsAppliedByWorktreeId: { 'ssh:build-box|repo-a::/srv/app': true as const }
+    }
+
+    const seen: [string, string | undefined][] = []
+    const projected = exportRemoteWorkspaceSession(session, {
+      isTargetWorktree: (worktreeId, executionHostId) => {
+        seen.push([worktreeId, executionHostId])
+        return worktreeId === 'repo-a::/srv/app' && executionHostId === 'ssh:build-box'
+      }
+    })
+
+    expect(projected.tabsByWorktreePath['/srv/app']?.map((row) => row.id)).toEqual(['tab-ssh'])
+    expect(projected.activeWorktreePath).toBe('/srv/app')
+    expect(projected.defaultTerminalTabsAppliedByWorktreePath).toEqual({ '/srv/app': true })
+    // Every resolution saw the bare id — never the qualified key.
+    expect(seen.every(([worktreeId]) => !worktreeId.includes('|'))).toBe(true)
   })
 
   it('imports projected terminal state into this client repo id', () => {
@@ -446,5 +488,102 @@ describe('remote workspace session projection', () => {
         )
       ).not.toContain('localOnlyScrollbackByTabId')
     })
+  })
+})
+
+/**
+ * The wire boundary for a contested workspace id.
+ *
+ * A bare `repoId::path` claimed by more than one host is spelled `host|repoId::path` in the unified
+ * renderer session (one row per claimant, `src/shared/workspace-session-worktree-key.ts`), while
+ * clients and remote servers update independently. The projection therefore publishes the bare
+ * `worktreePath` it always has — the host prefix never crosses the wire — and hands the host to the
+ * caller as a separate argument so the repo lookup still resolves a real repo id.
+ */
+describe('remote workspace session projection of a host-qualified key', () => {
+  const SHARED = 'repo-shared::/srv/app'
+  const RUNTIME_HOST = 'runtime:env-a'
+  const SSH_HOST = toSshExecutionHostId('box')
+
+  function qualifiedSession(): ReturnType<typeof getDefaultWorkspaceSession> {
+    return {
+      ...getDefaultWorkspaceSession(),
+      activeWorktreeId: `${RUNTIME_HOST}|${SHARED}`,
+      activeTabId: 'tab-a',
+      tabsByWorktree: {
+        [`${RUNTIME_HOST}|${SHARED}`]: [
+          {
+            id: 'tab-a',
+            ptyId: 'pty-a',
+            worktreeId: `${RUNTIME_HOST}|${SHARED}`,
+            title: 'Agent',
+            customTitle: null,
+            color: null,
+            sortOrder: 0,
+            createdAt: 1
+          }
+        ]
+      },
+      activeTabIdByWorktree: { [`${RUNTIME_HOST}|${SHARED}`]: 'tab-a' },
+      activeWorktreeIdsOnShutdown: [`${RUNTIME_HOST}|${SHARED}`],
+      defaultTerminalTabsAppliedByWorktreeId: { [`${RUNTIME_HOST}|${SHARED}`]: true }
+    }
+  }
+
+  it('publishes the bare path and names the qualified key host to the caller', () => {
+    const asked: [string, string | undefined][] = []
+    const projected = exportRemoteWorkspaceSession(qualifiedSession(), {
+      isTargetWorktree: (worktreeId, executionHostId) => {
+        asked.push([worktreeId, executionHostId])
+        return worktreeId === SHARED
+      }
+    })
+
+    // A qualified key reaching the catalog would read the repo as `runtime:env-a|repo-shared`, which
+    // resolves to nothing, and the row would be published to nobody — the empty-list deletion of
+    // #12721 all over again.
+    expect(asked).toEqual(Array.from({ length: 5 }, () => [SHARED, RUNTIME_HOST]))
+    expect(projected.tabsByWorktreePath['/srv/app']?.map((tab) => tab.id)).toEqual(['tab-a'])
+    expect(projected.activeWorktreePath).toBe('/srv/app')
+    expect(projected.activeTabIdByWorktreePath?.['/srv/app']).toBe('tab-a')
+    expect(projected.activeWorktreePathsOnShutdown).toEqual(['/srv/app'])
+    expect(projected.defaultTerminalTabsAppliedByWorktreePath).toEqual({ '/srv/app': true })
+    // The wire itself never carries the prefix.
+    expect(JSON.stringify(projected)).not.toContain('|')
+  })
+
+  it('keeps two claimants of one id as separate rows that each publish their own tabs', () => {
+    // Two claimants of the same id are two workspaces on two hosts. Routing by the bare id alone
+    // would publish one host's tabs to the other's snapshot; the host argument is what separates them.
+    const session = {
+      ...qualifiedSession(),
+      tabsByWorktree: {
+        ...qualifiedSession().tabsByWorktree,
+        [`ssh:box|${SHARED}`]: [
+          {
+            id: 'tab-ssh',
+            ptyId: 'pty-ssh',
+            worktreeId: `ssh:box|${SHARED}`,
+            title: 'Remote',
+            customTitle: null,
+            color: null,
+            sortOrder: 0,
+            createdAt: 1
+          }
+        ]
+      }
+    }
+
+    const forRuntime = exportRemoteWorkspaceSession(session, {
+      isTargetWorktree: (worktreeId, executionHostId) =>
+        worktreeId === SHARED && executionHostId === RUNTIME_HOST
+    })
+    const forSsh = exportRemoteWorkspaceSession(session, {
+      isTargetWorktree: (worktreeId, executionHostId) =>
+        worktreeId === SHARED && executionHostId === SSH_HOST
+    })
+
+    expect(forRuntime.tabsByWorktreePath['/srv/app']?.map((tab) => tab.id)).toEqual(['tab-a'])
+    expect(forSsh.tabsByWorktreePath['/srv/app']?.map((tab) => tab.id)).toEqual(['tab-ssh'])
   })
 })

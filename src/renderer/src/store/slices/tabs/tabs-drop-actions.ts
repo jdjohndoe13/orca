@@ -13,6 +13,7 @@ import {
   pushRecentTabId,
   sanitizeRecentTabIds
 } from '../tab-group-state'
+import { getWorkspaceIdFromSessionKey } from '../../../../../shared/workspace-session-worktree-key'
 
 export function createTabsDropActions(
   set: TabsSliceSet,
@@ -28,8 +29,12 @@ export function createTabsDropActions(
           return state
         }
 
-        const { tab, worktreeId } = foundTab
-        const sourceGroup = findGroupForTab(state.groupsByWorktree, worktreeId, tab.groupId)
+        // Both lookups walked the records, so the id they hand back is the row key — `host|id` for
+        // a contested workspace id (STA-4343).
+        const { tab } = foundTab
+        const rowKey = foundTab.worktreeId
+        const worktreeId = getWorkspaceIdFromSessionKey(rowKey)
+        const sourceGroup = findGroupForTab(state.groupsByWorktree, rowKey, tab.groupId)
         const targetGroup = foundTarget.group
         if (!sourceGroup) {
           return state
@@ -39,7 +44,7 @@ export function createTabsDropActions(
         if (!isSplitDrop && tab.groupId === target.groupId) {
           return state
         }
-        const layout = state.layoutByWorktree[worktreeId]
+        const layout = state.layoutByWorktree[rowKey]
         if (
           isSplitDrop &&
           isPaneColumnSplitDropNoOp({
@@ -56,7 +61,7 @@ export function createTabsDropActions(
 
         moved = true
 
-        let nextGroups = state.groupsByWorktree[worktreeId] ?? []
+        let nextGroups = state.groupsByWorktree[rowKey] ?? []
         let nextLayoutByWorktree = state.layoutByWorktree
         let nextActiveGroupIdByWorktree = state.activeGroupIdByWorktree
         let resolvedTargetGroupId = target.groupId
@@ -70,7 +75,7 @@ export function createTabsDropActions(
             tabOrder: []
           }
           const currentLayout =
-            nextLayoutByWorktree[worktreeId] ?? ({ type: 'leaf', groupId: target.groupId } as const)
+            nextLayoutByWorktree[rowKey] ?? ({ type: 'leaf', groupId: target.groupId } as const)
           const replacement = buildSplitNode(
             target.groupId,
             newGroupId,
@@ -84,11 +89,11 @@ export function createTabsDropActions(
           nextGroups = [...nextGroups, newGroup]
           nextLayoutByWorktree = {
             ...nextLayoutByWorktree,
-            [worktreeId]: replaceLeaf(currentLayout, target.groupId, replacement)
+            [rowKey]: replaceLeaf(currentLayout, target.groupId, replacement)
           }
           nextActiveGroupIdByWorktree = {
             ...nextActiveGroupIdByWorktree,
-            [worktreeId]: newGroupId
+            [rowKey]: newGroupId
           }
         }
 
@@ -142,26 +147,27 @@ export function createTabsDropActions(
             nextActiveGroupIdByWorktree,
             worktreeId,
             sourceGroup.id,
-            resolvedTargetGroupId
+            resolvedTargetGroupId,
+            rowKey
           )
           nextLayoutByWorktree = collapsedState.layoutByWorktree
           nextActiveGroupIdByWorktree = collapsedState.activeGroupIdByWorktree
         } else {
           nextActiveGroupIdByWorktree = {
             ...nextActiveGroupIdByWorktree,
-            [worktreeId]: resolvedTargetGroupId
+            [rowKey]: resolvedTargetGroupId
           }
         }
 
         const nextUnifiedTabsByWorktree = {
           ...state.unifiedTabsByWorktree,
-          [worktreeId]: (state.unifiedTabsByWorktree[worktreeId] ?? []).map((candidate) =>
+          [rowKey]: (state.unifiedTabsByWorktree[rowKey] ?? []).map((candidate) =>
             candidate.id === tabId ? { ...candidate, groupId: resolvedTargetGroupId } : candidate
           )
         }
         const nextGroupsByWorktree = {
           ...state.groupsByWorktree,
-          [worktreeId]: nextGroups
+          [rowKey]: nextGroups
         }
 
         return {
@@ -179,7 +185,8 @@ export function createTabsDropActions(
                   activeGroupIdByWorktree: nextActiveGroupIdByWorktree
                 },
                 worktreeId,
-                resolvedTargetGroupId
+                resolvedTargetGroupId,
+                rowKey
               )
             : {})
         }

@@ -2,6 +2,8 @@ import type { TabGroupLayoutNode } from '../../../../../shared/tab-types'
 import type { TabsSlice, TabsSliceGet, TabsSliceSet } from './tabs-slice-contract'
 import { findGroupAndWorktree, findTabAndWorktree } from '../tab-group-state'
 import { findSiblingGroupId, updateSplitRatio } from './tabs-layout'
+import { getWorkspaceIdFromSessionKey } from '../../../../../shared/workspace-session-worktree-key'
+import { resolveWorkspaceSessionRowKey } from '../../workspace-session-key'
 
 export function createTabsSecondaryActions(
   set: TabsSliceSet,
@@ -14,26 +16,33 @@ export function createTabsSecondaryActions(
       if (!foundTab || !foundTarget || foundTab.worktreeId !== foundTarget.worktreeId) {
         return null
       }
-      const { tab, worktreeId } = foundTab
-      return get().createUnifiedTab(worktreeId, tab.contentType, {
-        entityId: init?.entityId ?? tab.entityId,
-        executionHostId: tab.executionHostId,
-        label: init?.label ?? tab.label,
-        generatedLabel: init?.generatedLabel ?? tab.generatedLabel,
-        quickCommandLabel: init?.quickCommandLabel ?? tab.quickCommandLabel,
-        customLabel: init?.customLabel ?? tab.customLabel,
-        color: init?.color ?? tab.color,
-        isPinned: init?.isPinned ?? tab.isPinned,
-        id: init?.id,
-        targetGroupId
-      })
+      // The lookup walked the record, so the id is the row key — `host|id` for a contested
+      // workspace id (STA-4343). `createUnifiedTab` takes the bare id and resolves the key itself.
+      const { tab } = foundTab
+      return get().createUnifiedTab(
+        getWorkspaceIdFromSessionKey(foundTab.worktreeId),
+        tab.contentType,
+        {
+          entityId: init?.entityId ?? tab.entityId,
+          executionHostId: tab.executionHostId,
+          label: init?.label ?? tab.label,
+          generatedLabel: init?.generatedLabel ?? tab.generatedLabel,
+          quickCommandLabel: init?.quickCommandLabel ?? tab.quickCommandLabel,
+          customLabel: init?.customLabel ?? tab.customLabel,
+          color: init?.color ?? tab.color,
+          isPinned: init?.isPinned ?? tab.isPinned,
+          id: init?.id,
+          targetGroupId
+        }
+      )
     },
 
     mergeGroupIntoSibling: (worktreeId, groupId) => {
       const state = get()
-      const groups = state.groupsByWorktree[worktreeId] ?? []
+      const rowKey = resolveWorkspaceSessionRowKey(state, worktreeId)
+      const groups = state.groupsByWorktree[rowKey] ?? []
       const sourceGroup = groups.find((candidate) => candidate.id === groupId)
-      const layout = state.layoutByWorktree[worktreeId]
+      const layout = state.layoutByWorktree[rowKey]
       if (!sourceGroup || !layout || groups.length <= 1) {
         return null
       }
@@ -42,7 +51,7 @@ export function createTabsSecondaryActions(
         return null
       }
 
-      const orderedSourceTabs = (state.unifiedTabsByWorktree[worktreeId] ?? []).filter(
+      const orderedSourceTabs = (state.unifiedTabsByWorktree[rowKey] ?? []).filter(
         (tab) => tab.groupId === groupId
       )
       for (const tabId of sourceGroup.tabOrder) {
@@ -59,7 +68,8 @@ export function createTabsSecondaryActions(
 
     setTabGroupSplitRatio: (worktreeId, nodePath, ratio) => {
       set((state) => {
-        const currentLayout = state.layoutByWorktree[worktreeId]
+        const rowKey = resolveWorkspaceSessionRowKey(state, worktreeId)
+        const currentLayout = state.layoutByWorktree[rowKey]
         if (!currentLayout) {
           return state
         }
@@ -81,7 +91,7 @@ export function createTabsSecondaryActions(
           layoutByWorktree: {
             ...state.layoutByWorktree,
             // Why: split ratios belong to the tab-group model (not transient UI), so persist them for restores and multi-step group ops.
-            [worktreeId]: updateSplitRatio(
+            [rowKey]: updateSplitRatio(
               currentLayout,
               nodePath.length > 0 ? nodePath.split('.') : [],
               ratio

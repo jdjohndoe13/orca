@@ -115,19 +115,23 @@ describe('buildHostIdByWorktreeId for a contested workspace id', () => {
 })
 
 describe('mergeWorkspaceSessionsWithHostShadow', () => {
-  it('parks a co-claimant partition entry instead of letting it win the shared key', () => {
+  it('gives every claimant of a contested id its own qualified row instead of one shared bucket', () => {
+    // The old behavior parked the co-claimant and kept only the primary's row under the bare key,
+    // so every host-colliding card painted the primary's tabs (the known gap). Both claimants are
+    // now re-keyed `host|id`, nothing is parked, and no bare key survives for a contested id.
     const merged = mergeWorkspaceSessionsWithHostShadow({
       local: sessionWithTabs({ [SHARED_ID]: [tab('local-tab')] }),
       [SSH_HOST]: sessionWithTabs({ [SHARED_ID]: [tab('ssh-tab')] })
     })
 
-    expect(merged.session.tabsByWorktree[SHARED_ID]?.map((entry) => entry.id)).toEqual([
+    expect(merged.session.tabsByWorktree[`local|${SHARED_ID}`]?.map((entry) => entry.id)).toEqual([
       'local-tab'
     ])
     expect(
-      (merged.shadow[SSH_HOST]?.tabsByWorktree?.[SHARED_ID] ?? []).map((entry) => entry.id)
+      merged.session.tabsByWorktree[`${SSH_HOST}|${SHARED_ID}`]?.map((entry) => entry.id)
     ).toEqual(['ssh-tab'])
-    expect(merged.shadow.local).toBeUndefined()
+    expect(merged.session.tabsByWorktree[SHARED_ID]).toBeUndefined()
+    expect(merged.shadow).toEqual({})
   })
 
   it('leaves uncontested partitions untouched', () => {

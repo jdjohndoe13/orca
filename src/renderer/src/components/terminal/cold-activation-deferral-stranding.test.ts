@@ -94,6 +94,8 @@ function useStrandingHarness(props: HarnessProps) {
     activeGroupIdByWorktree: {},
     activeTabId: null,
     activeTabIdByWorktree: {},
+    // The real foundation derives this from the store; with no catalog the row key is the bare id.
+    activeWorktreeSessionRowKey: props.worktreeId,
     activeWorktreeDeferralHostId: 'local',
     activityTerminalPortals: [],
     backgroundMountRevision,

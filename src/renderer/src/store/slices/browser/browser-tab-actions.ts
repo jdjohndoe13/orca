@@ -24,6 +24,8 @@ import {
   loadPairedBrowserTabCreator
 } from './paired-browser-tab-creator'
 import { findGroupAndWorktree } from '../tab-group-state'
+import { getWorkspaceIdFromSessionKey } from '../../../../../shared/workspace-session-worktree-key'
+import { resolveWorkspaceSessionRowKey } from '../../workspace-session-key'
 
 export function createBrowserTabActions(
   set: BrowserSliceSet,
@@ -79,10 +81,11 @@ export function createBrowserTabActions(
       )
 
       set((s) => {
-        const existingTabs = s.browserTabsByWorktree[worktreeId] ?? []
+        const rowKey = resolveWorkspaceSessionRowKey(s, worktreeId)
+        const existingTabs = s.browserTabsByWorktree[rowKey] ?? []
         const nextTabBarOrder = (() => {
-          const currentOrder = s.tabBarOrderByWorktree[worktreeId] ?? []
-          const terminalIds = (s.tabsByWorktree[worktreeId] ?? []).map((tab) => tab.id)
+          const currentOrder = s.tabBarOrderByWorktree[rowKey] ?? []
+          const terminalIds = (s.tabsByWorktree[rowKey] ?? []).map((tab) => tab.id)
           const editorIds = s.openFiles
             .filter((file) => file.worktreeId === worktreeId)
             .map((file) => file.id)
@@ -115,7 +118,7 @@ export function createBrowserTabActions(
         return {
           browserTabsByWorktree: {
             ...s.browserTabsByWorktree,
-            [worktreeId]: [...existingTabs, browserTab]
+            [rowKey]: [...existingTabs, browserTab]
           },
           browserPagesByWorkspace: {
             ...s.browserPagesByWorkspace,
@@ -123,18 +126,18 @@ export function createBrowserTabActions(
           },
           tabBarOrderByWorktree: {
             ...s.tabBarOrderByWorktree,
-            [worktreeId]: nextTabBarOrder
+            [rowKey]: nextTabBarOrder
           },
           activeBrowserTabId: shouldUpdateGlobalActiveSurface ? workspaceId : s.activeBrowserTabId,
           activeBrowserTabIdByWorktree: {
             ...s.activeBrowserTabIdByWorktree,
-            [worktreeId]: shouldActivate
+            [rowKey]: shouldActivate
               ? workspaceId
-              : (s.activeBrowserTabIdByWorktree[worktreeId] ?? null)
+              : (s.activeBrowserTabIdByWorktree[rowKey] ?? null)
           },
           activeTabType: shouldUpdateGlobalActiveSurface ? 'browser' : s.activeTabType,
           activeTabTypeByWorktree: shouldActivate
-            ? { ...s.activeTabTypeByWorktree, [worktreeId]: 'browser' }
+            ? { ...s.activeTabTypeByWorktree, [rowKey]: 'browser' }
             : s.activeTabTypeByWorktree,
           pendingAddressBarFocusByPageId: shouldFocusAddressBar
             ? {
@@ -153,9 +156,9 @@ export function createBrowserTabActions(
       })
 
       const state = get()
-      const alreadyHasUnifiedTab = (state.unifiedTabsByWorktree[worktreeId] ?? []).some(
-        (t) => t.contentType === 'browser' && t.entityId === workspaceId
-      )
+      const alreadyHasUnifiedTab = (
+        state.unifiedTabsByWorktree[resolveWorkspaceSessionRowKey(state, worktreeId)] ?? []
+      ).some((t) => t.contentType === 'browser' && t.entityId === workspaceId)
       if (!alreadyHasUnifiedTab) {
         const shouldActivate = options?.activate ?? true
         const created = state.createUnifiedTab(worktreeId, 'browser', {
@@ -178,8 +181,12 @@ export function createBrowserTabActions(
     openNewBrowserTabInActiveWorkspace: async (groupId) => {
       const state = get()
       // Why: the invoking group owns its workspace; global selection may already point elsewhere.
-      const worktreeId =
-        findGroupAndWorktree(state.groupsByWorktree, groupId)?.worktreeId ?? state.activeWorktreeId
+      // The group lookup walks the record, so it hands back the row key — `host|id` for a
+      // contested workspace id (STA-4343) — while every consumer below resolves a bare id.
+      const foundGroup = findGroupAndWorktree(state.groupsByWorktree, groupId)
+      const worktreeId = foundGroup
+        ? getWorkspaceIdFromSessionKey(foundGroup.worktreeId)
+        : state.activeWorktreeId
       if (!worktreeId) {
         return
       }

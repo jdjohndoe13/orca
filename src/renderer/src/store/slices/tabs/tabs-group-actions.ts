@@ -4,6 +4,7 @@ import type { TabsSlice, TabsSliceGet, TabsSliceSet } from './tabs-slice-contrac
 import { activeSurfacePatchMatchesState, buildActiveSurfacePatch } from './tabs-surface'
 import { buildSplitNode, collapseGroupLayout, replaceLeaf } from './tabs-layout'
 import { ownsGlobalSelection } from '../../global-selection-owner'
+import { resolveWorkspaceSessionRowKey } from '../../workspace-session-key'
 
 export function createTabsGroupActions(
   set: TabsSliceSet,
@@ -14,9 +15,14 @@ export function createTabsGroupActions(
 > {
   return {
     ensureWorktreeRootGroup: (worktreeId) => {
-      const existingGroups = get().groupsByWorktree[worktreeId] ?? []
+      // Why the row key: a contested workspace id keys its session rows `host|id` (STA-4343), and
+      // the read path asks for that key — the group has to live where the layout is read from.
+      // The group's own `worktreeId` field stays the bare id: it is an entity reference that
+      // survives into the per-host partition, where only the bare spelling exists.
+      const rowKey = resolveWorkspaceSessionRowKey(get(), worktreeId)
+      const existingGroups = get().groupsByWorktree[rowKey] ?? []
       if (existingGroups.length > 0) {
-        return get().activeGroupIdByWorktree[worktreeId] ?? existingGroups[0].id
+        return get().activeGroupIdByWorktree[rowKey] ?? existingGroups[0].id
       }
 
       const groupId = createBrowserUuid()
@@ -24,15 +30,15 @@ export function createTabsGroupActions(
         // Why: a zero-tab worktree still needs a canonical root group so new tabs and splits land in a deterministic place.
         groupsByWorktree: {
           ...state.groupsByWorktree,
-          [worktreeId]: [{ id: groupId, worktreeId, activeTabId: null, tabOrder: [] }]
+          [rowKey]: [{ id: groupId, worktreeId, activeTabId: null, tabOrder: [] }]
         },
         layoutByWorktree: {
           ...state.layoutByWorktree,
-          [worktreeId]: { type: 'leaf', groupId }
+          [rowKey]: { type: 'leaf', groupId }
         },
         activeGroupIdByWorktree: {
           ...state.activeGroupIdByWorktree,
-          [worktreeId]: groupId
+          [rowKey]: groupId
         }
       }))
       return groupId
@@ -40,12 +46,13 @@ export function createTabsGroupActions(
 
     focusGroup: (worktreeId, groupId) =>
       set((state) => {
-        const groupAlreadyFocused = state.activeGroupIdByWorktree[worktreeId] === groupId
+        const rowKey = resolveWorkspaceSessionRowKey(state, worktreeId)
+        const groupAlreadyFocused = state.activeGroupIdByWorktree[rowKey] === groupId
         const nextActiveGroupIdByWorktree = groupAlreadyFocused
           ? state.activeGroupIdByWorktree
           : {
               ...state.activeGroupIdByWorktree,
-              [worktreeId]: groupId
+              [rowKey]: groupId
             }
         // Why: focusing a group surfaces its active terminal tab, so dismiss the tab-level bell.
         // Why (activeWorktree guard below): only when the group is in the active worktree, else the unseen tab's bell is swallowed.
@@ -57,8 +64,8 @@ export function createTabsGroupActions(
             activeGroupIdByWorktree: nextActiveGroupIdByWorktree
           }
         }
-        const groups = state.groupsByWorktree[worktreeId] ?? []
-        const unifiedTabs = state.unifiedTabsByWorktree[worktreeId] ?? []
+        const groups = state.groupsByWorktree[rowKey] ?? []
+        const unifiedTabs = state.unifiedTabsByWorktree[rowKey] ?? []
         const visibleTerminalEntityIds = new Set(
           groups
             .map((group) =>
@@ -88,12 +95,13 @@ export function createTabsGroupActions(
             activeGroupIdByWorktree: nextActiveGroupIdByWorktree
           },
           worktreeId,
-          groupId
+          groupId,
+          rowKey
         )
         if (
           groupAlreadyFocused &&
           nextUnreadTerminalTabs === state.unreadTerminalTabs &&
-          activeSurfacePatchMatchesState(state, worktreeId, activeSurfacePatch)
+          activeSurfacePatchMatchesState(state, worktreeId, activeSurfacePatch, rowKey)
         ) {
           return state
         }
@@ -108,15 +116,16 @@ export function createTabsGroupActions(
       }),
 
     closeEmptyGroup: (worktreeId, groupId) => {
+      const rowKey = resolveWorkspaceSessionRowKey(get(), worktreeId)
       const state = get()
-      const group = (state.groupsByWorktree[worktreeId] ?? []).find(
+      const group = (state.groupsByWorktree[rowKey] ?? []).find(
         (candidate) => candidate.id === groupId
       )
       if (!group || group.tabOrder.length > 0) {
         return false
       }
       set((current) => {
-        const remainingGroups = (current.groupsByWorktree[worktreeId] ?? []).filter(
+        const remainingGroups = (current.groupsByWorktree[rowKey] ?? []).filter(
           (candidate) => candidate.id !== groupId
         )
         const collapsedState = collapseGroupLayout(
@@ -124,13 +133,14 @@ export function createTabsGroupActions(
           current.activeGroupIdByWorktree,
           worktreeId,
           groupId,
-          remainingGroups[0]?.id ?? null
+          remainingGroups[0]?.id ?? null,
+          rowKey
         )
         // Why: drop the dead group's recent-quick-command entry so the map can't grow unbounded as groups open/close.
         const { [groupId]: _droppedRecent, ...remainingRecent } =
           current.recentQuickCommandIdByGroup
         return {
-          groupsByWorktree: { ...current.groupsByWorktree, [worktreeId]: remainingGroups },
+          groupsByWorktree: { ...current.groupsByWorktree, [rowKey]: remainingGroups },
           layoutByWorktree: collapsedState.layoutByWorktree,
           activeGroupIdByWorktree: collapsedState.activeGroupIdByWorktree,
           recentQuickCommandIdByGroup: remainingRecent,
@@ -140,13 +150,14 @@ export function createTabsGroupActions(
                   ...current,
                   groupsByWorktree: {
                     ...current.groupsByWorktree,
-                    [worktreeId]: remainingGroups
+                    [rowKey]: remainingGroups
                   },
                   layoutByWorktree: collapsedState.layoutByWorktree,
                   activeGroupIdByWorktree: collapsedState.activeGroupIdByWorktree
                 },
                 worktreeId,
-                collapsedState.activeGroupIdByWorktree[worktreeId] ?? null
+                collapsedState.activeGroupIdByWorktree[rowKey] ?? null,
+                rowKey
               )
             : {})
         }
@@ -164,9 +175,10 @@ export function createTabsGroupActions(
       }
       const shouldActivate = opts?.activate !== false
       set((state) => {
-        const existing = state.groupsByWorktree[worktreeId] ?? []
+        const rowKey = resolveWorkspaceSessionRowKey(state, worktreeId)
+        const existing = state.groupsByWorktree[rowKey] ?? []
         const currentLayout =
-          state.layoutByWorktree[worktreeId] ?? ({ type: 'leaf', groupId: sourceGroupId } as const)
+          state.layoutByWorktree[rowKey] ?? ({ type: 'leaf', groupId: sourceGroupId } as const)
         const replacement = buildSplitNode(
           sourceGroupId,
           newGroupId,
@@ -174,16 +186,16 @@ export function createTabsGroupActions(
           direction === 'left' || direction === 'up' ? 'first' : 'second'
         )
         return {
-          groupsByWorktree: { ...state.groupsByWorktree, [worktreeId]: [...existing, newGroup] },
+          groupsByWorktree: { ...state.groupsByWorktree, [rowKey]: [...existing, newGroup] },
           layoutByWorktree: {
             ...state.layoutByWorktree,
-            [worktreeId]: replaceLeaf(currentLayout, sourceGroupId, replacement)
+            [rowKey]: replaceLeaf(currentLayout, sourceGroupId, replacement)
           },
           ...(shouldActivate
             ? {
                 activeGroupIdByWorktree: {
                   ...state.activeGroupIdByWorktree,
-                  [worktreeId]: newGroupId
+                  [rowKey]: newGroupId
                 }
               }
             : {})

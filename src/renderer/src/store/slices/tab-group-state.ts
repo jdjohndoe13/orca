@@ -55,19 +55,30 @@ export function findTabByEntityInGroup(
   )
 }
 
+/**
+ * Mints the workspace's root group when it has none.
+ *
+ * `rowKey` is where the group rows live, `worktreeId` is what the group's own field names. They
+ * differ for a contested workspace id — one repo registered on several execution hosts, STA-4343 —
+ * whose rows live under `host|id` while the entity keeps the bare id. The bare id is what the
+ * persisted partition is checked against (`assertOwner` in the orcad migration validation) and what
+ * every partition already holds, so a qualified entity field would be a reference no reader can
+ * resolve.
+ */
 export function ensureGroup(
   groupsByWorktree: Record<string, TabGroup[]>,
   activeGroupIdByWorktree: Record<string, string>,
   worktreeId: string,
-  preferredGroupId?: string
+  preferredGroupId?: string,
+  rowKey: string = worktreeId
 ): {
   group: TabGroup
   groupsByWorktree: Record<string, TabGroup[]>
   activeGroupIdByWorktree: Record<string, string>
 } {
   const existing =
-    groupsByWorktree[worktreeId]?.find((group) => group.id === preferredGroupId) ??
-    groupsByWorktree[worktreeId]?.[0]
+    groupsByWorktree[rowKey]?.find((group) => group.id === preferredGroupId) ??
+    groupsByWorktree[rowKey]?.[0]
   if (existing) {
     return { group: existing, groupsByWorktree, activeGroupIdByWorktree }
   }
@@ -75,8 +86,8 @@ export function ensureGroup(
   const group: TabGroup = { id: groupId, worktreeId, activeTabId: null, tabOrder: [] }
   return {
     group,
-    groupsByWorktree: { ...groupsByWorktree, [worktreeId]: [group] },
-    activeGroupIdByWorktree: { ...activeGroupIdByWorktree, [worktreeId]: groupId }
+    groupsByWorktree: { ...groupsByWorktree, [rowKey]: [group] },
+    activeGroupIdByWorktree: { ...activeGroupIdByWorktree, [rowKey]: groupId }
   }
 }
 

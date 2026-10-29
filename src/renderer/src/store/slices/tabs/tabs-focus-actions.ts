@@ -5,6 +5,8 @@ import {
   pushRecentTabId,
   sanitizeRecentTabIds
 } from '../tab-group-state'
+import { getWorkspaceIdFromSessionKey } from '../../../../../shared/workspace-session-worktree-key'
+import { resolveWorkspaceSessionRowKey } from '../../workspace-session-key'
 
 export function createTabsFocusActions(
   _set: TabsSliceSet,
@@ -16,24 +18,24 @@ export function createTabsFocusActions(
 
     getActiveTab: (worktreeId) => {
       const state = get()
-      const groupId = state.activeGroupIdByWorktree[worktreeId]
-      const group = (state.groupsByWorktree[worktreeId] ?? []).find(
+      const rowKey = resolveWorkspaceSessionRowKey(state, worktreeId)
+      const groupId = state.activeGroupIdByWorktree[rowKey]
+      const group = (state.groupsByWorktree[rowKey] ?? []).find(
         (candidate) => candidate.id === groupId
       )
       if (!group?.activeTabId) {
         return null
       }
       return (
-        (state.unifiedTabsByWorktree[worktreeId] ?? []).find(
-          (tab) => tab.id === group.activeTabId
-        ) ?? null
+        (state.unifiedTabsByWorktree[rowKey] ?? []).find((tab) => tab.id === group.activeTabId) ??
+        null
       )
     },
 
     findTabForEntityInGroup: (worktreeId, groupId, entityId, contentType) =>
       findTabByEntityInGroup(
         get().unifiedTabsByWorktree,
-        worktreeId,
+        resolveWorkspaceSessionRowKey(get(), worktreeId),
         groupId,
         entityId,
         contentType
@@ -44,18 +46,22 @@ export function createTabsFocusActions(
         const scopedWorktreeId = opts?.worktreeId
         let found: ReturnType<typeof findTabAndWorktree>
         if (scopedWorktreeId !== undefined) {
-          const scopedTabs = Object.hasOwn(state.unifiedTabsByWorktree, scopedWorktreeId)
-            ? state.unifiedTabsByWorktree[scopedWorktreeId]
+          // A caller names the workspace by its bare id; the record may key it `host|id`.
+          const scopedKey = resolveWorkspaceSessionRowKey(state, scopedWorktreeId)
+          const scopedTabs = Object.hasOwn(state.unifiedTabsByWorktree, scopedKey)
+            ? state.unifiedTabsByWorktree[scopedKey]
             : []
           const scopedTab = scopedTabs.find((tab) => tab.id === tabId)
-          found = scopedTab ? { tab: scopedTab, worktreeId: scopedWorktreeId } : null
+          found = scopedTab ? { tab: scopedTab, worktreeId: scopedKey } : null
         } else {
           found = findTabAndWorktree(state.unifiedTabsByWorktree, tabId)
         }
         if (!found) {
           return state
         }
-        const { tab, worktreeId } = found
+        const { tab } = found
+        const rowKey = found.worktreeId
+        const worktreeId = getWorkspaceIdFromSessionKey(rowKey)
         // Why: activating a terminal tab dismisses its tab-level bell — the user has moved their eyes here.
         // Why (activeWorktree guard below): only when the tab is in the active worktree, else the unseen signal is lost (mirrors focusGroup).
         const terminalEntityId = tab.contentType === 'terminal' ? tab.entityId : null
@@ -72,7 +78,7 @@ export function createTabsFocusActions(
         return {
           unifiedTabsByWorktree: {
             ...state.unifiedTabsByWorktree,
-            [worktreeId]: (state.unifiedTabsByWorktree[worktreeId] ?? []).map((item) =>
+            [rowKey]: (state.unifiedTabsByWorktree[rowKey] ?? []).map((item) =>
               item.id === tabId
                 ? {
                     ...item,
@@ -84,7 +90,7 @@ export function createTabsFocusActions(
           },
           groupsByWorktree: {
             ...state.groupsByWorktree,
-            [worktreeId]: (state.groupsByWorktree[worktreeId] ?? []).map((group) =>
+            [rowKey]: (state.groupsByWorktree[rowKey] ?? []).map((group) =>
               group.id === tab.groupId
                 ? {
                     ...group,
@@ -100,7 +106,7 @@ export function createTabsFocusActions(
           },
           activeGroupIdByWorktree: {
             ...state.activeGroupIdByWorktree,
-            [worktreeId]: tab.groupId
+            [rowKey]: tab.groupId
           },
           // Why: skip writing unreadTerminalTabs when the reference is unchanged, avoiding a no-op alloc that re-runs full-state selectors.
           ...(nextUnreadTerminalTabs !== state.unreadTerminalTabs

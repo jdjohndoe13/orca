@@ -17,6 +17,7 @@ import { hasStructuredAgentLaunchInWorktree } from '@/lib/structured-agent-sessi
 import { isEmptyWorkspaceDefaultSurfacePending } from '@/lib/empty-workspace-default-surface-claims'
 import type { TerminalColdActivationController } from './terminal-cold-activation'
 import { selectParkedEquivalentMountTabIds } from './terminal/startup-terminal-tab-hold'
+import { resolveWorkspaceRowKeyFromStore } from './terminal-workspace-session-row'
 
 // Why shared: surfaces without watchable live tabs need no per-pass allocation.
 const NO_PARKED_TAB_IDS: ReadonlySet<string> = new Set()
@@ -98,7 +99,7 @@ export function useTerminalWatcherEffects(controller: TerminalWatcherController)
       ) {
         continue
       }
-      const tabs = tabsByWorktree[workspaceId] ?? []
+      const tabs = tabsByWorktree[resolveWorkspaceRowKeyFromStore(workspaceId)] ?? []
       let parkedTabIds: ReadonlySet<string> = NO_PARKED_TAB_IDS
       let deferredTabIds: ReadonlySet<string> | null = null
       if (!anyMountedWorktreeHasLayout && mountedWorktreeIdsRef.current.has(workspaceId)) {

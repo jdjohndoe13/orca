@@ -4,8 +4,10 @@ import {
   mergeWorkspaceSessionsFromHosts,
   type HostIdByWorktreeId
 } from './workspace-session-host-split'
+import { mergeWorkspaceSessionsWithHostShadow } from './workspace-session-host-contention'
 import { getDefaultWorkspaceSession } from '../../../shared/constants'
 import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../../shared/execution-host'
+import { WORKTREE_KEYED_WORKSPACE_SESSION_FIELDS } from '../../../shared/workspace-session-worktree-key'
 import { HOST_PARTITION_REDUNDANT_GLOBAL_FIELDS } from '../../../shared/workspace-session-host-field-ownership'
 import type { BrowserPage } from '../../../shared/browser-workspace-types'
 import type { Tab } from '../../../shared/tab-types'
@@ -445,6 +447,25 @@ describe('split → merge round trip', () => {
     expect(roundTrip(state)).toEqual(state)
   })
 
+  it('is byte-identical when the contested set is empty', () => {
+    // The whole gate for the 99.9%: passing the (empty) contested set alongside the slices must
+    // change nothing at all — no re-key, no re-order, no new bucket.
+    const state: WorkspaceSessionState = {
+      ...getDefaultWorkspaceSession(),
+      activeRepoId: 'repo-1',
+      tabsByWorktree: {
+        'local-wt': [makeTab('t-local', 'local-wt')],
+        'a-wt': [makeTab('t-a', 'a-wt')],
+        'b-wt': [makeTab('t-b', 'b-wt')]
+      },
+      activeTabIdByWorktree: { 'local-wt': 't-local', 'a-wt': 't-a' },
+      lastVisitedAtByWorktreeId: { 'a-wt': 10, 'local-wt': 5 }
+    }
+
+    const slices = splitWorkspaceSessionByHost(state, ownerByPrefix())
+    expect(mergeWorkspaceSessionsFromHosts(slices, new Set())).toEqual(state)
+  })
+
   it('keeps orphan-owned entries in local and preserves them', () => {
     const state: WorkspaceSessionState = {
       ...getDefaultWorkspaceSession(),
@@ -463,6 +484,120 @@ describe('split → merge round trip', () => {
       terminalLayoutsByTabId: { 't-a': makeLayout() }
     }
     expect(roundTrip(state)).toEqual(state)
+  })
+
+  it('keeps four claimants of one contested id as four buckets and back to four bare rows', () => {
+    // The root-cause gate: one repo path registered on four hosts publishes ONE id, so all four
+    // cards painted the primary's tabs. This single test pins the three rules together — the
+    // display fix (four rows reach the renderer), the disk-format rule (every partition holds
+    // only bare keys), and the write-back guarantee (each row returns to its own partition).
+    const SHARED = 'repo-shared::/work/orca'
+    const CLAIMANTS: readonly { host: ExecutionHostId; name: string }[] = [
+      { host: LOCAL_EXECUTION_HOST_ID, name: 'local' },
+      { host: 'ssh:builder', name: 'builder' },
+      { host: 'ssh:runner', name: 'runner' },
+      { host: 'ssh:deploy', name: 'deploy' }
+    ]
+    // Each partition carries the shapes the derived indexes read: a tab row (tabKeyed follows
+    // it), an open file (fileKeyed follows it), a pane key (paneKeyed follows the tab).
+    const partition = (name: string): WorkspaceSessionState => ({
+      ...getDefaultWorkspaceSession(),
+      tabsByWorktree: { [SHARED]: [makeTab(`t-${name}`, SHARED)] },
+      activeTabIdByWorktree: { [SHARED]: `t-${name}` },
+      openFilesByWorktree: {
+        [SHARED]: [
+          {
+            filePath: `/${name}/file.md`,
+            relativePath: 'file.md',
+            worktreeId: SHARED,
+            language: 'markdown'
+          }
+        ]
+      },
+      terminalLayoutsByTabId: { [`t-${name}`]: makeLayout() },
+      markdownFrontmatterVisible: { [`/${name}/file.md`]: true },
+      terminalPtyIncarnationsByPaneKey: { [`t-${name}:leaf-1`]: `inc-${name}` }
+    })
+
+    const merged = mergeWorkspaceSessionsWithHostShadow({
+      [LOCAL_EXECUTION_HOST_ID]: partition('local'),
+      'ssh:builder': partition('builder'),
+      'ssh:runner': partition('runner'),
+      'ssh:deploy': partition('deploy')
+    })
+
+    // (display) Four simultaneous buckets, every claimant qualified — including the primary —
+    // and no bare key for a contested id to fall back onto.
+    for (const { host, name } of CLAIMANTS) {
+      expect(merged.session.tabsByWorktree?.[`${host}|${SHARED}`]?.map((t) => t.id)).toEqual([
+        `t-${name}`
+      ])
+    }
+    expect(merged.session.tabsByWorktree?.[SHARED]).toBeUndefined()
+    // The shadow is no longer what carries a contested row home: the qualified key names the
+    // partition, so nothing is parked for the contested case.
+    expect(merged.shadow).toEqual({})
+
+    // The catalog's opinion is deliberately wrong here (it answers 'local' for everything); the
+    // key's own prefix wins, so a transient disagreement between the two contested sets cannot
+    // route a row to a partition that loses it.
+    const back = splitWorkspaceSessionByHost(merged.session, () => LOCAL_EXECUTION_HOST_ID)
+
+    // (disk format) No qualified key survives anywhere in the write: every key of every
+    // worktree-keyed field of every partition is bare. `lastVisitedAtByWorktreeId` is the one
+    // field with its own host convention and is absent from this fixture, so the scan covers the
+    // whole list without excusing it.
+    expect(Object.keys(back).sort()).toEqual(CLAIMANTS.map((c) => c.host).sort())
+    for (const { host } of CLAIMANTS) {
+      const slice = back[host]
+      for (const field of WORKTREE_KEYED_WORKSPACE_SESSION_FIELDS) {
+        for (const key of Object.keys(slice?.[field] ?? {})) {
+          expect(`${host} ${field} ${key}`).not.toContain('|')
+        }
+      }
+    }
+
+    // (write-back + derived indexes) Each row lands in the partition that wrote it, and the
+    // tab-, file- and pane-keyed rows follow their owner WITHOUT re-keying — their own keys are
+    // the tab id / file path / pane key, untouched.
+    for (const { host, name } of CLAIMANTS) {
+      const slice = back[host]
+      expect(slice?.tabsByWorktree).toEqual({ [SHARED]: [makeTab(`t-${name}`, SHARED)] })
+      expect(slice?.activeTabIdByWorktree).toEqual({ [SHARED]: `t-${name}` })
+      expect(slice?.terminalLayoutsByTabId).toEqual({ [`t-${name}`]: makeLayout() })
+      expect(slice?.markdownFrontmatterVisible).toEqual({ [`/${name}/file.md`]: true })
+      expect(slice?.terminalPtyIncarnationsByPaneKey).toEqual({
+        [`t-${name}:leaf-1`]: `inc-${name}`
+      })
+    }
+  })
+
+  it('routes a qualified row by its prefix even when the catalog does not yet consider it contested', () => {
+    // The two contested sets have different sources and can disagree in the window between a
+    // second host registering and the next write: the boot read qualified the row from the
+    // PERSISTED partitions, but the live catalog still thinks the id is single-owner and answers
+    // 'local' for it. The split must route by the key's own prefix, never the catalog's opinion,
+    // or the co-claimant's row is written into the wrong partition and the original is lost —
+    // the loss the transient disagreement must not be able to cause.
+    const SHARED = 'repo-shared::/work/orca'
+    const SSH_HOST: ExecutionHostId = 'ssh:builder'
+    const state: WorkspaceSessionState = {
+      ...getDefaultWorkspaceSession(),
+      tabsByWorktree: { [`${SSH_HOST}|${SHARED}`]: [makeTab('t-ssh', SHARED)] },
+      // The `worktreeArray` branch routes the same way; cover it so a second prefix-reading
+      // branch cannot drift from the record branch.
+      activeWorktreeIdsOnShutdown: [`${SSH_HOST}|${SHARED}`]
+    }
+
+    // A catalog that does NOT consider the id contested: it names exactly one host, 'local'.
+    const back = splitWorkspaceSessionByHost(state, () => LOCAL_EXECUTION_HOST_ID)
+
+    // The prefix won: the row is in the ssh partition it names, stripped back to the bare id —
+    // not in the local partition the catalog's opinion would have routed it to.
+    expect(back[SSH_HOST]?.tabsByWorktree).toEqual({ [SHARED]: [makeTab('t-ssh', SHARED)] })
+    expect(back[SSH_HOST]?.activeWorktreeIdsOnShutdown).toEqual([SHARED])
+    expect(back[LOCAL_EXECUTION_HOST_ID]?.tabsByWorktree?.[SHARED]).toBeUndefined()
+    expect(back[LOCAL_EXECUTION_HOST_ID]?.activeWorktreeIdsOnShutdown ?? []).not.toContain(SHARED)
   })
 })
 

@@ -14,6 +14,7 @@ import {
   shouldRetainStructuredAgentSessionLaunchTab
 } from '@/lib/structured-agent-session-launch-registry'
 import { structuredAgentSessionTabId } from '../../../../../shared/structured-agent-session-projection'
+import { getWorkspaceIdFromSessionKey } from '../../../../../shared/workspace-session-worktree-key'
 import { clearWebSessionFocusIntentIfMatches } from '@/runtime/web-session-focus-intent'
 import { ownsGlobalSelection } from '../../global-selection-owner'
 import {
@@ -32,8 +33,12 @@ export function createTabsCloseActions(
       if (!found) {
         return null
       }
-      const { tab, worktreeId } = found
-      const group = findGroupForTab(state.groupsByWorktree, worktreeId, tab.groupId)
+      // The lookup walked the record, so it hands back the row key — `host|id` for a contested
+      // workspace id (STA-4343). The bare id is what the entity-level owners below key on, and the
+      // key is the authoritative spelling of both halves.
+      const { tab, worktreeId: rowKey } = found
+      const worktreeId = getWorkspaceIdFromSessionKey(rowKey)
+      const group = findGroupForTab(state.groupsByWorktree, rowKey, tab.groupId)
       if (!group) {
         return null
       }
@@ -90,7 +95,7 @@ export function createTabsCloseActions(
       const terminalEntityId = tab.contentType === 'terminal' ? tab.entityId : null
 
       set((current) => {
-        const nextTabs = (current.unifiedTabsByWorktree[worktreeId] ?? []).filter(
+        const nextTabs = (current.unifiedTabsByWorktree[rowKey] ?? []).filter(
           (item) => item.id !== tabId
         )
         // Why: close-to-right/others bypass terminals.closeTab, so clear the entityId-keyed unread flag here or a stale dot leaks.
@@ -99,7 +104,7 @@ export function createTabsCloseActions(
           nextUnreadTerminalTabs = { ...current.unreadTerminalTabs }
           delete nextUnreadTerminalTabs[terminalEntityId]
         }
-        let nextGroups = (current.groupsByWorktree[worktreeId] ?? []).map((candidate) =>
+        let nextGroups = (current.groupsByWorktree[rowKey] ?? []).map((candidate) =>
           candidate.id === group.id
             ? {
                 ...candidate,
@@ -111,14 +116,15 @@ export function createTabsCloseActions(
         )
         let nextLayoutByWorktree = current.layoutByWorktree
         let nextActiveGroupIdByWorktree = current.activeGroupIdByWorktree
-        if (wasLastTab && current.layoutByWorktree[worktreeId] && nextGroups.length > 1) {
+        if (wasLastTab && current.layoutByWorktree[rowKey] && nextGroups.length > 1) {
           nextGroups = nextGroups.filter((candidate) => candidate.id !== group.id)
           const collapsedState = collapseGroupLayout(
             current.layoutByWorktree,
             current.activeGroupIdByWorktree,
             worktreeId,
             group.id,
-            nextGroups[0]?.id ?? null
+            nextGroups[0]?.id ?? null,
+            rowKey
           )
           nextLayoutByWorktree = collapsedState.layoutByWorktree
           nextActiveGroupIdByWorktree = collapsedState.activeGroupIdByWorktree
@@ -129,14 +135,14 @@ export function createTabsCloseActions(
           !opts?.preserveWorktreeSelection &&
           current.activeWorktreeId === worktreeId &&
           nextTabs.length === 0 &&
-          (current.tabsByWorktree[worktreeId] ?? []).length === 0 &&
-          (current.browserTabsByWorktree[worktreeId] ?? []).length === 0 &&
+          (current.tabsByWorktree[rowKey] ?? []).length === 0 &&
+          (current.browserTabsByWorktree[rowKey] ?? []).length === 0 &&
           !current.openFiles.some((file) => file.worktreeId === worktreeId)
         return {
-          unifiedTabsByWorktree: { ...current.unifiedTabsByWorktree, [worktreeId]: nextTabs },
+          unifiedTabsByWorktree: { ...current.unifiedTabsByWorktree, [rowKey]: nextTabs },
           groupsByWorktree: {
             ...current.groupsByWorktree,
-            [worktreeId]: nextGroups
+            [rowKey]: nextGroups
           },
           layoutByWorktree: nextLayoutByWorktree,
           activeGroupIdByWorktree: nextActiveGroupIdByWorktree,
@@ -156,19 +162,19 @@ export function createTabsCloseActions(
                 activeTabType: 'terminal' as const,
                 activeTabIdByWorktree: {
                   ...current.activeTabIdByWorktree,
-                  [worktreeId]: null
+                  [rowKey]: null
                 },
                 activeBrowserTabIdByWorktree: {
                   ...current.activeBrowserTabIdByWorktree,
-                  [worktreeId]: null
+                  [rowKey]: null
                 },
                 activeFileIdByWorktree: {
                   ...current.activeFileIdByWorktree,
-                  [worktreeId]: null
+                  [rowKey]: null
                 },
                 activeTabTypeByWorktree: {
                   ...current.activeTabTypeByWorktree,
-                  [worktreeId]: 'terminal'
+                  [rowKey]: 'terminal'
                 }
               }
             : {}),
@@ -178,17 +184,18 @@ export function createTabsCloseActions(
                   ...current,
                   unifiedTabsByWorktree: {
                     ...current.unifiedTabsByWorktree,
-                    [worktreeId]: nextTabs
+                    [rowKey]: nextTabs
                   },
                   groupsByWorktree: {
                     ...current.groupsByWorktree,
-                    [worktreeId]: nextGroups
+                    [rowKey]: nextGroups
                   },
                   layoutByWorktree: nextLayoutByWorktree,
                   activeGroupIdByWorktree: nextActiveGroupIdByWorktree
                 },
                 worktreeId,
-                nextActiveGroupIdByWorktree[worktreeId] ?? null
+                nextActiveGroupIdByWorktree[rowKey] ?? null,
+                rowKey
               )
             : {})
         }

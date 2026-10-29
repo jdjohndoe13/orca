@@ -1,6 +1,7 @@
 import type { EditorGet, EditorSet } from '../types/editor-set-get'
 import type { EditorSlice } from '../types/editor-slice'
 import { ownsGlobalSelection } from '../../../global-selection-owner'
+import { resolveWorkspaceSessionRowKey } from '../../../workspace-session-key'
 
 export function createOpenFileState(
   set: EditorSet,
@@ -27,8 +28,9 @@ export function createOpenFileState(
     setActiveTabType: (type, worktreeId) =>
       set((s) => ({
         ...(ownsGlobalSelection(s, worktreeId) ? { activeTabType: type } : {}),
+        // The slot lives under the session key, `host|id` for a contested workspace id (STA-4343).
         activeTabTypeByWorktree: worktreeId
-          ? { ...s.activeTabTypeByWorktree, [worktreeId]: type }
+          ? { ...s.activeTabTypeByWorktree, [resolveWorkspaceSessionRowKey(s, worktreeId)]: type }
           : s.activeTabTypeByWorktree
       }))
   }

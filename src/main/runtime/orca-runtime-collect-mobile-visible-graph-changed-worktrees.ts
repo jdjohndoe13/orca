@@ -4,6 +4,8 @@ import type { RuntimeMobileSessionTabsResult, RuntimeSyncedTab } from '../../sha
 import type { RuntimeLeafRecord } from './runtime-terminal-state-records'
 import type { PtyControllerInventory } from './runtime-pty-controller-contract'
 import { parseExecutionHostId } from '../../shared/execution-host'
+import { worktreeIdComparisonKey } from '../../shared/worktree/id'
+import { resolveTerminalSessionWorktreeId } from './runtime-worktree-path-identity'
 
 export class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees extends OrcaRuntimeWithSyncWindowGraph {
   // Why: toMobileSessionTabsResult resolves handles/titles from this.tabs and
@@ -52,14 +54,18 @@ export class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees extends Or
   ): Promise<RuntimeMobileSessionTabsResult> {
     const explicitWorktreeId = this.getValidatedExplicitWorktreeIdSelector(worktreeSelector)
     if (explicitWorktreeId) {
-      this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(explicitWorktreeId, {
+      // Why: the `id:` fast path keys the hydrate and the snapshot map by exact spelling, so a
+      // mirrored worktree stored as `C:\vmd` reads as empty when queried as `C:/vmd`. Fold to the
+      // session's own key through the same Windows-aware comparison the `id:` scan path applies.
+      const worktreeId = this.resolveMobileSessionWorktreeIdForList(explicitWorktreeId)
+      this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktreeId, {
         allowAttachedWindow: true,
         onlyRuntimeOwnedTerminals: true
       })
-      this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(explicitWorktreeId)
-      await this.refreshMobileSessionPtyRecords(explicitWorktreeId)
-      this.restoreLivePairedRendererSessionOwnedMobileTerminals(explicitWorktreeId)
-      return this.getMobileSessionTabsForWorktree(explicitWorktreeId, clientNavigationId)
+      this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktreeId)
+      await this.refreshMobileSessionPtyRecords(worktreeId)
+      this.restoreLivePairedRendererSessionOwnedMobileTerminals(worktreeId)
+      return this.getMobileSessionTabsForWorktree(worktreeId, clientNavigationId)
     }
     const worktree = await this.resolveWorktreeSelector(worktreeSelector)
     this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktree.id, {
@@ -70,6 +76,28 @@ export class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees extends Or
     await this.refreshMobileSessionPtyRecords()
     this.restoreLivePairedRendererSessionOwnedMobileTerminals(worktree.id)
     return this.getMobileSessionTabsForWorktree(worktree.id, clientNavigationId)
+  }
+
+  // Why: the `id:` fast path keys the hydrate's `tabsByWorktree` lookup and the snapshot map by
+  // exact spelling, so a mirrored worktree stored as `C:\vmd` reads as empty when queried as
+  // `C:/vmd`. Fold to the spelling the data already carries — the snapshot map first, then the
+  // persisted session's own key — so the read and the hydrate feeding it agree on one key.
+  // Windows-path-aware only (the shared comparison never folds a POSIX `/a\b`), and the ambiguous
+  // "both spellings present" case falls back to the raw id, which is itself one of the stored keys.
+  protected resolveMobileSessionWorktreeIdForList(worktreeId: string): string {
+    if (this.mobileSessionTabsByWorktree.has(worktreeId)) {
+      return worktreeId
+    }
+    const comparisonKey = worktreeIdComparisonKey(worktreeId)
+    if (comparisonKey !== null) {
+      for (const storedId of this.mobileSessionTabsByWorktree.keys()) {
+        if (worktreeIdComparisonKey(storedId) === comparisonKey) {
+          return storedId
+        }
+      }
+    }
+    const session = this.getWorkspaceSessionForWorktree(worktreeId)
+    return (session ? resolveTerminalSessionWorktreeId(session, worktreeId) : null) ?? worktreeId
   }
 
   async listAllMobileSessionTabs(

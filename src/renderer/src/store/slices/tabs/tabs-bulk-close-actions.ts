@@ -12,12 +12,14 @@ export function createTabsBulkCloseActions(
       if (!found) {
         return []
       }
-      const { tab, worktreeId } = found
-      const group = findGroupForTab(state.groupsByWorktree, worktreeId, tab.groupId)
+      // The lookup walked the record, so the id is the row key — `host|id` for a contested
+      // workspace id (STA-4343).
+      const { tab, worktreeId: rowKey } = found
+      const group = findGroupForTab(state.groupsByWorktree, rowKey, tab.groupId)
       if (!group) {
         return []
       }
-      const closedIds = (state.unifiedTabsByWorktree[worktreeId] ?? [])
+      const closedIds = (state.unifiedTabsByWorktree[rowKey] ?? [])
         .filter((item) => item.groupId === group.id && item.id !== tabId && !item.isPinned)
         .map((item) => item.id)
       for (const id of closedIds) {
@@ -32,8 +34,8 @@ export function createTabsBulkCloseActions(
       if (!found) {
         return []
       }
-      const { tab, worktreeId } = found
-      const group = findGroupForTab(state.groupsByWorktree, worktreeId, tab.groupId)
+      const { tab, worktreeId: rowKey } = found
+      const group = findGroupForTab(state.groupsByWorktree, rowKey, tab.groupId)
       if (!group) {
         return []
       }
@@ -45,9 +47,8 @@ export function createTabsBulkCloseActions(
         .slice(index + 1)
         .filter(
           (id) =>
-            !(state.unifiedTabsByWorktree[worktreeId] ?? []).find(
-              (candidate) => candidate.id === id
-            )?.isPinned
+            !(state.unifiedTabsByWorktree[rowKey] ?? []).find((candidate) => candidate.id === id)
+              ?.isPinned
         )
       for (const id of closableIds) {
         get().closeUnifiedTab(id)
@@ -61,8 +62,8 @@ export function createTabsBulkCloseActions(
       if (!found) {
         return []
       }
-      const { tab, worktreeId } = found
-      const group = findGroupForTab(state.groupsByWorktree, worktreeId, tab.groupId)
+      const { tab, worktreeId: rowKey } = found
+      const group = findGroupForTab(state.groupsByWorktree, rowKey, tab.groupId)
       if (!group) {
         return []
       }
@@ -74,9 +75,8 @@ export function createTabsBulkCloseActions(
         .slice(0, index)
         .filter(
           (id) =>
-            !(state.unifiedTabsByWorktree[worktreeId] ?? []).find(
-              (candidate) => candidate.id === id
-            )?.isPinned
+            !(state.unifiedTabsByWorktree[rowKey] ?? []).find((candidate) => candidate.id === id)
+              ?.isPinned
         )
       for (const id of closableIds) {
         get().closeUnifiedTab(id)

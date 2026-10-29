@@ -140,7 +140,7 @@ function runRepairCycle(store: TestStore): {
       activeTabType: 'terminal',
       activeTabId: live.activeTabId,
       activeTabIdByWorktree: live.activeTabIdByWorktree,
-      renderedActiveWorktreeId: live.activeWorktreeId,
+      activeWorktreeSessionRowKey: live.activeWorktreeId,
       setActiveTab: live.setActiveTab,
       tabs: live.activeWorktreeId ? (live.tabsByWorktree[live.activeWorktreeId] ?? []) : []
     })

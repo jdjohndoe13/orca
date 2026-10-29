@@ -2,6 +2,7 @@ import type { AppState } from '../../../types'
 import type { Tab, TabGroup, WorkspaceVisibleTabType } from '../../../../../../shared/tab-types'
 import { isEditorTabContentType } from './editor-tab-content-type'
 import { ownsGlobalSelection } from '../../../global-selection-owner'
+import { resolveWorkspaceSessionRowKey } from '../../../workspace-session-key'
 
 export function getGroupActiveTab(group: TabGroup, tabsById: Map<string, Tab>): Tab | null {
   return group.activeTabId ? (tabsById.get(group.activeTabId) ?? null) : null
@@ -30,7 +31,8 @@ export function getMostRecentEditorTabForGroup(
 }
 
 export function resolveEditorOpenTargetGroupId(
-  state: Pick<AppState, 'activeGroupIdByWorktree' | 'groupsByWorktree' | 'unifiedTabsByWorktree'>,
+  state: Pick<AppState, 'activeGroupIdByWorktree' | 'groupsByWorktree' | 'unifiedTabsByWorktree'> &
+    Parameters<typeof resolveWorkspaceSessionRowKey>[0],
   worktreeId: string,
   explicitTargetGroupId?: string
 ): string | undefined {
@@ -38,7 +40,9 @@ export function resolveEditorOpenTargetGroupId(
     return explicitTargetGroupId
   }
 
-  const groups = state.groupsByWorktree?.[worktreeId] ?? []
+  // The rows live under the session key, `host|id` for a contested workspace id (STA-4343).
+  const rowKey = resolveWorkspaceSessionRowKey(state, worktreeId)
+  const groups = state.groupsByWorktree?.[rowKey] ?? []
   if (groups.length === 0) {
     return undefined
   }
@@ -48,11 +52,10 @@ export function resolveEditorOpenTargetGroupId(
     return undefined
   }
   const tabsById = new Map(
-    (state.unifiedTabsByWorktree?.[worktreeId] ?? []).map((tab) => [tab.id, tab])
+    (state.unifiedTabsByWorktree?.[rowKey] ?? []).map((tab) => [tab.id, tab])
   )
   const activeGroup =
-    groups.find((group) => group.id === state.activeGroupIdByWorktree?.[worktreeId]) ??
-    fallbackGroup
+    groups.find((group) => group.id === state.activeGroupIdByWorktree?.[rowKey]) ?? fallbackGroup
   const activeTab = getGroupActiveTab(activeGroup, tabsById)
   // Why: only a focused agent *terminal* should defer to an existing editor pane
   // (#6891). Editor, browser, and simulator panes open the file in the focused
@@ -80,7 +83,8 @@ export function resolveEditorOpenTargetGroupId(
 }
 
 export function buildEditorActiveResult(
-  state: Pick<AppState, 'activeFileIdByWorktree' | 'activeTabTypeByWorktree' | 'activeWorktreeId'>,
+  state: Pick<AppState, 'activeFileIdByWorktree' | 'activeTabTypeByWorktree' | 'activeWorktreeId'> &
+    Parameters<typeof resolveWorkspaceSessionRowKey>[0],
   worktreeId: string,
   fileId: string
 ): {
@@ -89,12 +93,13 @@ export function buildEditorActiveResult(
   activeFileIdByWorktree: Record<string, string | null>
   activeTabTypeByWorktree: Record<string, WorkspaceVisibleTabType>
 } {
+  const rowKey = resolveWorkspaceSessionRowKey(state, worktreeId)
   return {
     // Why: only the on-screen worktree owns the main editor; a background or floating open updates only the per-worktree maps.
     ...(ownsGlobalSelection(state, worktreeId)
       ? { activeFileId: fileId, activeTabType: 'editor' as const }
       : {}),
-    activeFileIdByWorktree: { ...state.activeFileIdByWorktree, [worktreeId]: fileId },
-    activeTabTypeByWorktree: { ...state.activeTabTypeByWorktree, [worktreeId]: 'editor' }
+    activeFileIdByWorktree: { ...state.activeFileIdByWorktree, [rowKey]: fileId },
+    activeTabTypeByWorktree: { ...state.activeTabTypeByWorktree, [rowKey]: 'editor' }
   }
 }

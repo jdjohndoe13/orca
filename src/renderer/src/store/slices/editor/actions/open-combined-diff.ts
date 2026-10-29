@@ -4,6 +4,7 @@ import type { OpenFile } from '../types/open-file'
 import { resolveDiffRuntimeEnvironmentId } from '../git/diff-runtime-owner'
 import { toBranchCompareSnapshot, toCommitCompareSnapshot } from '../git/git-status-reconciliation'
 import { openWorkspaceEditorItem } from '../tabs/workspace-editor-item'
+import { resolveWorkspaceSessionRowKey } from '../../../workspace-session-key'
 
 export function createOpenCombinedDiff(
   set: EditorSet,
@@ -20,6 +21,9 @@ export function createOpenCombinedDiff(
           ] ?? 'All Changes')
         : 'All Changes'
       set((s) => {
+        // The per-worktree slot lives under the session key, `host|id` for a contested workspace
+        // id (STA-4343); the git-status caches and the open-file entity keep the bare id.
+        const rowKey = resolveWorkspaceSessionRowKey(s, worktreeId)
         const branchSummary = s.gitBranchCompareSummaryByWorktree[worktreeId]
         const branchCompare =
           !areaFilter &&
@@ -73,8 +77,8 @@ export function createOpenCombinedDiff(
             ),
             activeFileId: id,
             activeTabType: 'editor',
-            activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [worktreeId]: id },
-            activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [worktreeId]: 'editor' }
+            activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [rowKey]: id },
+            activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [rowKey]: 'editor' }
           }
         }
         const newFile: OpenFile = {
@@ -100,8 +104,8 @@ export function createOpenCombinedDiff(
           openFiles: [...s.openFiles, newFile],
           activeFileId: id,
           activeTabType: 'editor',
-          activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [worktreeId]: id },
-          activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [worktreeId]: 'editor' }
+          activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [rowKey]: id },
+          activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [rowKey]: 'editor' }
         }
       })
       void openWorkspaceEditorItem(get(), id, worktreeId, label, 'diff')
@@ -110,6 +114,7 @@ export function createOpenCombinedDiff(
       const branchCompare = toBranchCompareSnapshot(compare)
       const id = `${worktreeId}::all-diffs::branch::${compare.baseRef}::${branchCompare.compareVersion}`
       set((s) => {
+        const rowKey = resolveWorkspaceSessionRowKey(s, worktreeId)
         const runtimeEnvironmentId = resolveDiffRuntimeEnvironmentId(s, worktreeId, undefined)
         const branchEntriesSnapshot = s.gitBranchChangesByWorktree[worktreeId] ?? []
         const existing = s.openFiles.find((f) => f.id === id)
@@ -131,8 +136,8 @@ export function createOpenCombinedDiff(
             ),
             activeFileId: id,
             activeTabType: 'editor',
-            activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [worktreeId]: id },
-            activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [worktreeId]: 'editor' }
+            activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [rowKey]: id },
+            activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [rowKey]: 'editor' }
           }
         }
         const newFile: OpenFile = {
@@ -156,8 +161,8 @@ export function createOpenCombinedDiff(
           openFiles: [...s.openFiles, newFile],
           activeFileId: id,
           activeTabType: 'editor',
-          activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [worktreeId]: id },
-          activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [worktreeId]: 'editor' }
+          activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [rowKey]: id },
+          activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [rowKey]: 'editor' }
         }
       })
       void openWorkspaceEditorItem(
@@ -176,6 +181,7 @@ export function createOpenCombinedDiff(
         ? `Commit ${commitCompare.compareRef}: ${subject}`
         : `Commit ${commitCompare.compareRef}`
       set((s) => {
+        const rowKey = resolveWorkspaceSessionRowKey(s, worktreeId)
         const runtimeEnvironmentId = resolveDiffRuntimeEnvironmentId(s, worktreeId, undefined)
         const existing = s.openFiles.find((f) => f.id === id)
         if (existing) {
@@ -196,8 +202,8 @@ export function createOpenCombinedDiff(
             ),
             activeFileId: id,
             activeTabType: 'editor',
-            activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [worktreeId]: id },
-            activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [worktreeId]: 'editor' }
+            activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [rowKey]: id },
+            activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [rowKey]: 'editor' }
           }
         }
 
@@ -221,8 +227,8 @@ export function createOpenCombinedDiff(
           openFiles: [...s.openFiles, newFile],
           activeFileId: id,
           activeTabType: 'editor',
-          activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [worktreeId]: id },
-          activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [worktreeId]: 'editor' }
+          activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [rowKey]: id },
+          activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [rowKey]: 'editor' }
         }
       })
       void openWorkspaceEditorItem(get(), id, worktreeId, label, 'diff')

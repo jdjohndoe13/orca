@@ -66,9 +66,13 @@ export function worktreeIdForPaneKey(
 
 export function buildWorktreeIdByFileId(state: WorkspaceSessionState): Map<string, string> {
   const byFile = new Map<string, string>()
-  for (const files of Object.values(state.openFilesByWorktree ?? {})) {
+  // Why the record's key and not the entry's `worktreeId` field: a contested id is spelled
+  // `host|id` in the unified session, and the key is what carries the host the split routes by —
+  // the entry's field is the bare id. `buildWorktreeIdByTabId` already follows the key; every
+  // consumer normalizes before comparing, so a bare partition's key is unchanged for them.
+  for (const [worktreeId, files] of Object.entries(state.openFilesByWorktree ?? {})) {
     for (const file of files) {
-      byFile.set(file.filePath, file.worktreeId)
+      byFile.set(file.filePath, worktreeId)
     }
   }
   return byFile

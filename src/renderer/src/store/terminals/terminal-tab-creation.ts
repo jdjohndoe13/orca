@@ -19,6 +19,7 @@ import {
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import { ownsGlobalSelection } from '../global-selection-owner'
 import { getLocalProjectExecutionRuntimeContext } from '@/lib/local-preflight-context'
+import { resolveWorkspaceSessionRowKey } from '../workspace-session-key'
 import type { TerminalSlice, TerminalStoreGet, TerminalStoreSet } from './terminal-state'
 import {
   getRemoteConnectionIdForWorktree,
@@ -62,9 +63,14 @@ export function createTerminalTabCreationActions(
     createTab: (worktreeId, targetGroupId, shellOverride, options) => {
       let tab!: TerminalTab
       set((s) => {
-        const orphanTerminalIds = getOrphanTerminalIds(s, worktreeId)
-        const orphanCleanupPatch = buildOrphanTerminalCleanupPatch(s, worktreeId, orphanTerminalIds)
-        const existing = (s.tabsByWorktree[worktreeId] ?? []).filter(
+        // Why the row key and not the bare id: a contested workspace id (one repo registered on
+        // several execution hosts, STA-4343) keys its session rows `host|id`, and the read path
+        // already asks for exactly that. Writing the bare id here put the tab in a bucket no
+        // reader reads — and re-created the shared bucket the next hydration would resurrect.
+        const rowKey = resolveWorkspaceSessionRowKey(s, worktreeId)
+        const orphanTerminalIds = getOrphanTerminalIds(s, rowKey)
+        const orphanCleanupPatch = buildOrphanTerminalCleanupPatch(s, rowKey, orphanTerminalIds)
+        const existing = (s.tabsByWorktree[rowKey] ?? []).filter(
           (entry) => !orphanTerminalIds.has(entry.id)
         )
         // Why: honor a caller-supplied tab id but mint on collision — aliasing two PTYs to one id corrupts agent-status routing. See docs/cli-terminal-hook-pane-key.md.
@@ -143,29 +149,29 @@ export function createTerminalTabCreationActions(
           void warnIfZCodeCannotOpenSession()
         }
         const validTargetGroupId =
-          targetGroupId &&
-          s.groupsByWorktree[worktreeId]?.some((group) => group.id === targetGroupId)
+          targetGroupId && s.groupsByWorktree[rowKey]?.some((group) => group.id === targetGroupId)
             ? targetGroupId
             : undefined
         const { group, groupsByWorktree, activeGroupIdByWorktree } = ensureGroup(
           s.groupsByWorktree,
           s.activeGroupIdByWorktree,
           worktreeId,
-          validTargetGroupId ?? s.activeGroupIdByWorktree[worktreeId]
+          validTargetGroupId ?? s.activeGroupIdByWorktree[rowKey],
+          rowKey
         )
         const nextActiveGroupIdByWorktree =
           shouldActivate && validTargetGroupId
-            ? { ...activeGroupIdByWorktree, [worktreeId]: validTargetGroupId }
+            ? { ...activeGroupIdByWorktree, [rowKey]: validTargetGroupId }
             : activeGroupIdByWorktree
-        const existingUnifiedTabs = s.unifiedTabsByWorktree[worktreeId] ?? []
+        const existingUnifiedTabs = s.unifiedTabsByWorktree[rowKey] ?? []
         const existingTerminalTab = findTabByEntityInGroup(
           s.unifiedTabsByWorktree,
-          worktreeId,
+          rowKey,
           group.id,
           id,
           'terminal'
         )
-        const groupsForWorktree = groupsByWorktree[worktreeId] ?? []
+        const groupsForWorktree = groupsByWorktree[rowKey] ?? []
         const cleanedGroups =
           orphanTerminalIds.size === 0
             ? groupsForWorktree
@@ -215,7 +221,7 @@ export function createTerminalTabCreationActions(
         const nextRecent = shouldActivate
           ? pushRecentTabId(sanitizeRecentTabIds(group.recentTabIds, nextGroupOrder), unifiedTab.id)
           : sanitizeRecentTabIds(cleanedTargetGroup.recentTabIds, nextGroupOrder)
-        const cleanedActiveTabIdForWorktree = orphanCleanupPatch.activeTabIdByWorktree[worktreeId]
+        const cleanedActiveTabIdForWorktree = orphanCleanupPatch.activeTabIdByWorktree[rowKey]
         const cleanedGroupActiveTabId =
           cleanedTargetGroup.activeTabId && !orphanTerminalIds.has(cleanedTargetGroup.activeTabId)
             ? cleanedTargetGroup.activeTabId
@@ -227,18 +233,18 @@ export function createTerminalTabCreationActions(
           ...orphanCleanupPatch,
           tabsByWorktree: {
             ...orphanCleanupPatch.tabsByWorktree,
-            [worktreeId]: [...existing, tab]
+            [rowKey]: [...existing, tab]
           },
           // Why: publish the unified tab atomically with the runtime tab so a transient legacy mount can't race the split host.
           unifiedTabsByWorktree: {
             ...s.unifiedTabsByWorktree,
-            [worktreeId]: existingTerminalTab
+            [rowKey]: existingTerminalTab
               ? existingUnifiedTabs
               : [...existingUnifiedTabs, unifiedTab]
           },
           groupsByWorktree: {
             ...groupsByWorktree,
-            [worktreeId]: updateGroup(cleanedGroups, {
+            [rowKey]: updateGroup(cleanedGroups, {
               ...cleanedTargetGroup,
               activeTabId: shouldActivate
                 ? unifiedTab.id
@@ -250,7 +256,7 @@ export function createTerminalTabCreationActions(
           activeGroupIdByWorktree: nextActiveGroupIdByWorktree,
           layoutByWorktree: {
             ...s.layoutByWorktree,
-            [worktreeId]: s.layoutByWorktree[worktreeId] ?? { type: 'leaf', groupId: group.id }
+            [rowKey]: s.layoutByWorktree[rowKey] ?? { type: 'leaf', groupId: group.id }
           },
           activeTabId:
             shouldActivate && ownsGlobalSelection(s, worktreeId)
@@ -258,7 +264,7 @@ export function createTerminalTabCreationActions(
               : orphanCleanupPatch.activeTabId,
           activeTabIdByWorktree: {
             ...orphanCleanupPatch.activeTabIdByWorktree,
-            [worktreeId]: nextActiveTabIdForWorktree
+            [rowKey]: nextActiveTabIdForWorktree
           },
           ptyIdsByTabId: {
             ...orphanCleanupPatch.ptyIdsByTabId,

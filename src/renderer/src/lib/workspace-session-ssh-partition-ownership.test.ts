@@ -207,9 +207,15 @@ describe('a bare workspace id two partitions both hold', () => {
     // The #12721 shape - empty list here, the real one in the partition - does not stop being a gap
     // because the id is contested. Reading the empty row as "the base has tabs" is what let the
     // empty list win and then published it back to the host as a deletion.
-    expect(read.session.tabsByWorktree[WORKTREE_ID]?.map((entry) => entry.id)).toEqual([
+    //
+    // Why the rival's key: the id is contested, so the ssh partition's tabs are that host's rows and
+    // are spelled `host|id`. They are read (the gap is filled) without being written into the local
+    // workspace's own bucket, where the next write would strand them in the wrong partition.
+    expect(read.session.tabsByWorktree[`${SSH_HOST_ID}|${WORKTREE_ID}`]?.map((e) => e.id)).toEqual([
       'tab-rival'
     ])
+    // The local workspace's tombstone is its own row and is not overwritten by the rival's tabs.
+    expect(read.session.tabsByWorktree[WORKTREE_ID]).toEqual([])
   })
 
   it('never names the rival partition as the write target for a contested id', async () => {
@@ -248,7 +254,18 @@ describe('a bare workspace id two partitions both hold', () => {
       []
     )
 
-    expect(read.session.tabsByWorktree[WORKTREE_ID]?.map((entry) => entry.id)).toEqual(['tab-one'])
+    // Why the qualified key: the id is contested, so the winner's tabs are that host's rows and are
+    // spelled `host|id`. The determinism this test pins is unchanged — the sorted-first host wins
+    // because the census is sorted, not because of insertion order — and the other host's rows stay
+    // in its own partition rather than being copied into the session and then into the winner's
+    // partition on the next write.
+    expect(read.session.tabsByWorktree[`${SSH_HOST_ID}|${WORKTREE_ID}`]?.map((e) => e.id)).toEqual([
+      'tab-one'
+    ])
+    expect(read.session.tabsByWorktree[`${OTHER_SSH_HOST_ID}|${WORKTREE_ID}`]).toBeUndefined()
+    // The local workspace's editor row is the only thing the bare key holds; neither host's tabs
+    // were written into it.
+    expect(read.session.tabsByWorktree[WORKTREE_ID]).toBeUndefined()
     // Contested ids are withheld from the read-source override, so the write cannot carry one
     // host's rows into the other's partition.
     expect(read.contestedPrimaryHostBySessionKey?.[WORKTREE_ID]).not.toBe(SSH_HOST_ID)

@@ -32,11 +32,16 @@ function getStampedFolderWorkspaceHostId(
  * The terminal workbench's mount set: exactly one surface per workspace id.
  *
  * Why collapse here and nowhere else: the workbench is bare-id keyed end to end
- * (`activeWorktreeId`, `tabsByWorktree`, `mountedWorktreeIdsRef`, React keys),
- * so it can only represent one surface per id — but both catalogs it reads are
- * host-qualified on purpose (STA-4343), keeping a row per (host, id). Emitting
- * both mounts one workspace's tabs twice under a duplicate React key. Listing
- * surfaces such as the sidebar must keep showing every host.
+ * (`activeWorktreeId`, `mountedWorktreeIdsRef`, React keys), so it can only mount
+ * one surface per id — but both catalogs it reads are host-qualified on purpose
+ * (STA-4343), keeping a row per (host, id). Emitting both mounts one workspace's
+ * tabs twice under a duplicate React key. Listing surfaces such as the sidebar
+ * must keep showing every host.
+ *
+ * This is surface IDENTITY only, not the row READ. The session rows the mounted
+ * surface paints are host-qualified by the active workspace's host — see
+ * `terminal-workspace-session-row.ts` — so clicking another host's card of a
+ * colliding id keeps this one surface and re-points its reads at that host's row.
  *
  * `worktreesById` is the store's first-wins per-id index, and that collapse is
  * lossless: `worktreeId` is `repoId::path`, so colliding rows agree on the path.

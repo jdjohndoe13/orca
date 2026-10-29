@@ -1,6 +1,7 @@
 import type { AppState } from '../../types'
 import type { TerminalTab } from '../../../../../shared/terminal-tab-types'
 import { findTabAndWorktree } from '../tab-group-state'
+import { getWorkspaceIdFromSessionKey } from '../../../../../shared/workspace-session-worktree-key'
 import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
 import { locateTerminalTab } from '../../terminals/terminal-tab-location'
 
@@ -30,14 +31,15 @@ export function patchTerminalTabRow(
 export function mirrorTabPinnedToHost(state: AppState, tabId: string, isPinned: boolean): void {
   const found = findTabAndWorktree(state.unifiedTabsByWorktree, tabId)
   // Why: only terminal tab pins are persisted host-side today (browser/editor in #5729); skip the RPC for other types.
-  if (
-    !found ||
-    found.tab.contentType !== 'terminal' ||
-    !getRuntimeEnvironmentIdForWorktree(state, found.worktreeId)
-  ) {
+  if (!found || found.tab.contentType !== 'terminal') {
     return
   }
-  const worktreeId = found.worktreeId
+  // The lookup hands back the record key, which is `host|id` for a contested workspace id
+  // (STA-4343); the host resolves a worktree by its bare id, so every use below is the bare half.
+  const worktreeId = getWorkspaceIdFromSessionKey(found.worktreeId)
+  if (!getRuntimeEnvironmentIdForWorktree(state, worktreeId)) {
+    return
+  }
   void import('@/runtime/web-runtime-session').then(({ setWebRuntimeTabProps }) =>
     setWebRuntimeTabProps({ worktreeId, tabId, isPinned })
   )
@@ -52,14 +54,13 @@ export function mirrorTabViewModeToHost(
 ): void {
   const found = findTabAndWorktree(state.unifiedTabsByWorktree, tabId)
   // Why: only terminal tab viewMode is persisted host-side; skip the RPC for other types instead of a no-op round trip.
-  if (
-    !found ||
-    found.tab.contentType !== 'terminal' ||
-    !getRuntimeEnvironmentIdForWorktree(state, found.worktreeId)
-  ) {
+  if (!found || found.tab.contentType !== 'terminal') {
     return
   }
-  const worktreeId = found.worktreeId
+  const worktreeId = getWorkspaceIdFromSessionKey(found.worktreeId)
+  if (!getRuntimeEnvironmentIdForWorktree(state, worktreeId)) {
+    return
+  }
   void import('@/runtime/web-runtime-session').then(({ setWebRuntimeTabProps }) =>
     setWebRuntimeTabProps({ worktreeId, tabId, viewMode })
   )

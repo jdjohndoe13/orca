@@ -13,6 +13,7 @@ import {
 import { loadGitLabJobLogDetails } from '@/runtime/gitlab-job-trace-client'
 import { getSettingsForWorktreeRuntimeOwner } from '@/lib/worktree-runtime-owner'
 import { findWorktreeById, getRepoIdFromWorktreeId } from '../../worktree-helpers'
+import { resolveWorkspaceSessionRowKey } from '../../../workspace-session-key'
 import type { OpenFile } from '../types/open-file'
 import { openWorkspaceEditorItem } from '../tabs/workspace-editor-item'
 
@@ -38,6 +39,9 @@ export function createCheckRunDetailsActions(
         gitlabProjectRef: state.gitlabProjectRef ?? null
       }
       set((s) => {
+        // The per-worktree slot lives under the session key, `host|id` for a contested workspace
+        // id (STA-4343); the open-file entity keeps the bare id in its own `worktreeId` field.
+        const rowKey = resolveWorkspaceSessionRowKey(s, worktreeId)
         const existing = s.openFiles.find((f) => f.id === id)
         if (existing) {
           const existingDetails = existing.checkRunDetails
@@ -59,8 +63,8 @@ export function createCheckRunDetailsActions(
             ),
             activeFileId: id,
             activeTabType: 'editor',
-            activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [worktreeId]: id },
-            activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [worktreeId]: 'editor' }
+            activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [rowKey]: id },
+            activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [rowKey]: 'editor' }
           }
         }
 
@@ -79,8 +83,8 @@ export function createCheckRunDetailsActions(
           openFiles: [...s.openFiles, newFile],
           activeFileId: id,
           activeTabType: 'editor',
-          activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [worktreeId]: id },
-          activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [worktreeId]: 'editor' }
+          activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [rowKey]: id },
+          activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [rowKey]: 'editor' }
         }
       })
       void openWorkspaceEditorItem(get(), id, worktreeId, label, 'check-details')

@@ -30,7 +30,9 @@ describe('selectActiveTerminalChromeState', () => {
       activeTabId: 'tab-1',
       tabsByWorktree: { 'wt-1': tabs },
       canExpandPaneByTabId: { 'tab-1': true },
-      expandedPaneByTabId: { 'tab-1': false }
+      expandedPaneByTabId: { 'tab-1': false },
+      worktreesByRepo: {},
+      activeWorkspaceExecutionHostId: null
     } satisfies Parameters<typeof selectActiveTerminalChromeState>[0]
 
     const first = selectActiveTerminalChromeState(state)
@@ -56,7 +58,9 @@ describe('selectActiveTerminalChromeState', () => {
       activeTabId: null,
       tabsByWorktree: { 'wt-1': tabs },
       canExpandPaneByTabId: { 'tab-1': false },
-      expandedPaneByTabId: { 'tab-1': false }
+      expandedPaneByTabId: { 'tab-1': false },
+      worktreesByRepo: {},
+      activeWorkspaceExecutionHostId: null
     } satisfies Parameters<typeof selectActiveTerminalChromeState>[0]
 
     const first = selectActiveTerminalChromeState(state)

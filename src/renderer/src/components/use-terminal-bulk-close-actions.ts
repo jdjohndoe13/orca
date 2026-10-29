@@ -8,6 +8,7 @@ import {
   getActiveWorktreeRuntimeEnvironmentId,
   isPinnedEditorFileTab
 } from './terminal-workspace-model'
+import { resolveWorktreeSessionRowKeyFromStore } from './terminal-workspace-session-row'
 import type { TerminalCloseController } from './use-terminal-close-actions'
 
 export function useTerminalBulkCloseActions(controller: TerminalCloseController) {
@@ -19,9 +20,12 @@ export function useTerminalBulkCloseActions(controller: TerminalCloseController)
         return
       }
       const state = useAppStore.getState()
+      // Why the row key: these are the tab rows the strip is showing, and a contested id's rows
+      // live under `host|id` — closing the other host's row would leave this host's tabs open.
+      const rowKey = resolveWorktreeSessionRowKeyFromStore(activeWorktreeId)
       const dirtyFileIds: string[] = []
       for (const id of tabIds) {
-        const unifiedTab = (state.unifiedTabsByWorktree[activeWorktreeId] ?? []).find(
+        const unifiedTab = (state.unifiedTabsByWorktree[rowKey] ?? []).find(
           (candidate) => candidate.id === id || candidate.entityId === id
         )
         if (unifiedTab?.isPinned) {
@@ -57,7 +61,7 @@ export function useTerminalBulkCloseActions(controller: TerminalCloseController)
           state.closeUnifiedTab(unifiedTab.id)
           continue
         }
-        if ((state.tabsByWorktree[activeWorktreeId] ?? []).some((tab) => tab.id === id)) {
+        if ((state.tabsByWorktree[rowKey] ?? []).some((tab) => tab.id === id)) {
           closeTab(id)
         } else if (
           state.openFiles.some((file) => file.worktreeId === activeWorktreeId && file.id === id)
@@ -68,9 +72,7 @@ export function useTerminalBulkCloseActions(controller: TerminalCloseController)
             continue
           }
           closeFile(id)
-        } else if (
-          (state.browserTabsByWorktree[activeWorktreeId] ?? []).some((tab) => tab.id === id)
-        ) {
+        } else if ((state.browserTabsByWorktree[rowKey] ?? []).some((tab) => tab.id === id)) {
           closeBrowserTab(id, browserCloseOptions)
           // closeBrowserTab announces the MRU target before guest teardown can trigger bridge fallback.
           destroyWorkspaceWebviews(state.browserPagesByWorkspace, id)
@@ -90,7 +92,10 @@ export function useTerminalBulkCloseActions(controller: TerminalCloseController)
       if (!activeWorktreeId) {
         return
       }
-      const order = useAppStore.getState().tabBarOrderByWorktree[activeWorktreeId] ?? []
+      const order =
+        useAppStore.getState().tabBarOrderByWorktree[
+          resolveWorktreeSessionRowKeyFromStore(activeWorktreeId)
+        ] ?? []
       closeTabBarTabs(order.filter((id) => id !== tabId))
     },
     [activeWorktreeId, closeTabBarTabs]
@@ -100,7 +105,10 @@ export function useTerminalBulkCloseActions(controller: TerminalCloseController)
       if (!activeWorktreeId) {
         return
       }
-      const currentOrder = useAppStore.getState().tabBarOrderByWorktree[activeWorktreeId] ?? []
+      const currentOrder =
+        useAppStore.getState().tabBarOrderByWorktree[
+          resolveWorktreeSessionRowKeyFromStore(activeWorktreeId)
+        ] ?? []
       const index = currentOrder.indexOf(tabId)
       if (index === -1) {
         return
@@ -114,7 +122,10 @@ export function useTerminalBulkCloseActions(controller: TerminalCloseController)
       if (!activeWorktreeId) {
         return
       }
-      const currentOrder = useAppStore.getState().tabBarOrderByWorktree[activeWorktreeId] ?? []
+      const currentOrder =
+        useAppStore.getState().tabBarOrderByWorktree[
+          resolveWorktreeSessionRowKeyFromStore(activeWorktreeId)
+        ] ?? []
       const index = currentOrder.indexOf(tabId)
       if (index === -1) {
         return

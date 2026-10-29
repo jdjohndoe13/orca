@@ -1,5 +1,6 @@
 import { useAppStore } from '@/store'
 import { reconcileTabOrder } from '../tab-bar/reconcile-order'
+import { resolveWorktreeSessionRowKey } from '../terminal-workspace-session-row'
 import {
   createWebRuntimeSessionTerminal,
   isWebRuntimeSessionActive
@@ -45,15 +46,14 @@ export function createNewTerminalTab(
   // terminals-first when tabBarOrderByWorktree is unset, causing a new
   // terminal to jump to index 0 instead of appending after editor tabs.
   const freshState = useAppStore.getState()
-  const termIds = (freshState.tabsByWorktree[activeWorktreeId] ?? []).map((t) => t.id)
+  // Why the row key: a contested id's tab rows live under `host|id`, so the order must be
+  // reconciled against the tabs of the host this tab was created on.
+  const rowKey = resolveWorktreeSessionRowKey(freshState, activeWorktreeId)
+  const termIds = (freshState.tabsByWorktree[rowKey] ?? []).map((t) => t.id)
   const editorIds = freshState.openFiles
     .filter((f) => f.worktreeId === activeWorktreeId)
     .map((f) => f.id)
-  const base = reconcileTabOrder(
-    freshState.tabBarOrderByWorktree[activeWorktreeId],
-    termIds,
-    editorIds
-  )
+  const base = reconcileTabOrder(freshState.tabBarOrderByWorktree[rowKey], termIds, editorIds)
   // The new tab is already in base via termIds; move it to the end
   const order = base.filter((id) => id !== newTab.id)
   order.push(newTab.id)

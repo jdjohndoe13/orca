@@ -3,10 +3,8 @@ import { cn } from '@/lib/utils'
 import type { AppState } from '@/store/types'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import type { Worktree } from '../../../../../../shared/worktree/types'
-import {
-  composeWorktreeHostIdentity,
-  getWorktreeHostIdentity
-} from '../../../../../../shared/worktree/host-qualified-identity'
+import { getWorktreeHostIdentity } from '../../../../../../shared/worktree/host-qualified-identity'
+import { isWorkspaceRowActive } from './workspace-row-activation'
 import WorktreeCard, { type ActiveSurfaceVariant } from '../../WorktreeCard'
 import { PINNED_GROUP_KEY } from '../grouping/group-keys'
 import type { WorktreeGroupBy } from '../grouping/row-types'
@@ -141,11 +139,16 @@ export function renderWorktreeItemRow(
     ctx.worktreeDragState.draggingWorktreeId &&
     (ctx.worktreeDragState.lineageDropTargetId === itemRow.worktree.id ||
       ctx.nativeLineageDropTargetId === itemRow.worktree.id)
-  const isActiveWorktree =
-    ctx.activeWorktreeId === itemRow.worktree.id &&
-    (!ctx.activeWorkspaceExecutionHostId ||
-      worktreeIdentity ===
-        composeWorktreeHostIdentity(ctx.activeWorkspaceExecutionHostId, itemRow.worktree.id))
+  const isActiveWorktree = isWorkspaceRowActive(
+    ctx.activeWorktreeId,
+    ctx.activeWorkspaceExecutionHostId,
+    itemRow.worktree
+  )
+  const isCurrentWorktree = isWorkspaceRowActive(
+    ctx.currentWorktreeId,
+    ctx.activeWorkspaceExecutionHostId,
+    itemRow.worktree
+  )
   return (
     <div
       key={itemRow.rowKey}
@@ -189,7 +192,7 @@ export function renderWorktreeItemRow(
         worktree={itemRow.worktree}
         repo={itemRow.repo}
         isActive={isActiveWorktree}
-        isCurrentWorktree={ctx.currentWorktreeId === itemRow.worktree.id}
+        isCurrentWorktree={isCurrentWorktree}
         // Why: a child-active parent should look active without the active-card side effects (e.g. SSH reconnect UI).
         isActiveSurface={forceActiveSurface || isActiveWorktree}
         activeSurfaceVariant={

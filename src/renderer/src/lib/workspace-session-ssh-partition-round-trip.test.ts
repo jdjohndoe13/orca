@@ -563,18 +563,30 @@ describe('ssh host partition adoption on a contested bare id', () => {
     // The read names `local` primary for this id and parks the runtime claimant, so routing writes
     // whatever survives here back into local's own partition. Replacing local's rows with the SSH
     // workspace's would persist one workspace's editor state as another's — and destroy the draft.
+    //
+    // Why the qualified keys: a contested id has no bare key in the unified session any more — every
+    // claimant is spelled `host|id`, so the ssh row cannot land on a bucket the local workspace
+    // shares. The invariant is unchanged (the draft survives, the ssh row is not adopted into it);
+    // only the spelling of the survivor moved.
     const read = await fetchWorkspaceSessionWithRuntimeHostOwners(
       partitionedApi(contestedPartitions()),
       contestedRepos
     )
 
-    expect(read.session.openFilesByWorktree?.[WORKTREE_ID]?.[0]?.dirtyDraftContent).toBe(
+    expect(read.session.openFilesByWorktree?.[`local|${WORKTREE_ID}`]?.[0]?.dirtyDraftContent).toBe(
       'local unsaved work'
+    )
+    // The ssh row stays the ssh host's row and never occupies the shared bucket.
+    expect(read.session.openFilesByWorktree?.[WORKTREE_ID]?.[0]?.dirtyDraftContent).toBeUndefined()
+    expect(read.session.openFilesByWorktree?.[`${SSH_HOST_ID}|${WORKTREE_ID}`]?.[0]?.filePath).toBe(
+      '/remote/checkout/feature/src/other.ts'
     )
   })
 
   it('still fills a gap on a contested id', async () => {
     // Declining to replace is not declining to repair: a row no claimant answered is still adopted.
+    // The gap-fill lands on the ssh host's own key — the claimant whose row it is — because a
+    // contested id has no bare bucket to fill.
     const partitions = contestedPartitions()
     partitions[SSH_HOST_ID] = session({
       ...partitions[SSH_HOST_ID],
@@ -586,7 +598,7 @@ describe('ssh host partition adoption on a contested bare id', () => {
       contestedRepos
     )
 
-    expect(read.session.activeFileIdByWorktree?.[WORKTREE_ID]).toBe(
+    expect(read.session.activeFileIdByWorktree?.[`${SSH_HOST_ID}|${WORKTREE_ID}`]).toBe(
       '/remote/checkout/feature/src/other.ts'
     )
   })

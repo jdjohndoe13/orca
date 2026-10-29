@@ -49,6 +49,8 @@ export function resolveTerminalCloseTarget(
 
 // Why: host-backed terminals may exist only in unified state, so sibling
 // selection must merge both representations into one terminal entity set.
+// `worktreeId` is the ROW KEY (host-qualified for a contested id), not the bare id —
+// the caller resolves it so the merge reads the same host's rows it is closing from.
 export function getWorktreeTerminalTabIds(
   state: Pick<AppState, 'tabsByWorktree' | 'unifiedTabsByWorktree'>,
   worktreeId: string

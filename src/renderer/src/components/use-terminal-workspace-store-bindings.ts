@@ -1,4 +1,5 @@
 import { useAppStore } from '../store'
+import { readWorktreeSessionRow } from './terminal-workspace-session-row'
 import { useActivityTerminalPortals } from './activity/activity-terminal-portal'
 import type { ActivityTerminalPortalTarget } from './activity/activity-terminal-portal'
 import type { TerminalWorkspaceFoundation } from './use-terminal-workspace-foundation'
@@ -59,9 +60,13 @@ export function useTerminalWorkspaceStoreBindings(controller: TerminalWorkspaceF
   const reconcileWorktreeTabModel = useAppStore((state) => state.reconcileWorktreeTabModel)
   const setTabBarOrder = useAppStore((state) => state.setTabBarOrder)
   const tabBarOrderByWorktree = useAppStore((state) => state.tabBarOrderByWorktree)
-  const tabBarOrder = renderedActiveWorktreeId
-    ? tabBarOrderByWorktree[renderedActiveWorktreeId]
-    : undefined
+  // Why the row key: the order is read with the tabs it sorts, so a contested id must not sort
+  // one host's tabs by another host's stored order.
+  const tabBarOrder = useAppStore((state) =>
+    renderedActiveWorktreeId
+      ? readWorktreeSessionRow(state, state.tabBarOrderByWorktree, renderedActiveWorktreeId)
+      : undefined
+  )
   const activityTerminalPortals: ActivityTerminalPortalTarget[] = useActivityTerminalPortals(
     activeView === 'activity'
   )

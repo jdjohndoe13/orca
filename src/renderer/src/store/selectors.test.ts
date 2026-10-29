@@ -233,7 +233,9 @@ describe('store selectors', () => {
         'wt-2': [otherWorktreeTab]
       },
       canExpandPaneByTabId: { 'term-1': true, 'term-2': false },
-      expandedPaneByTabId: { 'term-1': true, 'term-2': false }
+      expandedPaneByTabId: { 'term-1': true, 'term-2': false },
+      worktreesByRepo: {},
+      activeWorkspaceExecutionHostId: null
     } satisfies Parameters<typeof selectActiveTerminalChromeState>[0]
 
     const selected = selectActiveTerminalChromeState(state)

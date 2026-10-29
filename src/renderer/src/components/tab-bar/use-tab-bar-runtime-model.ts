@@ -30,6 +30,7 @@ import type { TabAgentLaunchOption } from './tab-agent-launch-options'
 import { DEFAULT_DISABLED_TUI_AGENTS } from '../../../../shared/tui-agent-selection'
 import { shouldShowWindowsShellMenu } from './windows-shell-menu-visibility'
 import { createUnifiedTabLookup } from './tab-bar-item-model'
+import { resolveWorkspaceRowKey } from '../terminal-workspace-session-row'
 import { getClientCreationActionPolicy } from '@/lib/client-creation-action-policy'
 
 const isWindows = navigator.userAgent.includes('Windows')
@@ -114,10 +115,17 @@ export function useTabBarRuntimeModel({
   const gitStatusEntries = useAppStore(
     (s) => s.gitStatusByWorktree[worktreeId] ?? EMPTY_GIT_STATUS_ENTRIES
   )
-  const unifiedTabs = useAppStore((s) => s.unifiedTabsByWorktree[worktreeId] ?? EMPTY_UNIFIED_TABS)
+  // Why the row key: the tab strip is mounted with the bare worktree id (the workbench mounts one
+  // surface per id), while a contested id's unified rows live under `host|id`. Resolved inside
+  // each selector so a host switch — which keeps the bare id — re-points the read.
+  const unifiedTabs = useAppStore(
+    (s) => s.unifiedTabsByWorktree[resolveWorkspaceRowKey(s, worktreeId)] ?? EMPTY_UNIFIED_TABS
+  )
   const pinTab = useAppStore((s) => s.pinTab)
   const unpinTab = useAppStore((s) => s.unpinTab)
-  const activeGroupIdForWorktree = useAppStore((s) => s.activeGroupIdByWorktree[worktreeId])
+  const activeGroupIdForWorktree = useAppStore(
+    (s) => s.activeGroupIdByWorktree[resolveWorkspaceRowKey(s, worktreeId)]
+  )
   const defaultWindowsShell = useAppStore(
     (s) => s.settings?.terminalWindowsShell ?? 'powershell.exe'
   )

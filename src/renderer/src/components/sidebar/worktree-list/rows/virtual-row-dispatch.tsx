@@ -28,6 +28,7 @@ import {
   renderWorktreeLineageDescendants,
   type WorktreeItemRowContext
 } from './item-row'
+import { isWorkspaceRowActive } from './workspace-row-activation'
 import { renderWorktreeSectionHeaderRow, type SectionHeaderRowContext } from './SectionHeader'
 import type { WorktreeRowDragState } from '../drag/row-state'
 
@@ -109,7 +110,13 @@ function renderLineageGroupVirtualRow(
   vItem: VirtualItem
 ): React.JSX.Element {
   const [parent, ...children] = row.rows
-  const childIsActive = children.some((child) => child.worktree.id === ctx.activeWorktreeId)
+  const childIsActive = children.some((child) =>
+    isWorkspaceRowActive(
+      ctx.item.activeWorktreeId,
+      ctx.item.activeWorkspaceExecutionHostId,
+      child.worktree
+    )
+  )
   const parentPreviewOffset = parent
     ? (ctx.worktreeDragState.previewOffsetsByWorktreeId.get(parent.worktree.id) ?? 0)
     : 0

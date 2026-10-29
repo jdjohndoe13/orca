@@ -84,6 +84,8 @@ function useStartupHoldHarness(props: HarnessProps) {
     activeGroupIdByWorktree: props.worktreeId ? { [props.worktreeId]: GROUP_ID } : {},
     activeTabId: TAB_1,
     activeTabIdByWorktree: props.worktreeId ? { [props.worktreeId]: TAB_1 } : {},
+    // The real foundation derives this from the store; with no catalog the row key is the bare id.
+    activeWorktreeSessionRowKey: props.worktreeId,
     activeWorktreeDeferralHostId: 'local',
     activityTerminalPortals: [],
     backgroundMountRevision,

@@ -25,6 +25,7 @@ import type { ClientHostedBrowserRow } from '../../../../shared/client-hosted-br
 import { useClientHostedBrowserRows } from '@/lib/pane-manager/client-hosted-browser-row-state'
 import { resolveClientHostedBrowserRowStripGroupId } from '../tab-bar/client-hosted-browser-row-strip-placement'
 import { useEditorGroupFileDropOwner } from '../editor/use-editor-group-file-drop-owner'
+import { resolveWorkspaceRowKey } from '../terminal-workspace-session-row'
 
 const EditorPanel = lazy(() => import('../editor/EditorPanel'))
 const EMPTY_GROUPS: readonly TabGroup[] = []
@@ -85,10 +86,13 @@ export default function TabGroupPanel({
     terminalTabs
   } = model
   // Why: one strip owns the worktree's client-hosted rows, or every split repeats them.
+  // Why the row key: the panel gets the bare worktree id (the workbench mounts one surface per
+  // id), while a contested id's group rows live under `host|id`. Resolved inside the selector so
+  // a host switch — which keeps the bare id — re-points the read.
   const ownsClientHostedRows = useAppStore(
     (state) =>
       resolveClientHostedBrowserRowStripGroupId(
-        state.groupsByWorktree[worktreeId] ?? EMPTY_GROUPS
+        state.groupsByWorktree[resolveWorkspaceRowKey(state, worktreeId)] ?? EMPTY_GROUPS
       ) === groupId
   )
   const worktreeClientHostedRows = useClientHostedBrowserRows(worktreeId)

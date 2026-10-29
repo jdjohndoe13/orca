@@ -2,6 +2,7 @@ import type { Tab, TabContentType } from '../../../shared/tab-types'
 import type { KeybindingContext } from '../../../shared/keybindings'
 import { useAppStore } from '../store'
 import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
+import { resolveWorktreeSessionRowKey } from './terminal-workspace-session-row'
 
 export const CLOSE_DIALOG_DEBOUNCE_MS = 200
 
@@ -26,30 +27,40 @@ export function haveSameIdSet(left: ReadonlySet<string>, right: ReadonlySet<stri
   return true
 }
 
+/**
+ * The row key of `worktreeId` in `state`.
+ *
+ * These helpers take the whole snapshot and a bare worktree id, so the key is resolved here rather
+ * than at every caller — a contested id's unified rows live under `host|id`, and a bare read would
+ * pin/close the other host's tab.
+ */
+function rowKeyOf(state: TerminalStoreSnapshot, worktreeId: string): string {
+  return resolveWorktreeSessionRowKey(state, worktreeId)
+}
+
 function findUnifiedTabByVisibleId(
   state: TerminalStoreSnapshot,
   worktreeId: string,
   visibleId: string
 ): Tab | null {
   return (
-    (state.unifiedTabsByWorktree[worktreeId] ?? []).find(
+    (state.unifiedTabsByWorktree[rowKeyOf(state, worktreeId)] ?? []).find(
       (tab) => tab.id === visibleId || tab.entityId === visibleId
     ) ?? null
   )
 }
 
 function findActiveUnifiedTab(state: TerminalStoreSnapshot, worktreeId: string): Tab | null {
-  const activeGroupId = state.activeGroupIdByWorktree[worktreeId]
+  const rowKey = rowKeyOf(state, worktreeId)
+  const activeGroupId = state.activeGroupIdByWorktree[rowKey]
   const group =
-    (state.groupsByWorktree[worktreeId] ?? []).find(
-      (candidate) => candidate.id === activeGroupId
-    ) ?? null
+    (state.groupsByWorktree[rowKey] ?? []).find((candidate) => candidate.id === activeGroupId) ??
+    null
   if (!group?.activeTabId) {
     return null
   }
   return (
-    (state.unifiedTabsByWorktree[worktreeId] ?? []).find((tab) => tab.id === group.activeTabId) ??
-    null
+    (state.unifiedTabsByWorktree[rowKey] ?? []).find((tab) => tab.id === group.activeTabId) ?? null
   )
 }
 
@@ -79,7 +90,7 @@ export function isPinnedActiveEditorTab(
     )
   }
   return (
-    (state.unifiedTabsByWorktree[worktreeId] ?? []).some(
+    (state.unifiedTabsByWorktree[rowKeyOf(state, worktreeId)] ?? []).some(
       (tab) =>
         tab.entityId === fileId &&
         EDITOR_TAB_CONTENT_TYPES.has(tab.contentType) &&
@@ -93,7 +104,7 @@ export function isPinnedEditorFileTab(
   worktreeId: string,
   fileId: string
 ): boolean {
-  return (state.unifiedTabsByWorktree[worktreeId] ?? []).some(
+  return (state.unifiedTabsByWorktree[rowKeyOf(state, worktreeId)] ?? []).some(
     (tab) =>
       tab.entityId === fileId && EDITOR_TAB_CONTENT_TYPES.has(tab.contentType) && tab.isPinned
   )

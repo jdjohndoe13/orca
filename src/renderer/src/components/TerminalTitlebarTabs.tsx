@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom'
 import type { TerminalTab } from '../../../shared/terminal-tab-types'
 import { useAppStore } from '../store'
+import { readWorktreeSessionRow } from './terminal-workspace-session-row'
 import TabBar from './tab-bar/TabBar'
 import type { TerminalController } from './use-terminal-controller'
 
@@ -11,7 +12,13 @@ const EMPTY_TERMINAL_TABS: TerminalTab[] = []
 function LiveTerminalTabBar(
   props: Omit<React.ComponentProps<typeof TabBar>, 'tabs'>
 ): React.JSX.Element {
-  const tabs = useAppStore((state) => state.tabsByWorktree[props.worktreeId] ?? EMPTY_TERMINAL_TABS)
+  // Why the row key inside the selector: the strip is mounted with the bare id, but a contested
+  // id's tab row lives under `host|id`. Resolving in the same snapshot the read comes from is
+  // what makes a host switch — which keeps the bare id — re-point this subscription.
+  const tabs = useAppStore(
+    (state) =>
+      readWorktreeSessionRow(state, state.tabsByWorktree, props.worktreeId) ?? EMPTY_TERMINAL_TABS
+  )
   return <TabBar {...props} tabs={tabs} />
 }
 
@@ -25,6 +32,7 @@ export function TerminalTitlebarTabs({
     activeFileId,
     activeTabId,
     activeTabType,
+    activeWorktreeSessionRowKey,
     effectiveActiveLayout,
     expandedPaneByTabId,
     handleActivateBrowserTab,
@@ -86,14 +94,16 @@ export function TerminalTitlebarTabs({
       activeFileId={activeFileId}
       activeBrowserTabId={activeBrowserTabId}
       activeSimulatorTabId={
-        activeTabType === 'simulator' && renderedActiveWorktreeId
-          ? (useAppStore.getState().getActiveTab(renderedActiveWorktreeId)?.id ?? null)
+        activeTabType === 'simulator' && activeWorktreeSessionRowKey
+          ? (useAppStore.getState().getActiveTab(activeWorktreeSessionRowKey)?.id ?? null)
           : null
       }
       activeTabType={activeTabType}
       onActivateFile={(fileId) => {
         const unifiedTabs =
-          useAppStore.getState().unifiedTabsByWorktree[renderedActiveWorktreeId ?? ''] ?? []
+          (activeWorktreeSessionRowKey !== null
+            ? useAppStore.getState().unifiedTabsByWorktree[activeWorktreeSessionRowKey]
+            : undefined) ?? []
         const unifiedTab = unifiedTabs.find((tab) => tab.id === fileId)
         if (unifiedTab?.contentType === 'simulator') {
           setActiveTab(fileId)

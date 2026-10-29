@@ -10,6 +10,7 @@ type WorktreeSnapshot = {
   allWorktrees: Worktree[]
   worktreeMap: Map<string, Worktree>
   worktreesById: Map<string, Worktree[]>
+  contestedIds: ReadonlySet<string>
 }
 
 // Why: Zustand reruns selectors on every write, so identity projections need
@@ -60,7 +61,16 @@ function getWorktreeSnapshot(worktreesByRepo: AppState['worktreesByRepo']): Work
       worktreesById.set(worktreeId, [worktree])
     }
   }
-  const snapshot = { allWorktrees, worktreeMap, worktreesById }
+  const contestedIds = new Set<string>()
+  for (const [worktreeId, rows] of worktreesById) {
+    // Two rows for one id after the same-host dedup above means two hosts publish the same
+    // workspace id. That is the only condition under which a session record may key on
+    // `host|id` (see `workspace-session-worktree-key`); everything else keeps the bare key.
+    if (rows.length > 1) {
+      contestedIds.add(worktreeId)
+    }
+  }
+  const snapshot = { allWorktrees, worktreeMap, worktreesById, contestedIds }
   worktreeSnapshotCache.set(worktreesByRepo, snapshot)
   return snapshot
 }
@@ -88,6 +98,19 @@ export function getIndexedWorktreesById(
   worktreeId: string
 ): Worktree[] {
   return getWorktreeSnapshot(worktreesByRepo).worktreesById.get(worktreeId) ?? []
+}
+
+/**
+ * The bare worktree ids more than one execution host publishes right now.
+ *
+ * This is the whole gate for host-qualified session keys: an id outside this set keeps the exact
+ * bare key it has always had, so the store, the persisted partitions, and the paired-host wire are
+ * unchanged for every install without a collision. Only these ids may hold one bucket per host.
+ */
+export function getContestedWorktreeIds(
+  worktreesByRepo: AppState['worktreesByRepo']
+): ReadonlySet<string> {
+  return getWorktreeSnapshot(worktreesByRepo).contestedIds
 }
 
 export function getIndexedWorktreeById(

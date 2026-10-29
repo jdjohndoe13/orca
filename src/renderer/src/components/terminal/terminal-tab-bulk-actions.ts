@@ -6,6 +6,7 @@ import {
 import { closeWebRuntimeSessionTab, isWebRuntimeSessionActive } from '@/runtime/web-runtime-session'
 import { useAppStore } from '@/store'
 import { reconcileTabOrder } from '../tab-bar/reconcile-order'
+import { resolveWorktreeSessionRowKeyFromStore } from '../terminal-workspace-session-row'
 import { closeLocalTerminalTabState } from './close-local-terminal-tab-state'
 
 const EDITOR_TAB_CONTENT_TYPES = new Set<TabContentType>([
@@ -37,7 +38,10 @@ export function closeOtherTerminalTabs(tabId: string, activeWorktreeId: string |
   if (hasUnroutableTerminalWorktreeOwner(state, activeWorktreeId)) {
     return
   }
-  const currentTabs = state.tabsByWorktree[activeWorktreeId] ?? []
+  // Why the row key: these are the session rows the strip shows, and a contested id's rows live
+  // under `host|id` — a bare read would close the other host's tabs.
+  const rowKey = resolveWorktreeSessionRowKeyFromStore(activeWorktreeId)
+  const currentTabs = state.tabsByWorktree[rowKey] ?? []
   state.setActiveTab(tabId)
   const runtimeEnvironmentId = resolveTerminalWorktreeRoute(
     state,
@@ -45,7 +49,7 @@ export function closeOtherTerminalTabs(tabId: string, activeWorktreeId: string |
   )?.runtimeEnvironmentId
   const closeHostTerminalTabs = isWebRuntimeSessionActive(runtimeEnvironmentId)
   for (const tab of currentTabs) {
-    if (tab.id === tabId || isPinnedVisibleTab(state, activeWorktreeId, tab.id)) {
+    if (tab.id === tabId || isPinnedVisibleTab(state, rowKey, tab.id)) {
       continue
     }
     if (closeHostTerminalTabs) {
@@ -72,7 +76,8 @@ export function closeTerminalTabsToRight(tabId: string, activeWorktreeId: string
   if (hasUnroutableTerminalWorktreeOwner(state, activeWorktreeId)) {
     return
   }
-  const currentTerminalTabs = state.tabsByWorktree[activeWorktreeId] ?? []
+  const rowKey = resolveWorktreeSessionRowKeyFromStore(activeWorktreeId)
+  const currentTerminalTabs = state.tabsByWorktree[rowKey] ?? []
   const currentEditorFiles = state.openFiles.filter((file) => file.worktreeId === activeWorktreeId)
   const runtimeEnvironmentId = resolveTerminalWorktreeRoute(
     state,
@@ -82,7 +87,7 @@ export function closeTerminalTabsToRight(tabId: string, activeWorktreeId: string
   const terminalIds = currentTerminalTabs.map((tab) => tab.id)
   const terminalIdSet = new Set(terminalIds)
   const orderedIds = reconcileTabOrder(
-    state.tabBarOrderByWorktree[activeWorktreeId],
+    state.tabBarOrderByWorktree[rowKey],
     terminalIds,
     currentEditorFiles.map((file) => file.id)
   )
@@ -92,7 +97,7 @@ export function closeTerminalTabsToRight(tabId: string, activeWorktreeId: string
     return
   }
   for (const id of orderedIds.slice(index + 1)) {
-    if (isPinnedVisibleTab(state, activeWorktreeId, id)) {
+    if (isPinnedVisibleTab(state, rowKey, id)) {
       continue
     }
     if (terminalIdSet.has(id)) {
@@ -110,7 +115,7 @@ export function closeTerminalTabsToRight(tabId: string, activeWorktreeId: string
       }
       continue
     }
-    const unifiedTab = (state.unifiedTabsByWorktree?.[activeWorktreeId] ?? []).find(
+    const unifiedTab = (state.unifiedTabsByWorktree?.[rowKey] ?? []).find(
       (tab) => tab.entityId === id && EDITOR_TAB_CONTENT_TYPES.has(tab.contentType)
     )
     if (!unifiedTab?.isPinned) {

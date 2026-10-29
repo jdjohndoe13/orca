@@ -6,6 +6,7 @@ import {
   scheduleActivationDeferredAdmission
 } from './activation-deferred-tab-admission'
 import { revealActivationDeferredTabs } from './background-terminal-worktree-mount'
+import { resolveWorktreeSessionRowKeyFromStore } from '../terminal-workspace-session-row'
 import type { TerminalColdActivationController } from '../terminal-cold-activation'
 
 /**
@@ -60,9 +61,12 @@ export function useActivationDeferredTabAdmission(
     return scheduleActivationDeferredAdmission(() => {
       // Why re-read: tabs can be created or closed between the scheduling frame
       // and this one, and admitting a stale id would strand the restriction.
-      const allTabIds = (useAppStore.getState().tabsByWorktree[worktreeId] ?? []).map(
-        (tab) => tab.id
-      )
+      // Why the row key: the restriction refs are mount-keyed (bare id) but the tab
+      // row is host-qualified for a contested id, so the two must not be confused.
+      const allTabIds = (
+        useAppStore.getState().tabsByWorktree[resolveWorktreeSessionRowKeyFromStore(worktreeId)] ??
+        []
+      ).map((tab) => tab.id)
       const nextTabId = pickNextActivationDeferredTabId(
         allTabIds,
         activationDeferredMountTabIdsByWorktreeRef.current.get(worktreeId)

@@ -3,6 +3,7 @@ import { useAppStore } from '../store'
 import { hasFeatureInteraction } from '../../../shared/feature-interactions'
 import { setForegroundTerminalTabIds } from '@/lib/foreground-terminal-tabs'
 import { useClientHostedBrowserRows } from '@/lib/pane-manager/client-hosted-browser-row-state'
+import { resolveWorkspaceRowKeyFromStore } from './terminal-workspace-session-row'
 import { useTerminalProviderSnapshotCapability } from './terminal/use-terminal-provider-snapshot-capability'
 import { getEffectiveLayoutForWorktree as getEffectiveLayout } from './terminal/split-group-mount'
 import { useContextualTour } from './contextual-tours/use-contextual-tour'
@@ -16,6 +17,7 @@ export function useTerminalWorkspaceProjection(controller: TerminalWorkspaceStor
     activeTabType,
     activeView,
     activeWorktreeId,
+    activeWorktreeSessionRowKey,
     activityTerminalPortals,
     browserTabsByWorktree,
     ensureWorktreeRootGroup,
@@ -43,12 +45,17 @@ export function useTerminalWorkspaceProjection(controller: TerminalWorkspaceStor
     return () => setForegroundTerminalTabIds([])
   }, [foregroundTerminalTabIds])
 
+  // Why the row key and not the bare id: the workbench is bare-id keyed, so clicking another
+  // host's card of a colliding id changes only `activeWorkspaceExecutionHostId`. The bucket
+  // projection passes keys through, so the qualified row is already in this copy — the read
+  // just has to ask for it.
   const tabs = useMemo(
     () =>
-      renderedActiveWorktreeId !== null && Object.hasOwn(tabsByWorktree, renderedActiveWorktreeId)
-        ? tabsByWorktree[renderedActiveWorktreeId]
+      activeWorktreeSessionRowKey !== null &&
+      Object.hasOwn(tabsByWorktree, activeWorktreeSessionRowKey)
+        ? tabsByWorktree[activeWorktreeSessionRowKey]
         : [],
-    [renderedActiveWorktreeId, tabsByWorktree]
+    [activeWorktreeSessionRowKey, tabsByWorktree]
   )
   const terminalProviderSnapshotCapabilityRevision = useTerminalProviderSnapshotCapability(
     workspaceSessionReady && hydrationSucceeded
@@ -63,23 +70,32 @@ export function useTerminalWorkspaceProjection(controller: TerminalWorkspaceStor
   }, [activeWorktreeId, ensureWorktreeRootGroup])
 
   const worktreeFiles = useWorktreeFiles(openFiles, renderedActiveWorktreeId)
-  const worktreeBrowserTabs = renderedActiveWorktreeId
-    ? (browserTabsByWorktree[renderedActiveWorktreeId] ?? [])
-    : []
+  const worktreeBrowserTabs =
+    activeWorktreeSessionRowKey !== null
+      ? (browserTabsByWorktree[activeWorktreeSessionRowKey] ?? [])
+      : []
   // Why: this strip only renders before the worktree has a layout, which is exactly when a paired
   // client can have opened a page the host never has. Without a row here it stays uncloseable.
   const worktreeClientHostedBrowserRows = useClientHostedBrowserRows(renderedActiveWorktreeId ?? '')
   const getEffectiveLayoutForWorktree = useCallback(
     (worktreeId: string) =>
-      getEffectiveLayout(worktreeId, layoutByWorktree, groupsByWorktree, activeGroupIdByWorktree),
+      getEffectiveLayout(
+        // Why the row key: this runs for every mounted surface, and the surface list is bare-id
+        // keyed, so a contested id's layout/group rows have to be asked for by name.
+        resolveWorkspaceRowKeyFromStore(worktreeId),
+        layoutByWorktree,
+        groupsByWorktree,
+        activeGroupIdByWorktree
+      ),
     [activeGroupIdByWorktree, groupsByWorktree, layoutByWorktree]
   )
   const effectiveActiveLayout = renderedActiveWorktreeId
     ? getEffectiveLayoutForWorktree(renderedActiveWorktreeId)
     : undefined
-  const activeWorktreeBrowserTabIdsKey = renderedActiveWorktreeId
-    ? (browserTabsByWorktree[renderedActiveWorktreeId] ?? []).map((tab) => tab.id).join(',')
-    : ''
+  const activeWorktreeBrowserTabIdsKey =
+    activeWorktreeSessionRowKey !== null
+      ? (browserTabsByWorktree[activeWorktreeSessionRowKey] ?? []).map((tab) => tab.id).join(',')
+      : ''
   const activeContextualTourId = useAppStore((state) => state.activeContextualTourId)
   const hasSplitTerminalPane = useAppStore((state) =>
     hasFeatureInteraction(state.featureInteractions, 'terminal-pane-split')

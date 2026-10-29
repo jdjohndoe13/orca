@@ -201,6 +201,9 @@ export function closeTerminalTab(
   // Why: a terminal with a unified row must leave successor choice to closeUnifiedTab's
   // MRU/neighbor repair — a terminal-only pre-pick skips agent-session/simulator neighbors
   // and re-stamps the group active before the canonical repair can run.
+  // Why no row-key resolution here: `owningWorktreeId` came from `resolveTerminalCloseTarget`,
+  // which reads the record's own keys, so it is already the row key (host-qualified for a
+  // contested id) and the same key this close's tab rows live under.
   const hasUnifiedRow = (state.unifiedTabsByWorktree?.[owningWorktreeId] ?? []).some(
     (tab) =>
       tab.contentType === 'terminal' && (tab.entityId === terminalTabId || tab.id === terminalTabId)

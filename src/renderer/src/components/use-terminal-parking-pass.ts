@@ -16,6 +16,7 @@ import { warnTerminalLifecycleAnomaly } from './terminal-pane/terminal-lifecycle
 import { recordTerminalWorktreeParkingDebugVerdicts } from './terminal-pane/terminal-parking-e2e-overrides'
 import { getTerminalWorktreeColdParkRecheckDelayMs } from './terminal-pane/terminal-cold-park-recheck-deadlines'
 import { haveSameIdSet } from './terminal-workspace-model'
+import { resolveWorkspaceRowKeyFromStore } from './terminal-workspace-session-row'
 import {
   canOrdinarilyParkRetentionCandidate,
   collectTerminalParkingPassCandidates
@@ -54,7 +55,7 @@ export function useTerminalParkingPass(controller: TerminalParkingFoundation): v
     const pass = collectTerminalParkingPassCandidates(controller)
     const retentionBudgetCandidates: TerminalWorktreeRetentionCandidate[] =
       pass.retentionCandidates.map((candidate) => {
-        const tabs = tabsByWorktree[candidate.worktreeId] ?? []
+        const tabs = candidate.terminalTabs
         return {
           worktreeId: candidate.worktreeId,
           hiddenSinceMs: candidate.hiddenSinceMs,
@@ -102,7 +103,9 @@ export function useTerminalParkingPass(controller: TerminalParkingFoundation): v
       if (
         captureParkedTerminalBuffers({
           worktreeId,
-          tabIds: (tabsByWorktree[worktreeId] ?? []).map((tab) => tab.id),
+          tabIds: (tabsByWorktree[resolveWorkspaceRowKeyFromStore(worktreeId)] ?? []).map(
+            (tab) => tab.id
+          ),
           repos,
           localOnly: true
         })
@@ -112,7 +115,7 @@ export function useTerminalParkingPass(controller: TerminalParkingFoundation): v
     }
     const nextEvictionExemptTabIds = new Set<string>()
     for (const worktreeId of forceParkedWorktreeIds) {
-      const forceParkedTabs = tabsByWorktree[worktreeId] ?? []
+      const forceParkedTabs = tabsByWorktree[resolveWorkspaceRowKeyFromStore(worktreeId)] ?? []
       const exemptTabIds = selectEvictionExemptTerminalTabIds(worktreeId, forceParkedTabs)
       for (const tabId of exemptTabIds) {
         nextEvictionExemptTabIds.add(tabId)

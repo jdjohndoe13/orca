@@ -7,6 +7,7 @@ import {
 } from './terminal-pane/terminal-hidden-view-parking'
 import { getTerminalParkingPolicyOverrides } from './terminal-pane/terminal-parking-e2e-overrides'
 import { canWatcherCoverParkedTerminalTab } from './terminal-pane/terminal-parked-tab-watchers'
+import { resolveWorkspaceRowKeyFromStore } from './terminal-workspace-session-row'
 import type { TerminalParkingFoundation } from './use-terminal-parking-foundation'
 
 export type TerminalParkingPassCandidates = ReturnType<typeof collectTerminalParkingPassCandidates>
@@ -81,7 +82,10 @@ export function collectTerminalParkingPassCandidates(controller: TerminalParking
 
     retentionCandidates.push({
       worktreeId,
-      terminalTabs: tabsByWorktree[worktreeId] ?? [],
+      // Why the row key: the pass reads every surface's tab row, and a contested id's row lives
+      // under `host|id` — a bare-id read would park (or keep mounted) one host's worktree based
+      // on another host's tabs.
+      terminalTabs: tabsByWorktree[resolveWorkspaceRowKeyFromStore(worktreeId)] ?? [],
       isVisible,
       shouldMeasureHiddenWorktree,
       hasActivityTerminalPortal,
@@ -114,7 +118,12 @@ export function collectTerminalParkingPassCandidates(controller: TerminalParking
       return covered
     })
   for (const worktreeId of Array.from(nextParkedTerminalWorktreeIds)) {
-    if (!worktreeTabsAreWatcherCovered(worktreeId, tabsByWorktree[worktreeId] ?? [])) {
+    if (
+      !worktreeTabsAreWatcherCovered(
+        worktreeId,
+        tabsByWorktree[resolveWorkspaceRowKeyFromStore(worktreeId)] ?? []
+      )
+    ) {
       nextParkedTerminalWorktreeIds.delete(worktreeId)
     }
   }
@@ -135,7 +144,8 @@ export function canOrdinarilyParkRetentionCandidate(
   pass: TerminalParkingPassCandidates,
   candidate: TerminalWorktreeColdParkCandidate
 ): boolean {
-  const tabs = controller.tabsByWorktree[candidate.worktreeId] ?? []
+  const tabs =
+    controller.tabsByWorktree[resolveWorkspaceRowKeyFromStore(candidate.worktreeId)] ?? []
   const parkEligible = canParkTerminalWorktreeRenderers({
     ...candidate,
     parkCooldownUntilMs: null,

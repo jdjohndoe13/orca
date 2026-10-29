@@ -19,6 +19,7 @@ import {
 } from './tabs-tab-order'
 import { resolveUnifiedTabCreatePlacement } from './tabs-create-placement'
 import { folderWorkspaceToWorktree } from '../../../../../shared/folder-workspace-worktree'
+import { resolveWorkspaceSessionRowKey } from '../../workspace-session-key'
 
 export function createTabsCreateActions(
   set: TabsSliceSet,
@@ -29,11 +30,12 @@ export function createTabsCreateActions(
       const id = init?.id ?? createBrowserUuid()
       let created!: Tab
       set((state) => {
-        const existingTabs = state.unifiedTabsByWorktree[worktreeId] ?? []
+        const rowKey = resolveWorkspaceSessionRowKey(state, worktreeId)
+        const existingTabs = state.unifiedTabsByWorktree[rowKey] ?? []
         const placement = resolveUnifiedTabCreatePlacement({
-          groups: state.groupsByWorktree[worktreeId] ?? [],
+          groups: state.groupsByWorktree[rowKey] ?? [],
           tabs: existingTabs,
-          activeGroupId: state.activeGroupIdByWorktree[worktreeId],
+          activeGroupId: state.activeGroupIdByWorktree[rowKey],
           targetGroupId: init?.targetGroupId,
           afterTabId: init?.afterTabId,
           executionHostId: init?.executionHostId,
@@ -47,7 +49,8 @@ export function createTabsCreateActions(
           state.groupsByWorktree,
           state.activeGroupIdByWorktree,
           worktreeId,
-          placement.groupId
+          placement.groupId,
+          rowKey
         )
 
         let nextTabs = existingTabs
@@ -115,11 +118,11 @@ export function createTabsCreateActions(
         return {
           unifiedTabsByWorktree: {
             ...state.unifiedTabsByWorktree,
-            [worktreeId]: [...nextTabs, created]
+            [rowKey]: [...nextTabs, created]
           },
           groupsByWorktree: {
             ...groupsByWorktree,
-            [worktreeId]: updateGroup(groupsByWorktree[worktreeId] ?? [], {
+            [rowKey]: updateGroup(groupsByWorktree[rowKey] ?? [], {
               ...group,
               activeTabId: nextActiveTabId,
               tabOrder: nextOrder,
@@ -129,7 +132,7 @@ export function createTabsCreateActions(
           activeGroupIdByWorktree,
           layoutByWorktree: {
             ...state.layoutByWorktree,
-            [worktreeId]: state.layoutByWorktree[worktreeId] ?? { type: 'leaf', groupId: group.id }
+            [rowKey]: state.layoutByWorktree[rowKey] ?? { type: 'leaf', groupId: group.id }
           }
         }
       })
@@ -145,19 +148,16 @@ export function createTabsCreateActions(
       let created: Tab | null = null
       let moved = false
       set((state) => {
-        const sourceGroup = findGroupForTab(
-          state.groupsByWorktree,
-          worktreeId,
-          target.sourceGroupId
-        )
+        const rowKey = resolveWorkspaceSessionRowKey(state, worktreeId)
+        const sourceGroup = findGroupForTab(state.groupsByWorktree, rowKey, target.sourceGroupId)
         if (!sourceGroup) {
           return state
         }
-        const existingTabs = state.unifiedTabsByWorktree[worktreeId] ?? []
-        const currentGroups = state.groupsByWorktree[worktreeId] ?? []
+        const existingTabs = state.unifiedTabsByWorktree[rowKey] ?? []
+        const currentGroups = state.groupsByWorktree[rowKey] ?? []
         const shouldActivate = init?.activate ?? true
         const currentLayout =
-          state.layoutByWorktree[worktreeId] ??
+          state.layoutByWorktree[rowKey] ??
           ({ type: 'leaf', groupId: target.sourceGroupId } as const)
         const createdAt = Date.now()
         const executionHostId =
@@ -204,20 +204,20 @@ export function createTabsCreateActions(
         )
         const nextUnifiedTabsByWorktree = {
           ...state.unifiedTabsByWorktree,
-          [worktreeId]: [...existingTabs, createdTab]
+          [rowKey]: [...existingTabs, createdTab]
         }
         const nextGroupsByWorktree = {
           ...state.groupsByWorktree,
-          [worktreeId]: [...currentGroups, newGroup]
+          [rowKey]: [...currentGroups, newGroup]
         }
         const nextLayoutByWorktree = {
           ...state.layoutByWorktree,
-          [worktreeId]: replaceLeaf(currentLayout, target.sourceGroupId, replacement)
+          [rowKey]: replaceLeaf(currentLayout, target.sourceGroupId, replacement)
         }
         const nextActiveGroupIdByWorktree = shouldActivate
           ? {
               ...state.activeGroupIdByWorktree,
-              [worktreeId]: newGroupId
+              [rowKey]: newGroupId
             }
           : state.activeGroupIdByWorktree
         moved = true
@@ -236,7 +236,8 @@ export function createTabsCreateActions(
                   activeGroupIdByWorktree: nextActiveGroupIdByWorktree
                 },
                 worktreeId,
-                newGroupId
+                newGroupId,
+                rowKey
               )
             : {})
         }

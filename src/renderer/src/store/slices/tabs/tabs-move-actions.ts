@@ -10,6 +10,7 @@ import {
   pushRecentTabId,
   sanitizeRecentTabIds
 } from '../tab-group-state'
+import { getWorkspaceIdFromSessionKey } from '../../../../../shared/workspace-session-worktree-key'
 
 export function createTabsMoveActions(
   set: TabsSliceSet,
@@ -24,11 +25,15 @@ export function createTabsMoveActions(
         if (!foundTab || !foundTarget || foundTab.worktreeId !== foundTarget.worktreeId) {
           return state
         }
-        const { tab, worktreeId } = foundTab
+        // Both lookups walked the records, so the id they hand back is the row key — `host|id` for
+        // a contested workspace id (STA-4343). Comparing the two is still the right ownership test.
+        const { tab } = foundTab
+        const rowKey = foundTab.worktreeId
+        const worktreeId = getWorkspaceIdFromSessionKey(rowKey)
         if (tab.groupId === targetGroupId) {
           return state
         }
-        const sourceGroup = findGroupForTab(state.groupsByWorktree, worktreeId, tab.groupId)
+        const sourceGroup = findGroupForTab(state.groupsByWorktree, rowKey, tab.groupId)
         const targetGroup = foundTarget.group
         if (!sourceGroup) {
           return state
@@ -46,13 +51,13 @@ export function createTabsMoveActions(
         targetOrder.splice(targetIndex, 0, tabId)
         const nextActiveGroupIdByWorktree = {
           ...state.activeGroupIdByWorktree,
-          [worktreeId]: opts?.activate ? targetGroupId : state.activeGroupIdByWorktree[worktreeId]
+          [rowKey]: opts?.activate ? targetGroupId : state.activeGroupIdByWorktree[rowKey]
         }
         const sourceRecentTabIds = sanitizeRecentTabIds(
           (sourceGroup.recentTabIds ?? []).filter((id) => id !== tabId),
           sourceOrder
         )
-        const nextGroups = (state.groupsByWorktree[worktreeId] ?? []).map((group) => {
+        const nextGroups = (state.groupsByWorktree[rowKey] ?? []).map((group) => {
           if (group.id === sourceGroup.id) {
             return {
               ...group,
@@ -88,18 +93,19 @@ export function createTabsMoveActions(
             nextActiveGroupIdByWorktreeResolved,
             worktreeId,
             sourceGroup.id,
-            targetGroupId
+            targetGroupId,
+            rowKey
           )
           nextLayoutByWorktree = collapsedState.layoutByWorktree
           nextActiveGroupIdByWorktreeResolved = collapsedState.activeGroupIdByWorktree
         }
         const nextGroupsByWorktree = {
           ...state.groupsByWorktree,
-          [worktreeId]: filteredGroups
+          [rowKey]: filteredGroups
         }
         const nextUnifiedTabsByWorktree = {
           ...state.unifiedTabsByWorktree,
-          [worktreeId]: (state.unifiedTabsByWorktree[worktreeId] ?? []).map((candidate) =>
+          [rowKey]: (state.unifiedTabsByWorktree[rowKey] ?? []).map((candidate) =>
             candidate.id === tabId ? { ...candidate, groupId: targetGroupId } : candidate
           )
         }
@@ -118,7 +124,8 @@ export function createTabsMoveActions(
                   activeGroupIdByWorktree: nextActiveGroupIdByWorktreeResolved
                 },
                 worktreeId,
-                nextActiveGroupIdByWorktreeResolved[worktreeId] ?? null
+                nextActiveGroupIdByWorktreeResolved[rowKey] ?? null,
+                rowKey
               )
             : {})
         }

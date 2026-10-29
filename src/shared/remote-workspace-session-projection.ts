@@ -9,6 +9,10 @@ import {
   getWorktreeIdFromHostIdentity,
   isWorktreeHostIdentity
 } from './worktree/host-qualified-identity'
+import {
+  getExecutionHostIdFromSessionKey,
+  getWorkspaceIdFromSessionKey
+} from './workspace-session-worktree-key'
 
 type ExportOptions = {
   isTargetWorktree: (worktreeId: string, executionHostId?: ExecutionHostId) => boolean
@@ -62,8 +66,13 @@ export function exportRemoteWorkspaceSession(
   const tabsByWorktreePath: Record<string, RemoteWorkspaceTerminalTab[]> = {}
   const terminalTabIds = new Set<string>()
 
-  for (const [worktreeId, tabs] of Object.entries(session.tabsByWorktree)) {
-    if (!options.isTargetWorktree(worktreeId)) {
+  for (const [sessionKey, tabs] of Object.entries(session.tabsByWorktree)) {
+    // A contested id is spelled `host|id` in the unified session; the repo lookup and the
+    // target resolution below must see the bare id and the host separately, or the row is
+    // resolved against a repo id (`host|repo`) that exists nowhere and silently dropped.
+    const worktreeId = getWorkspaceIdFromSessionKey(sessionKey)
+    const executionHostId = getExecutionHostIdFromSessionKey(sessionKey) ?? undefined
+    if (!options.isTargetWorktree(worktreeId, executionHostId)) {
       continue
     }
     const worktreePath = worktreePathFromId(worktreeId)
@@ -92,16 +101,26 @@ export function exportRemoteWorkspaceSession(
   }
 
   const activeWorktreePath =
-    session.activeWorktreeId && options.isTargetWorktree(session.activeWorktreeId)
-      ? worktreePathFromId(session.activeWorktreeId)
+    session.activeWorktreeId &&
+    options.isTargetWorktree(
+      getWorkspaceIdFromSessionKey(session.activeWorktreeId),
+      getExecutionHostIdFromSessionKey(session.activeWorktreeId) ?? undefined
+    )
+      ? worktreePathFromId(getWorkspaceIdFromSessionKey(session.activeWorktreeId))
       : null
 
   const activeTabId =
     session.activeTabId && terminalTabIds.has(session.activeTabId) ? session.activeTabId : null
 
   const activeTabIdByWorktreePath: Record<string, string | null> = {}
-  for (const [worktreeId, tabId] of Object.entries(session.activeTabIdByWorktree ?? {})) {
-    if (!options.isTargetWorktree(worktreeId)) {
+  for (const [sessionKey, tabId] of Object.entries(session.activeTabIdByWorktree ?? {})) {
+    const worktreeId = getWorkspaceIdFromSessionKey(sessionKey)
+    if (
+      !options.isTargetWorktree(
+        worktreeId,
+        getExecutionHostIdFromSessionKey(sessionKey) ?? undefined
+      )
+    ) {
       continue
     }
     const worktreePath = worktreePathFromId(worktreeId)
@@ -136,8 +155,14 @@ export function exportRemoteWorkspaceSession(
   }
 
   const defaultTerminalTabsAppliedByWorktreePath: Record<string, true> = {}
-  for (const worktreeId of Object.keys(session.defaultTerminalTabsAppliedByWorktreeId ?? {})) {
-    if (!options.isTargetWorktree(worktreeId)) {
+  for (const sessionKey of Object.keys(session.defaultTerminalTabsAppliedByWorktreeId ?? {})) {
+    const worktreeId = getWorkspaceIdFromSessionKey(sessionKey)
+    if (
+      !options.isTargetWorktree(
+        worktreeId,
+        getExecutionHostIdFromSessionKey(sessionKey) ?? undefined
+      )
+    ) {
       continue
     }
     const worktreePath = worktreePathFromId(worktreeId)
@@ -156,8 +181,13 @@ export function exportRemoteWorkspaceSession(
       )
     ),
     activeWorktreePathsOnShutdown: session.activeWorktreeIdsOnShutdown
-      ?.filter((worktreeId) => options.isTargetWorktree(worktreeId))
-      .map(worktreePathFromId)
+      ?.filter((sessionKey) =>
+        options.isTargetWorktree(
+          getWorkspaceIdFromSessionKey(sessionKey),
+          getExecutionHostIdFromSessionKey(sessionKey) ?? undefined
+        )
+      )
+      .map((sessionKey) => worktreePathFromId(getWorkspaceIdFromSessionKey(sessionKey)))
       .filter((path): path is string => Boolean(path)),
     activeTabIdByWorktreePath,
     remoteSessionIdsByTabId: session.remoteSessionIdsByTabId

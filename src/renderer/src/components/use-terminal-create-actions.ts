@@ -18,6 +18,7 @@ import { showClientCreationActionError } from '@/lib/client-creation-action-erro
 import { openTabBarEntry, type TabCreateEntryArgs } from './tab-bar/tab-create-entry-action'
 import { translate } from '@/i18n/i18n'
 import { getActiveWorktreeRuntimeEnvironmentId } from './terminal-workspace-model'
+import { resolveWorktreeSessionRowKeyFromStore } from './terminal-workspace-session-row'
 import type { TerminalColdActivationController } from './terminal-cold-activation'
 
 export function useTerminalCreateActions(controller: TerminalColdActivationController) {
@@ -36,9 +37,12 @@ export function useTerminalCreateActions(controller: TerminalColdActivationContr
       if (!activeWorktreeId) {
         return
       }
+      // Why the row key: every record below is a session row, and a contested id's rows live
+      // under `host|id` — reading the bare key would group the other host's tabs.
+      const rowKey = resolveWorktreeSessionRowKeyFromStore(activeWorktreeId)
       const targetGroupId =
-        useAppStore.getState().activeGroupIdByWorktree[activeWorktreeId] ??
-        useAppStore.getState().groupsByWorktree[activeWorktreeId]?.[0]?.id
+        useAppStore.getState().activeGroupIdByWorktree[rowKey] ??
+        useAppStore.getState().groupsByWorktree[rowKey]?.[0]?.id
       const runtimeEnvironmentId = getActiveWorktreeRuntimeEnvironmentId(activeWorktreeId)
       if (isWebRuntimeSessionActive(runtimeEnvironmentId)) {
         void createWebRuntimeSessionTerminal({
@@ -57,10 +61,10 @@ export function useTerminalCreateActions(controller: TerminalColdActivationContr
       const newTab = createTab(activeWorktreeId, undefined, shellOverride)
       setActiveTabType('terminal', activeWorktreeId)
       const state = useAppStore.getState()
-      const currentTerminals = state.tabsByWorktree[activeWorktreeId] ?? []
+      const currentTerminals = state.tabsByWorktree[rowKey] ?? []
       const currentEditors = state.openFiles.filter((file) => file.worktreeId === activeWorktreeId)
-      const currentBrowsers = state.browserTabsByWorktree[activeWorktreeId] ?? []
-      const stored = state.tabBarOrderByWorktree[activeWorktreeId]
+      const currentBrowsers = state.browserTabsByWorktree[rowKey] ?? []
+      const stored = state.tabBarOrderByWorktree[rowKey]
       const termIds = currentTerminals.map((tab) => tab.id)
       const editorIds = currentEditors.map((file) => file.id)
       const browserIds = currentBrowsers.map((tab) => tab.id)
@@ -93,9 +97,9 @@ export function useTerminalCreateActions(controller: TerminalColdActivationContr
         return
       }
       const state = useAppStore.getState()
+      const rowKey = resolveWorktreeSessionRowKeyFromStore(activeWorktreeId)
       const targetGroupId =
-        state.activeGroupIdByWorktree[activeWorktreeId] ??
-        state.groupsByWorktree[activeWorktreeId]?.[0]?.id
+        state.activeGroupIdByWorktree[rowKey] ?? state.groupsByWorktree[rowKey]?.[0]?.id
       const result = launchAgentInNewTab({
         requestId: newAgentLaunchRequestId(),
         agent,
@@ -120,9 +124,10 @@ export function useTerminalCreateActions(controller: TerminalColdActivationContr
     if (!activeWorktreeId) {
       return
     }
+    const rowKey = resolveWorktreeSessionRowKeyFromStore(activeWorktreeId)
     const targetGroupId =
-      useAppStore.getState().activeGroupIdByWorktree[activeWorktreeId] ??
-      useAppStore.getState().groupsByWorktree[activeWorktreeId]?.[0]?.id
+      useAppStore.getState().activeGroupIdByWorktree[rowKey] ??
+      useAppStore.getState().groupsByWorktree[rowKey]?.[0]?.id
     void openMobileEmulatorTab(activeWorktreeId, {
       placement: 'rightSplit',
       targetGroupId: targetGroupId ?? undefined
@@ -133,9 +138,10 @@ export function useTerminalCreateActions(controller: TerminalColdActivationContr
     if (!activeWorktreeId) {
       return
     }
+    const rowKey = resolveWorktreeSessionRowKeyFromStore(activeWorktreeId)
     const targetGroupId =
-      useAppStore.getState().activeGroupIdByWorktree[activeWorktreeId] ??
-      useAppStore.getState().groupsByWorktree[activeWorktreeId]?.[0]?.id
+      useAppStore.getState().activeGroupIdByWorktree[rowKey] ??
+      useAppStore.getState().groupsByWorktree[rowKey]?.[0]?.id
     if (targetGroupId) {
       void openNewBrowserTabInActiveWorkspace(targetGroupId).catch(showClientCreationActionError)
       return
@@ -175,7 +181,8 @@ export function useTerminalCreateActions(controller: TerminalColdActivationContr
         return
       }
       const state = useAppStore.getState()
-      const tabs = state.browserTabsByWorktree[activeWorktreeId] ?? []
+      const tabs =
+        state.browserTabsByWorktree[resolveWorktreeSessionRowKeyFromStore(activeWorktreeId)] ?? []
       const source = tabs.find((tab) => tab.id === browserTabId)
       if (!source) {
         return
@@ -219,9 +226,10 @@ export function useTerminalCreateActions(controller: TerminalColdActivationContr
     if (!activeWorktreeId) {
       return
     }
+    const rowKey = resolveWorktreeSessionRowKeyFromStore(activeWorktreeId)
     const targetGroupId =
-      useAppStore.getState().activeGroupIdByWorktree[activeWorktreeId] ??
-      useAppStore.getState().groupsByWorktree[activeWorktreeId]?.[0]?.id
+      useAppStore.getState().activeGroupIdByWorktree[rowKey] ??
+      useAppStore.getState().groupsByWorktree[rowKey]?.[0]?.id
     if (!targetGroupId) {
       return
     }

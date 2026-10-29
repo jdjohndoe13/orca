@@ -30,16 +30,27 @@ export function getEffectiveLayoutForWorktree(
  * to unmount when switching to a newly-activated worktree that has no
  * groups yet — destroying PaneManagers, xterm buffers, and PTY connections.
  */
+/**
+ * `rowKeyOf` maps a surface's bare id to the key its row lives under. The mount list is bare-id
+ * keyed (one surface per workspace id), so without it a contested id reads the primary host's
+ * layout and every other host's pane tree is judged by the wrong row.
+ */
 export function anyMountedWorktreeHasLayout(
   allWorktreeIds: string[],
   mountedWorktreeIds: ReadonlySet<string>,
   layoutByWorktree: Record<string, TabGroupLayoutNode | undefined>,
   groupsByWorktree: Record<string, TabGroup[]>,
-  activeGroupIdByWorktree: Record<string, string | undefined>
+  activeGroupIdByWorktree: Record<string, string | undefined>,
+  rowKeyOf: (worktreeId: string) => string = (worktreeId) => worktreeId
 ): boolean {
   return allWorktreeIds.some(
     (id) =>
       mountedWorktreeIds.has(id) &&
-      getEffectiveLayoutForWorktree(id, layoutByWorktree, groupsByWorktree, activeGroupIdByWorktree)
+      getEffectiveLayoutForWorktree(
+        rowKeyOf(id),
+        layoutByWorktree,
+        groupsByWorktree,
+        activeGroupIdByWorktree
+      )
   )
 }
