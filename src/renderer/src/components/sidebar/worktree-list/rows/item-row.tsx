@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils'
 import type { AppState } from '@/store/types'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import type { Worktree } from '../../../../../../shared/worktree/types'
+import type { ContestedWorkspaceIds } from '../../../../../../shared/workspace-session-worktree-key'
 import { getWorktreeHostIdentity } from '../../../../../../shared/worktree/host-qualified-identity'
 import { isWorkspaceRowActive } from './workspace-row-activation'
 import WorktreeCard, { type ActiveSurfaceVariant } from '../../WorktreeCard'
@@ -34,6 +35,8 @@ export type WorktreeItemRowContext = {
   nativeLineageDropTargetId: string | null
   activeWorktreeId: string | null
   activeWorkspaceExecutionHostId: ExecutionHostId | null
+  // Gate for the contested-id guard in `isWorkspaceRowActive`; the store selector is identity-stable.
+  contestedWorktreeIds: ContestedWorkspaceIds
   currentWorktreeId: string | null
   highlightedRevealRowKey: string | null
   selectedWorktreeIds: ReadonlySet<string>
@@ -142,12 +145,14 @@ export function renderWorktreeItemRow(
   const isActiveWorktree = isWorkspaceRowActive(
     ctx.activeWorktreeId,
     ctx.activeWorkspaceExecutionHostId,
-    itemRow.worktree
+    itemRow.worktree,
+    ctx.contestedWorktreeIds
   )
   const isCurrentWorktree = isWorkspaceRowActive(
     ctx.currentWorktreeId,
     ctx.activeWorkspaceExecutionHostId,
-    itemRow.worktree
+    itemRow.worktree,
+    ctx.contestedWorktreeIds
   )
   return (
     <div

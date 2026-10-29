@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Repo } from '../../../../shared/repo-types'
-import { DEFAULT_REPO_BADGE_COLOR } from '../../../../shared/constants'
-import { getDefaultWorkspaceSession } from '../../../../shared/constants'
+import { DEFAULT_REPO_BADGE_COLOR, getDefaultWorkspaceSession } from '../../../../shared/constants'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
 import {
   buildValidWorktreeIdsForSessionHydration,

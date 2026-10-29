@@ -16,6 +16,7 @@ import type {
   Worktree
 } from '../../../../../../shared/worktree/types'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
+import type { ContestedWorkspaceIds } from '../../../../../../shared/workspace-session-worktree-key'
 import type { HostSectionRow } from '../../host-section-rows'
 import type { ImportedWorktreeCardActionState } from '../../imported-worktrees-card-actions'
 import type { NewExternalWorktreesInboxActionState } from '../../new-external-worktrees-inbox-actions'
@@ -29,6 +30,8 @@ export type VirtualizedWorktreeViewportProps = {
   rows: HostSectionRow[]
   activeWorktreeId: string | null
   activeWorkspaceExecutionHostId: ExecutionHostId | null
+  // Ids more than one host publishes; gates the contested-id active-row guard.
+  contestedWorktreeIds: ContestedWorkspaceIds
   currentWorktreeId: string | null
   groupBy: WorktreeGroupBy
   pinnedDisplayPolicy: PinnedWorktreeDisplayPolicy

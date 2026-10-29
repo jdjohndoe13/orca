@@ -114,7 +114,8 @@ function renderLineageGroupVirtualRow(
     isWorkspaceRowActive(
       ctx.item.activeWorktreeId,
       ctx.item.activeWorkspaceExecutionHostId,
-      child.worktree
+      child.worktree,
+      ctx.item.contestedWorktreeIds
     )
   )
   const parentPreviewOffset = parent

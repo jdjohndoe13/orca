@@ -76,7 +76,10 @@ function itemContext(
   overrides: Partial<
     Pick<
       WorktreeItemRowContext,
-      'activeWorktreeId' | 'activeWorkspaceExecutionHostId' | 'currentWorktreeId'
+      | 'activeWorktreeId'
+      | 'activeWorkspaceExecutionHostId'
+      | 'contestedWorktreeIds'
+      | 'currentWorktreeId'
     >
   >
 ): WorktreeItemRowContext {
@@ -91,6 +94,7 @@ function itemContext(
     nativeLineageDropTargetId: null,
     activeWorktreeId: null,
     activeWorkspaceExecutionHostId: null,
+    contestedWorktreeIds: new Set(),
     currentWorktreeId: null,
     highlightedRevealRowKey: null,
     selectedWorktreeIds: new Set(),
@@ -168,7 +172,10 @@ function folderContext(
   overrides: Partial<
     Pick<
       FolderWorkspaceRowContext,
-      'activeWorktreeId' | 'activeWorkspaceExecutionHostId' | 'currentWorktreeId'
+      | 'activeWorktreeId'
+      | 'activeWorkspaceExecutionHostId'
+      | 'contestedWorktreeIds'
+      | 'currentWorktreeId'
     >
   >
 ): FolderWorkspaceRowContext {
@@ -178,6 +185,7 @@ function folderContext(
     settings: null,
     activeWorktreeId: null,
     activeWorkspaceExecutionHostId: null,
+    contestedWorktreeIds: new Set(),
     currentWorktreeId: null,
     selectedWorktreeIds: new Set(),
     repoMap: new Map(),
@@ -197,7 +205,14 @@ function folderContext(
 }
 
 function virtualItem(index: number): VirtualItem {
-  return { key: index, index, start: index * 100, end: (index + 1) * 100, size: 100, lane: 0 }
+  return {
+    key: index,
+    index,
+    start: index * 100,
+    end: (index + 1) * 100,
+    size: 100,
+    lane: 0
+  }
 }
 
 describe('sidebar host-collision active row', () => {
@@ -219,8 +234,18 @@ describe('sidebar host-collision active row', () => {
       .join('')
 
     expect(cardFlags(markup)).toEqual([
-      { id: 'local|repo-1::/repo', active: 'false', surface: 'false', current: 'false' },
-      { id: 'ssh:host-b|repo-1::/repo', active: 'true', surface: 'true', current: 'true' }
+      {
+        id: 'local|repo-1::/repo',
+        active: 'false',
+        surface: 'false',
+        current: 'false'
+      },
+      {
+        id: 'ssh:host-b|repo-1::/repo',
+        active: 'true',
+        surface: 'true',
+        current: 'true'
+      }
     ])
     expect(markup.match(/aria-current="page"/g)).toHaveLength(1)
   })
@@ -229,14 +254,117 @@ describe('sidebar host-collision active row', () => {
   it('keeps the bare match when the session names no host', () => {
     const markup = renderToStaticMarkup(
       renderWorktreeItemRow(
-        itemContext({ activeWorktreeId: SHARED_ID, currentWorktreeId: SHARED_ID }),
+        itemContext({
+          activeWorktreeId: SHARED_ID,
+          currentWorktreeId: SHARED_ID
+        }),
         itemRow(undefined),
         false
       )
     )
 
     expect(cardFlags(markup)).toEqual([
-      { id: '|repo-1::/repo', active: 'true', surface: 'true', current: 'true' }
+      {
+        id: '|repo-1::/repo',
+        active: 'true',
+        surface: 'true',
+        current: 'true'
+      }
+    ])
+  })
+
+  // The bare match also survives when OTHER ids are contested — the gate is per-id.
+  it('keeps the bare match for an uncontested id while other ids are contested', () => {
+    const markup = renderToStaticMarkup(
+      renderWorktreeItemRow(
+        itemContext({
+          activeWorktreeId: SHARED_ID,
+          currentWorktreeId: SHARED_ID,
+          contestedWorktreeIds: new Set(['other-repo::/other'])
+        }),
+        itemRow(undefined),
+        false
+      )
+    )
+
+    expect(cardFlags(markup)).toEqual([
+      {
+        id: '|repo-1::/repo',
+        active: 'true',
+        surface: 'true',
+        current: 'true'
+      }
+    ])
+  })
+
+  // A contested id whose stamp is null means the activation could not name its host; a bare
+  // match would light every claimant at once, so the guard must match nothing.
+  it('lights no claimant when a contested id is active with no host stamped', () => {
+    const contested = new Set<string>([SHARED_ID])
+    const markup = [itemRow('local'), itemRow('ssh:host-b')]
+      .map((row) =>
+        renderToStaticMarkup(
+          renderWorktreeItemRow(
+            itemContext({
+              activeWorktreeId: SHARED_ID,
+              contestedWorktreeIds: contested,
+              currentWorktreeId: SHARED_ID
+            }),
+            row,
+            false
+          )
+        )
+      )
+      .join('')
+
+    expect(cardFlags(markup)).toEqual([
+      {
+        id: 'local|repo-1::/repo',
+        active: 'false',
+        surface: 'false',
+        current: 'false'
+      },
+      {
+        id: 'ssh:host-b|repo-1::/repo',
+        active: 'false',
+        surface: 'false',
+        current: 'false'
+      }
+    ])
+    expect(markup.match(/aria-current="page"/g)).toBeNull()
+  })
+
+  it('lights no folder claimant when a contested folder id is active with no host stamped', () => {
+    const markup = [folderRow('local'), folderRow('ssh:host-b')]
+      .map((row) =>
+        renderToStaticMarkup(
+          renderFolderWorkspaceVirtualRow({
+            ctx: folderContext({
+              activeWorktreeId: SHARED_FOLDER_ID,
+              contestedWorktreeIds: new Set([SHARED_FOLDER_ID]),
+              currentWorktreeId: SHARED_FOLDER_ID
+            }),
+            row,
+            vItem: virtualItem(0),
+            measureVirtualRowElement: () => {}
+          })
+        )
+      )
+      .join('')
+
+    expect(cardFlags(markup)).toEqual([
+      {
+        id: 'local|folder:shared-folder',
+        active: 'false',
+        surface: 'false',
+        current: 'false'
+      },
+      {
+        id: 'ssh:host-b|folder:shared-folder',
+        active: 'false',
+        surface: 'false',
+        current: 'false'
+      }
     ])
   })
 
@@ -259,7 +387,12 @@ describe('sidebar host-collision active row', () => {
       .join('')
 
     expect(cardFlags(markup)).toEqual([
-      { id: 'local|folder:shared-folder', active: 'false', surface: 'false', current: 'false' },
+      {
+        id: 'local|folder:shared-folder',
+        active: 'false',
+        surface: 'false',
+        current: 'false'
+      },
       {
         id: 'ssh:host-b|folder:shared-folder',
         active: 'true',
@@ -285,7 +418,12 @@ describe('sidebar host-collision active row', () => {
     )
 
     expect(cardFlags(markup)).toEqual([
-      { id: 'ssh:host-b|folder:shared-folder', active: 'false', surface: 'false', current: 'false' }
+      {
+        id: 'ssh:host-b|folder:shared-folder',
+        active: 'false',
+        surface: 'false',
+        current: 'false'
+      }
     ])
   })
 
@@ -299,7 +437,11 @@ describe('sidebar host-collision active row', () => {
       rowKey: 'all:local|child',
       depth: 1,
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the lineage dispatch reads only the id/host fields this child fixture supplies; a full Worktree needs catalog state this suite does not build.
-      worktree: { id: 'child', repoId: 'repo-1', hostId: 'local' } as unknown as Worktree
+      worktree: {
+        id: 'child',
+        repoId: 'repo-1',
+        hostId: 'local'
+      } as unknown as Worktree
     }
 
     const dispatchContext = (
@@ -317,7 +459,10 @@ describe('sidebar host-collision active row', () => {
         activeWorktreeId: 'child',
         worktreeDragState: WORKTREE_ROW_DRAG_INITIAL_STATE,
         orderedHostIds: [],
-        hostDrag: { state: { draggingHostId: null }, onHandlePointerDown: () => {} },
+        hostDrag: {
+          state: { draggingHostId: null },
+          onHandlePointerDown: () => {}
+        },
         toggleGroupWithScrollAnchor: () => {},
         header: {},
         item: itemContext({

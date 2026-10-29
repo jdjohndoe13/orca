@@ -7,6 +7,7 @@ import type {
   WorktreeLineage
 } from '../../../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../../../shared/worktree/types'
+import type { ContestedWorkspaceIds } from '../../../../../../shared/workspace-session-worktree-key'
 import { getWorktreeHostIdentity } from '../../../../../../shared/worktree/host-qualified-identity'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import { isWorkspaceRowActive } from './workspace-row-activation'
@@ -28,6 +29,8 @@ export type FolderWorkspaceRowContext = {
   settings: AppState['settings']
   activeWorktreeId: string | null
   activeWorkspaceExecutionHostId: ExecutionHostId | null
+  // Gate for the contested-id guard in `isWorkspaceRowActive`; the store selector is identity-stable.
+  contestedWorktreeIds: ContestedWorkspaceIds
   currentWorktreeId: string | null
   selectedWorktreeIds: ReadonlySet<string>
   repoMap: Map<string, Repo>
@@ -66,12 +69,14 @@ export function renderFolderWorkspaceVirtualRow(args: {
   const isActiveWorktree = isWorkspaceRowActive(
     ctx.activeWorktreeId,
     ctx.activeWorkspaceExecutionHostId,
-    folderWorktree
+    folderWorktree,
+    ctx.contestedWorktreeIds
   )
   const isCurrentWorktree = isWorkspaceRowActive(
     ctx.currentWorktreeId,
     ctx.activeWorkspaceExecutionHostId,
-    folderWorktree
+    folderWorktree,
+    ctx.contestedWorktreeIds
   )
   const pathStatus = ctx.getCachedFolderWorkspacePathStatus({
     scope: 'folder-workspace',
