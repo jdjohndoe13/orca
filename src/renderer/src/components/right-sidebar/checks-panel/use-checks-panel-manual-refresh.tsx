@@ -3,6 +3,7 @@ import { useAppStore } from '@/store'
 import { buildGitHubPRRefreshStateClearToken } from '@/store/github/pr-refresh-state'
 import { refreshHostedReviewCard } from '@/store/slices/hosted-review-card-refresh'
 import { getRuntimeGitStatus, getRuntimeGitUpstreamStatus } from '@/runtime/runtime-git-client'
+import { gitStatusRefreshExecutionHost } from '../git-status-refresh-execution-host'
 import {
   hasChecksPanelGitStatusBranchChanged,
   readChecksPanelRefreshGitIdentitySnapshot,
@@ -68,6 +69,10 @@ export function useChecksPanelManualRefresh(model: ChecksPanelManualRefreshInput
     }
     // Why: button isn't disabled until next render; guard a rapid double-click from starting duplicate git subprocesses.
     refreshInFlightRef.current = true
+    const identityHost = gitStatusRefreshExecutionHost(
+      ownerSettings,
+      activeConnectionId ?? undefined
+    )
     const initialRequestKey = checksPanelAsyncResultKey(
       prCacheKey,
       branch,
@@ -102,10 +107,11 @@ export function useChecksPanelManualRefresh(model: ChecksPanelManualRefreshInput
           currentBranch: branch
         })
         if (snapshotIdentity.kind === 'changed') {
-          updateWorktreeGitIdentity(activeWorktreeId, {
-            head: snapshotIdentity.head,
-            branch: snapshotIdentity.branch
-          })
+          updateWorktreeGitIdentity(
+            activeWorktreeId,
+            { head: snapshotIdentity.head, branch: snapshotIdentity.branch },
+            identityHost
+          )
           // Why: this click discovered a terminal branch switch; let branch-keyed render/effects restart instead of refreshing old PR data.
           refreshOutcome = 'branch-changed'
           return
@@ -121,10 +127,11 @@ export function useChecksPanelManualRefresh(model: ChecksPanelManualRefreshInput
             admissionTier: 'interactive'
           })
           const observedBranch = status.branch ?? (status.head ? null : undefined)
-          updateWorktreeGitIdentity(activeWorktreeId, {
-            head: status.head,
-            branch: observedBranch
-          })
+          updateWorktreeGitIdentity(
+            activeWorktreeId,
+            { head: status.head, branch: observedBranch },
+            identityHost
+          )
           if (
             observedBranch !== undefined &&
             hasChecksPanelGitStatusBranchChanged({

@@ -3,7 +3,11 @@ import type { WorktreeSliceGet, WorktreeSliceSet } from '../listing/worktree-sli
 import type { Worktree } from '../../../../../../shared/worktree/types'
 import { getRepoIdFromWorktreeId } from '../../worktree-helpers'
 import { branchName } from '@/lib/git-utils'
+import { getContestedWorktreeIds } from '../../../worktree-repo-index'
+import { hasContestedClaim } from '../../../../../../shared/workspace-session-worktree-key'
+import { worktreeRowMatchesMetaHost } from '../listing/worktree-meta-host-match'
 import { detachedHeadAutoDerivedDisplayNames } from './detached-head-display-name'
+import { composeWorktreeHostIdentity } from '../../../../../../shared/worktree/host-qualified-identity'
 import {
   applyHostedReviewLinkClear,
   canonicalHostedReviewBranchIdentity,
@@ -24,12 +28,27 @@ export function createUpdateWorktreeGitIdentity(
   set: WorktreeSliceSet,
   get: WorktreeSliceGet
 ): WorktreeSlice['updateWorktreeGitIdentity'] {
-  return (worktreeId, identity) => {
+  return (worktreeId, identity, executionHostId) => {
     let shouldPersistHostedReviewClear = false
     let clearedBranch: string | null = null
     let clearGeneration = getHostedReviewLinkMutationGeneration(worktreeId)
     const repoId = getRepoIdFromWorktreeId(worktreeId)
-    const existing = get().worktreesByRepo[repoId]?.find((worktree) => worktree.id === worktreeId)
+    const contested = hasContestedClaim(getContestedWorktreeIds(get().worktreesByRepo), worktreeId)
+    // Why: a contested id publishes one row per host (STA-4343). Without this gate a
+    // patch for one host lands on every claimant — branch, head, and the re-derived
+    // auto title — which is the "both rows show the clicked host's name" defect.
+    // An uncontested id, or a caller that names no host, matches every row as before.
+    const rowMatchesHost = (worktree: Worktree): boolean =>
+      !contested || worktreeRowMatchesMetaHost(worktree, executionHostId)
+    // Keep the detached-title cache per host only where the id is contested; the
+    // bare key is the byte-identical spelling for every other install.
+    const detachedKey =
+      contested && executionHostId
+        ? composeWorktreeHostIdentity(executionHostId, worktreeId)
+        : worktreeId
+    const existing = get().worktreesByRepo[repoId]?.find(
+      (worktree) => worktree.id === worktreeId && rowMatchesHost(worktree)
+    )
     if (!existing) {
       return
     }
@@ -47,7 +66,7 @@ export function createUpdateWorktreeGitIdentity(
 
       let changed = false
       const next = current.map((worktree) => {
-        if (worktree.id !== worktreeId) {
+        if (worktree.id !== worktreeId || !rowMatchesHost(worktree)) {
           return worktree
         }
         const nextHead = identity.head ?? worktree.head
@@ -93,15 +112,15 @@ export function createUpdateWorktreeGitIdentity(
         const wasDetachedAutoDerived =
           worktree.branch === '' &&
           nextBranch !== '' &&
-          detachedHeadAutoDerivedDisplayNames.get(worktreeId) === worktree.displayName
+          detachedHeadAutoDerivedDisplayNames.get(detachedKey) === worktree.displayName
         const nextDisplayName =
           (wasAutoDerived || wasDetachedAutoDerived) && nextBranch
             ? branchName(nextBranch)
             : worktree.displayName
         if (identity.branch === null && wasAutoDerived) {
-          detachedHeadAutoDerivedDisplayNames.set(worktreeId, worktree.displayName)
+          detachedHeadAutoDerivedDisplayNames.set(detachedKey, worktree.displayName)
         } else if (identity.branch !== undefined) {
-          detachedHeadAutoDerivedDisplayNames.delete(worktreeId)
+          detachedHeadAutoDerivedDisplayNames.delete(detachedKey)
         }
         return {
           ...worktree,

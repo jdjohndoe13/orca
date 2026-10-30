@@ -3,7 +3,7 @@ import { forgetAgentHibernationTabOutput } from '@/lib/agent-hibernation-output-
 import { forgetForegroundTerminalTabs } from '@/lib/foreground-terminal-tabs'
 import { forgetAgentStartupDeliveriesForTabs } from '@/lib/agent-startup-delivery-guards'
 import { forgetAgentPaneAuthorityAliasesByTabIds } from '../../agent-pane-authority'
-import { forgetDetachedHeadAutoDerivedDisplayName } from '../metadata/detached-head-display-name'
+import { forgetDetachedHeadAutoDerivedDisplayNamesForWorktree } from '../metadata/detached-head-display-name'
 
 export type WorktreePurgeDoomedIds = {
   doomedTabIds: Set<string>
@@ -52,7 +52,7 @@ export function collectWorktreePurgeDoomedIds(
       doomedBrowserWorkspaceIds.add(workspace.id)
     }
     // Why: drop the auto-derived detached-HEAD display name so the module-level map doesn't retain removed worktrees for the session.
-    forgetDetachedHeadAutoDerivedDisplayName(id)
+    forgetDetachedHeadAutoDerivedDisplayNamesForWorktree(id)
   }
   // Why: same rationale for doomed tabs' foreground last-seen timestamps and agent-startup delivery guards — retired tab ids never recur.
   forgetForegroundTerminalTabs(doomedTabIds)

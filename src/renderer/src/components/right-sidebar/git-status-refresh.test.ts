@@ -67,10 +67,14 @@ describe('refreshGitStatusForWorktree', () => {
       admissionTier: 'status'
     })
     expect(deps.setGitStatus).toHaveBeenCalledWith('wt-1', status)
-    expect(deps.updateWorktreeGitIdentity).toHaveBeenCalledWith('wt-1', {
-      head: 'abc123',
-      branch: 'refs/heads/feature'
-    })
+    expect(deps.updateWorktreeGitIdentity).toHaveBeenCalledWith(
+      'wt-1',
+      {
+        head: 'abc123',
+        branch: 'refs/heads/feature'
+      },
+      'ssh:ssh-1'
+    )
     expect(deps.setUpstreamStatus).toHaveBeenCalledWith('wt-1', status.upstreamStatus)
     expect(deps.fetchUpstreamStatus).not.toHaveBeenCalled()
   })
@@ -122,10 +126,14 @@ describe('refreshGitStatusForWorktree', () => {
     })
 
     expect(deps.setGitStatus).toHaveBeenCalledWith('wt-2', status)
-    expect(deps.updateWorktreeGitIdentity).toHaveBeenCalledWith('wt-2', {
-      head: 'def456',
-      branch: 'refs/heads/main'
-    })
+    expect(deps.updateWorktreeGitIdentity).toHaveBeenCalledWith(
+      'wt-2',
+      {
+        head: 'def456',
+        branch: 'refs/heads/main'
+      },
+      'ssh:ssh-2'
+    )
     expect(deps.setUpstreamStatus).not.toHaveBeenCalled()
     expect(deps.fetchUpstreamStatus).toHaveBeenCalledWith('wt-2', '/repo', 'ssh-2', undefined, {
       runtimeTargetSettings: undefined,
@@ -389,9 +397,13 @@ describe('refreshGitStatusForWorktree', () => {
       deps
     })
 
-    expect(deps.updateWorktreeGitIdentity).toHaveBeenCalledWith('wt-detached', {
-      head: 'abc123456789',
-      branch: null
-    })
+    expect(deps.updateWorktreeGitIdentity).toHaveBeenCalledWith(
+      'wt-detached',
+      {
+        head: 'abc123456789',
+        branch: null
+      },
+      'local'
+    )
   })
 })

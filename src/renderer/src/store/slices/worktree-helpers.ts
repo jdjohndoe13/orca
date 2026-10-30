@@ -378,7 +378,13 @@ export type WorktreeSlice = {
   migrateWorktreeIdentity: (oldWorktreeId: string, newWorktreeId: string) => void
   updateWorktreeGitIdentity: (
     worktreeId: string,
-    identity: { head?: string; branch?: string | null }
+    identity: { head?: string; branch?: string | null },
+    /**
+     * The host whose row(s) this identity belongs to. Only gates rows when the
+     * id is contested (one repo on several hosts, STA-4343); uncontested ids
+     * patch every row of the id exactly as before.
+     */
+    executionHostId?: ExecutionHostId
   ) => void
   updateWorktreeBaseStatus: (event: WorktreeBaseStatusEvent) => void
   updateWorktreeRemoteBranchConflict: (event: WorktreeRemoteBranchConflictEvent) => void

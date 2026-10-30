@@ -1,11 +1,13 @@
 import type { Worktree, WorktreeHeadIdentity } from '../../../shared/worktree/types'
+import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../../shared/execution-host'
 import { normalizeRuntimePathForComparison } from '../../../shared/cross-platform-path'
 
 export type WorktreeHeadIdentityApplyDeps = {
   getWorktreesForRepo: (repoId: string) => Worktree[] | undefined
   updateWorktreeGitIdentity: (
     worktreeId: string,
-    identity: { head?: string; branch?: string | null }
+    identity: { head?: string; branch?: string | null },
+    executionHostId?: ExecutionHostId
   ) => void
 }
 
@@ -38,9 +40,16 @@ export function applyWorktreeHeadIdentities(
     if (!worktree) {
       continue
     }
-    deps.updateWorktreeGitIdentity(worktree.id, {
-      head: identity.head,
-      branch: identity.branch
-    })
+    // Why: the event is the LOCAL gitdir's head data, but the path is shared
+    // across hosts' rows (both `C:/vmd`), so name the local host explicitly —
+    // a contested id must not let this watcher's data repaint a sibling host's row.
+    deps.updateWorktreeGitIdentity(
+      worktree.id,
+      {
+        head: identity.head,
+        branch: identity.branch
+      },
+      LOCAL_EXECUTION_HOST_ID
+    )
   }
 }
