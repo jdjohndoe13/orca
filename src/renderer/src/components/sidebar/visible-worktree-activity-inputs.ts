@@ -1,7 +1,7 @@
 import type { BrowserWorkspace } from '../../../../shared/browser-workspace-types'
 import type { Tab } from '../../../../shared/tab-types'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
-import { getStructuredAgentSessionTabs } from '@/components/native-chat/structured-agent-session-tabs'
+import { isStructuredTab } from '@/components/native-chat/structured-agent-session-tabs'
 import { createWorktreeTabBucketProjection } from '@/lib/worktree-tab-bucket-projection'
 
 export type TerminalActivityTab = Pick<TerminalTab, 'id'>
@@ -59,9 +59,19 @@ export function getWorktreeIdsWithStructuredChat(
   if (cached) {
     return cached
   }
-  const worktreeIds = new Set(
-    getStructuredAgentSessionTabs(unifiedTabsByWorktree).map((tab) => tab.worktreeId)
-  )
+  // Why the bucket key and not `tab.worktreeId` (STA-4343): the paired-host mirror qualifies the
+  // record keys while the tab's own field stays the host's bare id, so the field would name the
+  // shared bucket and one host's chat would keep every claimant's card awake. The bucket is the
+  // spelling the reader asks about; an uncontested id's bucket is the bare id, as before.
+  const worktreeIds = new Set<string>()
+  for (const [worktreeId, tabs] of Object.entries(unifiedTabsByWorktree)) {
+    for (const tab of tabs) {
+      if (isStructuredTab(tab)) {
+        worktreeIds.add(worktreeId)
+        break
+      }
+    }
+  }
   structuredChatWorktreeIds.set(unifiedTabsByWorktree, worktreeIds)
   return worktreeIds
 }

@@ -15,7 +15,11 @@ import { useAppStore } from '@/store'
 import { useAllWorktrees, useRepoMap, useWorktreeMap } from '@/store/selectors'
 import { cn } from '@/lib/utils'
 import { isImeCompositionKeyDown } from '@/lib/ime-composition-keyboard-event'
-import { useWorktreeActivityStatuses } from './use-worktree-activity-statuses'
+import {
+  useWorktreeActivityRowKeys,
+  useWorktreeActivityStatuses
+} from './use-worktree-activity-statuses'
+import type { WorktreeStatus } from '@/lib/worktree-status'
 import { WorktreeParentPickerRow } from './WorktreeParentPickerRow'
 import { getEligibleWorktreeParents } from './worktree-parent-candidates'
 import {
@@ -259,14 +263,30 @@ export function WorktreeParentPickerPopover({
   const virtualRows = virtualizer.getVirtualItems()
   // Why: the hook memoizes its store selector on this array's identity, so a
   // fresh array each render would rebuild the status map on every render.
-  const visibleWorktreeIds = useMemo(
+  // The rows carry their own host (STA-4343): a contested id's status lives
+  // under `host|id`, so the batch must resolve each candidate's row key.
+  const visibleWorktreeRows = useMemo(
     () =>
-      virtualRows
-        .map((row) => filtered[row.index]?.id)
-        .filter((id): id is string => id !== undefined),
+      virtualRows.flatMap((row) => {
+        const candidate = filtered[row.index]
+        return candidate
+          ? [{ filteredIndex: row.index, id: candidate.id, hostId: candidate.hostId }]
+          : []
+      }),
     [filtered, virtualRows]
   )
-  const statuses = useWorktreeActivityStatuses(visibleWorktreeIds)
+  const statuses = useWorktreeActivityStatuses(visibleWorktreeRows)
+  const visibleRowKeys = useWorktreeActivityRowKeys(visibleWorktreeRows)
+  // The status map is keyed by the row KEY, so read it back through the
+  // positionally paired row key; the candidate id would collide the two
+  // claimants of a contested id onto one status.
+  const statusByFilteredIndex = useMemo(() => {
+    const byIndex = new Map<number, WorktreeStatus>()
+    visibleWorktreeRows.forEach((row, position) => {
+      byIndex.set(row.filteredIndex, statuses.get(visibleRowKeys[position] ?? row.id) ?? 'inactive')
+    })
+    return byIndex
+  }, [statuses, visibleRowKeys, visibleWorktreeRows])
 
   const moveHighlight = useCallback(
     (nextIndex: number) => {
@@ -397,7 +417,7 @@ export function WorktreeParentPickerPopover({
                       <WorktreeParentPickerRow
                         candidate={candidate}
                         repo={repoMap.get(candidate.repoId)}
-                        status={statuses.get(candidate.id) ?? 'inactive'}
+                        status={statusByFilteredIndex.get(virtualRow.index) ?? 'inactive'}
                         isCurrent={activeWorktreeId === candidate.id}
                       />
                     </div>

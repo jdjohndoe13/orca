@@ -12,6 +12,9 @@ import {
 } from '../../../../shared/agent-status-types'
 import { agentVerdictDisplayMark } from '../../../../shared/agent-main-agent-verdict'
 import { applyAgentPaneActivityFlags } from '@/lib/agent-pane-activity-flags'
+import { isWebTerminalSurfaceTabId } from '../../../../shared/terminal-surface-id'
+import { getContestedWorktreeIds } from '@/store/worktree-repo-index'
+import { agentRowBucketKey } from '../../../../shared/worktree/agent-row-bucket-key'
 
 export type WorktreeAgentActivitySummary = {
   hasPermission: boolean
@@ -59,6 +62,8 @@ export type AgentActivityInput = Pick<
 > & {
   tabsByWorktree: AgentActivityTabsByWorktree
   runtimeAgentOrchestrationByPaneKey?: AppState['runtimeAgentOrchestrationByPaneKey']
+  /** Only the contested-id set is read; an absent catalog means no collision. */
+  worktreesByRepo?: AppState['worktreesByRepo']
 }
 
 type AgentActivityCache = {
@@ -67,11 +72,18 @@ type AgentActivityCache = {
   migrationUnsupportedByPtyId: AppState['migrationUnsupportedByPtyId']
   retainedAgentsByPaneKey: AppState['retainedAgentsByPaneKey']
   runtimeAgentOrchestrationByPaneKey: AppState['runtimeAgentOrchestrationByPaneKey'] | undefined
+  worktreesByRepo: AppState['worktreesByRepo'] | undefined
   summaries: Map<string, WorktreeAgentActivitySummary>
 }
 
 let agentActivityCache: AgentActivityCache | null = null
 
+/**
+ * The summary for one card, keyed by the card's SESSION ROW KEY (STA-4343): a
+ * contested id's rows live under `host|id`, so a bare read would show every
+ * claimant the same agent's state — the bug behind one host's spinner painting
+ * every host's card. An uncontested id keeps the bare key byte-identically.
+ */
 export function selectWorktreeAgentActivitySummary(
   state: AgentActivityInput,
   worktreeId: string
@@ -83,16 +95,19 @@ function getWorktreeAgentActivitySummaries(
   state: AgentActivityInput
 ): Map<string, WorktreeAgentActivitySummary> {
   const runtimeAgentOrchestrationByPaneKey = state.runtimeAgentOrchestrationByPaneKey
+  const worktreesByRepo = state.worktreesByRepo
   if (
     agentActivityCache &&
     agentActivityCache.tabsByWorktree === state.tabsByWorktree &&
     agentActivityCache.agentStatusEpoch === state.agentStatusEpoch &&
     agentActivityCache.migrationUnsupportedByPtyId === state.migrationUnsupportedByPtyId &&
     agentActivityCache.retainedAgentsByPaneKey === state.retainedAgentsByPaneKey &&
-    agentActivityCache.runtimeAgentOrchestrationByPaneKey === runtimeAgentOrchestrationByPaneKey
+    agentActivityCache.runtimeAgentOrchestrationByPaneKey === runtimeAgentOrchestrationByPaneKey &&
+    agentActivityCache.worktreesByRepo === worktreesByRepo
   ) {
     return agentActivityCache.summaries
   }
+  const contested = getContestedWorktreeIds(worktreesByRepo)
 
   // Why: status dots render once per visible worktree. Build the tab/worktree
   // index once per store snapshot so agent pings are O(worktrees + agents),
@@ -124,10 +139,25 @@ function getWorktreeAgentActivitySummaries(
       entry,
       runtimeAgentOrchestrationByPaneKey?.[paneKey]
     )
-    const worktreeId = resolveAgentStatusWorktreeId(entry, tabIdToWorktreeId, orchestration)
-    if (!worktreeId) {
+    const resolvedWorktreeId = resolveAgentStatusWorktreeId(entry, tabIdToWorktreeId, orchestration)
+    if (!resolvedWorktreeId) {
       continue
     }
+    // Why the row key (STA-4343): a paired host reports its OWN bare id, so the
+    // resolved id alone merges both claimants' rows into one bucket — the bug
+    // behind one host's working agent spinning every host's card. The entry's
+    // transport stamp names the host, exactly as the sidebar's inline rows
+    // bucket them (`liveEntryWorktreeId`); an uncontested id keeps the bare key.
+    const remote = Boolean(entry.connectionId) || isWebTerminalSurfaceTabId(paneIdentity.tabId)
+    const worktreeId =
+      agentRowBucketKey({
+        worktreeId: resolvedWorktreeId,
+        // A mirrored tab id can collide, so the tab index is not evidence here.
+        tabRowKey: remote ? undefined : tabIdToWorktreeId.get(paneIdentity.tabId),
+        tabId: paneIdentity.tabId,
+        entry,
+        contested
+      }) ?? resolvedWorktreeId
     const summary = summaryForWorktree(worktreeId)
     if (entry.restoredUnconfirmed) {
       addAgentStatusPaneId(summary, paneIdentity.tabId, paneIdentity.paneId)
@@ -156,7 +186,18 @@ function getWorktreeAgentActivitySummaries(
   }
 
   for (const retained of Object.values(state.retainedAgentsByPaneKey ?? {})) {
-    const summary = summaryForWorktree(retained.worktreeId)
+    // The retained row's own worktreeId stays bare by design; the bucket is the
+    // card's row key, so a contested id splits per host like the live rows
+    // (same rule as the sidebar's inline rows in `worktree-agent-row-selectors`).
+    const bucketedWorktreeId =
+      agentRowBucketKey({
+        worktreeId: retained.worktreeId,
+        tabRowKey: tabIdToWorktreeId.get(retained.tab.id),
+        tabId: retained.tab.id,
+        entry: retained.entry,
+        contested
+      }) ?? retained.worktreeId
+    const summary = summaryForWorktree(bucketedWorktreeId)
     // Why: a failed agent is retained so its failure stays visible, not so it reads done.
     if (agentVerdictDisplayMark(retained.entry) === 'failed') {
       summary.hasRetainedFailed = true
@@ -171,7 +212,7 @@ function getWorktreeAgentActivitySummaries(
       retained.entry,
       runtimeAgentOrchestrationByPaneKey?.[retained.entry.paneKey]
     )
-    addParentPaneId(summary, orchestration, retained.worktreeId, tabIdToWorktreeId)
+    addParentPaneId(summary, orchestration, bucketedWorktreeId, tabIdToWorktreeId)
   }
 
   // Why: epoch changes rebuild every summary, so reuse structurally equal results
@@ -192,6 +233,7 @@ function getWorktreeAgentActivitySummaries(
     migrationUnsupportedByPtyId: state.migrationUnsupportedByPtyId,
     retainedAgentsByPaneKey: state.retainedAgentsByPaneKey,
     runtimeAgentOrchestrationByPaneKey,
+    worktreesByRepo,
     summaries
   }
   return summaries

@@ -15,7 +15,7 @@ import {
 import { selectWorktreeAgentOrchestration } from './worktree-agent-orchestration-index'
 import { createWorktreeRecordSelector } from '@/store/worktree-record-selector-cache'
 import { getContestedWorktreeIds } from '@/store/worktree-repo-index'
-import { agentRowBucketKey } from './worktree-agent-row-bucket-key'
+import { agentRowBucketKey } from '../../../../shared/worktree/agent-row-bucket-key'
 import { getLiveTabIdToWorktreeId, getTabIdToWorktreeId } from './worktree-agent-tab-index'
 import type { TerminalLayoutSnapshot } from '../../../../shared/terminal-tab-types'
 

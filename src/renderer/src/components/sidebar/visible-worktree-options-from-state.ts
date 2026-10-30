@@ -2,6 +2,7 @@ import type { Repo } from '../../../../shared/repo-types'
 import { getSettingsFocusedExecutionHostId } from '../../../../shared/execution-host'
 import { getWorktreeIdsWithLiveAgent } from '@/lib/worktree-activity-state'
 import type { useAppStore } from '@/store'
+import { getContestedWorktreeIds } from '@/store/worktree-repo-index'
 import { getWorktreeIdsWithStructuredChat } from './visible-worktree-activity-inputs'
 import {
   EMPTY_PAIRED_DEVICE_IDS_BY_ENVIRONMENT,
@@ -29,8 +30,10 @@ export function buildVisibleWorktreeOptionsFromState(
     worktreeIdsWithLiveAgent: getWorktreeIdsWithLiveAgent(
       state.agentStatusByPaneKey,
       state.tabsByWorktree,
-      Date.now()
+      Date.now(),
+      getContestedWorktreeIds(state.worktreesByRepo)
     ),
+    contestedWorktreeIds: getContestedWorktreeIds(state.worktreesByRepo),
     worktreeIdsWithStructuredChat: getWorktreeIdsWithStructuredChat(state.unifiedTabsByWorktree),
     hideDefaultBranchWorkspace: state.hideDefaultBranchWorkspace,
     hideAutomationGeneratedWorkspaces: state.hideAutomationGeneratedWorkspaces,

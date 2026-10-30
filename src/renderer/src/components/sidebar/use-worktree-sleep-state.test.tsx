@@ -5,6 +5,9 @@ import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import type { Tab } from '../../../../shared/tab-types'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
+import type { Worktree } from '../../../../shared/worktree/types'
+import type { ExecutionHostId } from '../../../../shared/execution-host'
+import { composeWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import {
   useIsSleepingWorktree,
   resetWorktreeSleepStateCacheForTests
@@ -22,6 +25,7 @@ type MockState = {
   runtimeAgentOrchestrationByPaneKey: Record<string, NonNullable<AgentStatusEntry['orchestration']>>
   migrationUnsupportedByPtyId: Record<string, never>
   retainedAgentsByPaneKey: Record<string, unknown>
+  worktreesByRepo: Record<string, Worktree[]>
 }
 
 let mockState: MockState
@@ -81,8 +85,14 @@ function makeUnifiedTab(args: {
   }
 }
 
-function SleepProbe({ worktreeId }: { worktreeId: string }) {
-  return <span>{String(useIsSleepingWorktree(worktreeId))}</span>
+function SleepProbe({
+  worktreeId,
+  hostId
+}: {
+  worktreeId: string
+  hostId?: ExecutionHostId | null
+}) {
+  return <span>{String(useIsSleepingWorktree(worktreeId, hostId))}</span>
 }
 
 describe('useIsSleepingWorktree', () => {
@@ -101,7 +111,8 @@ describe('useIsSleepingWorktree', () => {
       agentStatusByPaneKey: {},
       runtimeAgentOrchestrationByPaneKey: {},
       migrationUnsupportedByPtyId: {},
-      retainedAgentsByPaneKey: {}
+      retainedAgentsByPaneKey: {},
+      worktreesByRepo: {}
     }
   })
 
@@ -271,5 +282,45 @@ describe('useIsSleepingWorktree', () => {
     }
 
     expect(renderToStaticMarkup(<SleepProbe worktreeId={worktreeId} />)).toBe('<span>true</span>')
+  })
+
+  // The moon must follow the row key (STA-4343): a contested id's rows live
+  // under `host|id`, so the bare read would paint a moon on a card with a
+  // live console, and one host's agent would keep the co-claimant awake.
+  it('keeps the contested card with a live console awake and the agentless one asleep', () => {
+    const repoId = '2f26b94b-7ab6-458c-a8e1-b711dcc03eb1'
+    const vmdId = `${repoId}::C:/vmd`
+    const winA = 'runtime:9937524c-610f-45f2-8a66-68fa9deaac33'
+    const winB = 'runtime:989e103b-98c7-403b-946f-c117ebd72a9d'
+    const keyA = composeWorktreeHostIdentity(winA, vmdId)
+    const keyB = composeWorktreeHostIdentity(winB, vmdId)
+    const row = (hostId: string): Worktree =>
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test fixture carries only the fields the contested gate reads.
+      ({ id: vmdId, repoId, hostId }) as unknown as Worktree
+    const paneKey = makePaneKey('tab-a', LEAF_ID)
+    const entry: AgentStatusEntry = {
+      ...makeAgentStatusEntry({ paneKey, state: 'working', worktreeId: vmdId }),
+      connectionId: null
+    }
+    mockState = {
+      ...mockState,
+      worktreesByRepo: { [repoId]: [row(winA), row(winB)] },
+      tabsByWorktree: {
+        [keyA]: [makeTab('tab-a', keyA)],
+        [keyB]: [makeTab('tab-b', keyB)]
+      },
+      ptyIdsByTabId: { 'tab-a': ['pty-a'] },
+      agentStatusByPaneKey: { [paneKey]: entry }
+    }
+
+    // win-a: live PTY + its own working agent → awake.
+    expect(renderToStaticMarkup(<SleepProbe worktreeId={vmdId} hostId={winA} />)).toBe(
+      '<span>false</span>'
+    )
+    // win-b: a tab with no live PTY and no agent of its own → asleep, even
+    // though win-a's agent shares the bare id.
+    expect(renderToStaticMarkup(<SleepProbe worktreeId={vmdId} hostId={winB} />)).toBe(
+      '<span>true</span>'
+    )
   })
 })

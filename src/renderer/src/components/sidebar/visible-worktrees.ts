@@ -51,6 +51,10 @@ import { isWorkspaceFromOtherDevice } from './workspace-creator-visibility'
 import { isDefaultBranchWorkspace } from './default-branch-workspace'
 import { getLineageAncestorIndex, getSortedWorktreeRankIndex } from './visible-worktree-indexes'
 import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
+import {
+  workspaceSessionKey,
+  type ContestedWorkspaceIds
+} from '../../../../shared/workspace-session-worktree-key'
 
 /**
  * Whether the "Hide sleeping" sweep must keep this row (#8873).
@@ -72,6 +76,8 @@ export type VisibleWorktreeOptions = {
   browserTabsByWorktree?: Record<string, { id: string }[]> | null
   worktreeIdsWithLiveAgent: ReadonlySet<string>
   worktreeIdsWithStructuredChat?: ReadonlySet<string>
+  /** The contested-id set (STA-4343); the sleep filter folds each row's id to its row key. */
+  contestedWorktreeIds?: ContestedWorkspaceIds
   hideDefaultBranchWorkspace: boolean
   hideAutomationGeneratedWorkspaces: boolean
   hideCliCreatedWorkspaces: boolean
@@ -149,11 +155,18 @@ export function computeVisibleWorktrees(
   if (!opts.showSleepingWorkspaces) {
     // Why no !hideDefaultBranchWorkspace term: that filter already ran above, so
     // an explicit hide still wins over the exemption.
+    // Why the row key (STA-4343): a contested id's tabs and agent rows live under
+    // `host|id`, so the bare read would find nothing for either claimant and sweep
+    // a card that has a live console.
     all = all.filter(
       (w) =>
         isSleepingSweepExemptWorkspace(w, opts.alwaysShowDefaultBranchWorkspace) ||
         !isInactiveWorkspace(
-          w.id,
+          workspaceSessionKey(
+            w.id,
+            getWorktreeExecutionHostId(w, opts.repoMap.get(w.repoId), opts.defaultHostId),
+            opts.contestedWorktreeIds
+          ),
           opts.tabsByWorktree,
           opts.ptyIdsByTabId,
           opts.browserTabsByWorktree,

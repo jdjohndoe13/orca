@@ -147,6 +147,7 @@ export function WorktreeCardParentContent({
         >
           <WorktreeCardStatusSlot
             worktreeId={worktree.id}
+            hostId={worktree.hostId}
             showStatus={showStatus}
             showUnreadAction={showUnreadQuickAction}
             isUnread={worktree.isUnread}

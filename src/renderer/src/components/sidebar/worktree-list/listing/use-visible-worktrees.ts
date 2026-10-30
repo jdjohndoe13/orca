@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useAppStore } from '@/store'
 import { getAgentStatusEpochNow } from '@/lib/agent-status-epoch-clock'
 import { getWorktreeIdsWithLiveAgent } from '@/lib/worktree-activity-state'
+import { getContestedWorktreeIds } from '@/store/worktree-repo-index'
 import type { Repo } from '../../../../../../shared/repo-types'
 import type { WorktreeLineage } from '../../../../../../shared/worktree/lineage-types'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
@@ -92,8 +93,10 @@ export function useVisibleSidebarWorktrees(args: {
         : getWorktreeIdsWithLiveAgent(
             useAppStore.getState().agentStatusByPaneKey,
             tabsByWorktree,
-            agentStatusNow
+            agentStatusNow,
+            getContestedWorktreeIds(worktreesByRepo)
           ),
+      contestedWorktreeIds: getContestedWorktreeIds(worktreesByRepo),
       hideDefaultBranchWorkspace,
       hideAutomationGeneratedWorkspaces,
       hideCliCreatedWorkspaces,

@@ -1,21 +1,18 @@
-import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
+import type { AgentStatusEntry } from '../agent-status-types'
 import {
   LOCAL_EXECUTION_HOST_ID,
   toRuntimeExecutionHostId,
   toSshExecutionHostId,
   type ExecutionHostId
-} from '../../../../shared/execution-host'
-import { isWebTerminalSurfaceTabId } from '../../../../shared/terminal-surface-id'
+} from '../execution-host'
+import { isWebTerminalSurfaceTabId } from '../terminal-surface-id'
 import {
   composeWorktreeHostIdentity,
   getWorktreeIdFromHostIdentity,
   isWorktreeHostIdentity
-} from '../../../../shared/worktree/host-qualified-identity'
-import {
-  hasContestedClaim,
-  type ContestedWorkspaceIds
-} from '../../../../shared/workspace-session-worktree-key'
-import { canonicalizeWorktreeId } from '../../../../shared/worktree/id'
+} from './host-qualified-identity'
+import { hasContestedClaim, type ContestedWorkspaceIds } from '../workspace-session-worktree-key'
+import { canonicalizeWorktreeId } from './id'
 
 /**
  * The row bucket one agent row belongs to — the same string the card reads

@@ -15,7 +15,10 @@ function makeStatusState(): StatusState {
     agentStatusByPaneKey: {},
     migrationUnsupportedByPtyId: {},
     retainedAgentsByPaneKey: {},
-    runtimeAgentOrchestrationByPaneKey: {}
+    runtimeAgentOrchestrationByPaneKey: {},
+    worktreesByRepo: {},
+    activeWorktreeId: null,
+    activeWorkspaceExecutionHostId: null
   }
 }
 

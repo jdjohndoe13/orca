@@ -11,6 +11,7 @@ import { useIsSleepingWorktree } from './use-worktree-sleep-state'
 import type { WorktreeCardPrDisplay } from './worktree-card-pr-display'
 import { getReviewLabel, ReviewIcon } from './worktree-review-helpers'
 import type { WorkspaceReviewChecksSummary } from '../../../../shared/workspace-review-checks'
+import type { ExecutionHostId } from '../../../../shared/execution-host'
 import {
   WorkspaceReviewChecksIndicator,
   workspaceReviewChecksLabel
@@ -18,6 +19,8 @@ import {
 
 type WorktreeCardStatusSlotProps = {
   worktreeId: string
+  /** The card's own row's host (STA-4343); the status and moon read the row key. */
+  hostId?: ExecutionHostId | null
   showStatus: boolean
   showUnreadAction: boolean
   isUnread: boolean
@@ -101,6 +104,7 @@ function getReviewStatusLabel(review: WorktreeCardPrDisplay): string {
 
 export function WorktreeCardStatusSlot({
   worktreeId,
+  hostId,
   showStatus,
   showUnreadAction,
   isUnread,
@@ -115,8 +119,8 @@ export function WorktreeCardStatusSlot({
   className
 }: WorktreeCardStatusSlotProps): React.JSX.Element | null {
   const collectionChecks = reviewChecks && reviewChecks.total > 1 ? reviewChecks : undefined
-  const status = useWorktreeActivityStatus(worktreeId)
-  const isSleeping = useIsSleepingWorktree(worktreeId)
+  const status = useWorktreeActivityStatus(worktreeId, hostId)
+  const isSleeping = useIsSleepingWorktree(worktreeId, hostId)
   const statusLabel = getWorktreeStatusLabel(status) || status
   // Why: sleep must stay distinct from awake completion; a sleeping workspace
   // never collapses into branch/PR, even when retained done rows keep its

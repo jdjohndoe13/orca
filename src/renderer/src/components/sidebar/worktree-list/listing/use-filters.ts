@@ -23,6 +23,8 @@ import {
 } from '../../workspace-creator-visibility'
 import { getAgentStatusEpochNow } from '@/lib/agent-status-epoch-clock'
 import { getWorktreeIdsWithLiveAgent, isInactiveWorkspace } from '@/lib/worktree-activity-state'
+import { getContestedWorktreeIds } from '@/store/worktree-repo-index'
+import { workspaceSessionKey } from '../../../../../../shared/workspace-session-worktree-key'
 import {
   getVisibleWorktreeBrowserActivityTabs,
   getVisibleWorktreeTerminalActivityTabs,
@@ -122,15 +124,20 @@ export function useSidebarWorktreeFilters() {
       const browserTabsByWorktree = getVisibleWorktreeBrowserActivityTabs(
         state.browserTabsByWorktree
       )
+      // Why the row key (STA-4343): a contested id's rows live under `host|id`,
+      // so the bare read would call this card asleep and flip the wrong
+      // user-facing filter on.
+      const contested = getContestedWorktreeIds(state.worktreesByRepo)
       const liveAgentWorktrees = getWorktreeIdsWithLiveAgent(
         state.agentStatusByPaneKey,
         tabsByWorktree,
-        getAgentStatusEpochNow(state.agentStatusEpoch)
+        getAgentStatusEpochNow(state.agentStatusEpoch),
+        contested
       )
       if (
         !isSleepingSweepExemptWorkspace(worktree, state.alwaysShowDefaultBranchWorkspace) &&
         isInactiveWorkspace(
-          worktree.id,
+          workspaceSessionKey(worktree.id, targetHostId, contested),
           tabsByWorktree,
           state.ptyIdsByTabId,
           browserTabsByWorktree,

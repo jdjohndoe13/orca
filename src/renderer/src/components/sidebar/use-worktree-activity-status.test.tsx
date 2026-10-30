@@ -3,6 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import type { TerminalLayoutSnapshot, TerminalTab } from '../../../../shared/terminal-tab-types'
+import type { Worktree } from '../../../../shared/worktree/types'
+import type { ExecutionHostId } from '../../../../shared/execution-host'
+import { composeWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
+import { toWebTerminalSurfaceTabId } from '../../../../shared/terminal-surface-id'
 import { useWorktreeActivityStatus } from './use-worktree-activity-status'
 
 const LEAF_ID = '11111111-1111-4111-8111-111111111111'
@@ -20,6 +24,7 @@ type MockState = {
   runtimeAgentOrchestrationByPaneKey: Record<string, NonNullable<AgentStatusEntry['orchestration']>>
   migrationUnsupportedByPtyId: Record<string, never>
   retainedAgentsByPaneKey: Record<string, unknown>
+  worktreesByRepo: Record<string, Worktree[]>
 }
 
 let mockState: MockState
@@ -96,8 +101,14 @@ function makeThreePaneLayout(): TerminalLayoutSnapshot {
   }
 }
 
-function StatusProbe({ worktreeId }: { worktreeId: string }) {
-  return <span>{useWorktreeActivityStatus(worktreeId)}</span>
+function StatusProbe({
+  worktreeId,
+  hostId
+}: {
+  worktreeId: string
+  hostId?: ExecutionHostId | null
+}) {
+  return <span>{useWorktreeActivityStatus(worktreeId, hostId)}</span>
 }
 
 describe('useWorktreeActivityStatus', () => {
@@ -113,7 +124,8 @@ describe('useWorktreeActivityStatus', () => {
       agentStatusByPaneKey: {},
       runtimeAgentOrchestrationByPaneKey: {},
       migrationUnsupportedByPtyId: {},
-      retainedAgentsByPaneKey: {}
+      retainedAgentsByPaneKey: {},
+      worktreesByRepo: {}
     }
   })
 
@@ -347,6 +359,48 @@ describe('useWorktreeActivityStatus', () => {
     )
     expect(renderToStaticMarkup(<StatusProbe worktreeId={secondWorktreeId} />)).toBe(
       '<span>done</span>'
+    )
+  })
+
+  // The reported multi-host bug (STA-4343): one repo on two paired runtimes,
+  // win-a's working agent mirrored with the HOST's bare worktreeId and the
+  // environment stamp. The win-b card (a plain console, no agent) must not
+  // paint the spinner — the bare-key read used to merge both claimants.
+  it('paints only the publishing host spinner for a contested paired-host row', () => {
+    const repoId = '2f26b94b-7ab6-458c-a8e1-b711dcc03eb1'
+    const vmdId = `${repoId}::C:/vmd`
+    const winA = 'runtime:9937524c-610f-45f2-8a66-68fa9deaac33'
+    const winB = 'runtime:989e103b-98c7-403b-946f-c117ebd72a9d'
+    const keyA = composeWorktreeHostIdentity(winA, vmdId)
+    const keyB = composeWorktreeHostIdentity(winB, vmdId)
+    const mirroredTabA = toWebTerminalSurfaceTabId('host-tab-a')
+    const paneKey = makePaneKey(mirroredTabA, LEAF_ID)
+    const row = (hostId: string): Worktree =>
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test fixture carries only the fields the contested gate reads.
+      ({ id: vmdId, repoId, hostId }) as unknown as Worktree
+    const entry: AgentStatusEntry = {
+      ...makeAgentStatusEntry({ paneKey, state: 'working', worktreeId: vmdId }),
+      connectionId: winA.slice('runtime:'.length)
+    }
+    mockState = {
+      ...mockState,
+      worktreesByRepo: { [repoId]: [row(winA), row(winB)] },
+      tabsByWorktree: {
+        [keyA]: [makeTab(mirroredTabA, keyA)],
+        [keyB]: [makeTab(toWebTerminalSurfaceTabId('host-tab-b'), keyB)]
+      },
+      ptyIdsByTabId: {
+        [mirroredTabA]: ['pty-a'],
+        [toWebTerminalSurfaceTabId('host-tab-b')]: ['pty-b']
+      },
+      agentStatusByPaneKey: { [paneKey]: entry }
+    }
+
+    expect(renderToStaticMarkup(<StatusProbe worktreeId={vmdId} hostId={winA} />)).toBe(
+      '<span>working</span>'
+    )
+    expect(renderToStaticMarkup(<StatusProbe worktreeId={vmdId} hostId={winB} />)).toBe(
+      '<span>active</span>'
     )
   })
 })

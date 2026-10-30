@@ -24,7 +24,7 @@ export function getWorkspaceReferenceRefreshTargets(
     state,
     options
   )) {
-    if (selectIsSleepingWorktree(state, worktree.id)) {
+    if (selectIsSleepingWorktree(state, worktree.id, worktree.hostId)) {
       continue
     }
     const branchKey = getHostedReviewCacheKey(

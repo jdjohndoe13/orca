@@ -4,7 +4,7 @@ import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import { isWebTerminalSurfaceTabId } from '../../../../shared/terminal-surface-id'
 import type { ContestedWorkspaceIds } from '../../../../shared/workspace-session-worktree-key'
-import { agentRowBucketKey } from './worktree-agent-row-bucket-key'
+import { agentRowBucketKey } from '../../../../shared/worktree/agent-row-bucket-key'
 
 export type LiveEntriesByWorktreeCache = {
   tabsByWorktree: AppState['tabsByWorktree']

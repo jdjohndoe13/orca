@@ -1,9 +1,14 @@
 import { useAppStore } from '@/store'
 import { getAgentStatusEpochNow } from '@/lib/agent-status-epoch-clock'
 import { getWorktreeIdsWithLiveAgent, isInactiveWorkspace } from '@/lib/worktree-activity-state'
+import { getContestedWorktreeIds } from '@/store/worktree-repo-index'
+import { resolveWorkspaceSessionHost } from '@/store/workspace-session-key'
+import { workspaceSessionKey } from '../../../../shared/workspace-session-worktree-key'
 import { getWorktreeIdsWithStructuredChat } from './visible-worktree-activity-inputs'
+import type { ExecutionHostId } from '../../../../shared/execution-host'
 import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import type { Tab } from '../../../../shared/tab-types'
+import type { AppState } from '@/store/types'
 
 type TabLike = { id: string }
 
@@ -16,11 +21,16 @@ type SleepStateInput = {
   ptyIdsByTabId?: Record<string, string[]> | null
   browserTabsByWorktree?: Record<string, readonly TabLike[]> | null
   unifiedTabsByWorktree?: Record<string, Tab[]> | null
+  /** Only the contested-id set is read; an absent catalog means no collision. */
+  worktreesByRepo?: AppState['worktreesByRepo']
+  activeWorkspaceExecutionHostId?: AppState['activeWorkspaceExecutionHostId']
+  activeWorktreeId?: AppState['activeWorktreeId']
 }
 
 type LiveAgentGeneration = {
   agentStatusByPaneKey: SleepStateInput['agentStatusByPaneKey']
   tabsByWorktree: SleepStateInput['tabsByWorktree']
+  worktreesByRepo: SleepStateInput['worktreesByRepo']
   agentStatusNow: number
   worktreeIds: ReadonlySet<string>
 }
@@ -37,6 +47,7 @@ function selectWorktreeIdsWithLiveAgent(state: SleepStateInput): ReadonlySet<str
     liveAgentGeneration &&
     liveAgentGeneration.agentStatusByPaneKey === state.agentStatusByPaneKey &&
     liveAgentGeneration.tabsByWorktree === state.tabsByWorktree &&
+    liveAgentGeneration.worktreesByRepo === state.worktreesByRepo &&
     liveAgentGeneration.agentStatusNow === agentStatusNow
   ) {
     return liveAgentGeneration.worktreeIds
@@ -44,11 +55,13 @@ function selectWorktreeIdsWithLiveAgent(state: SleepStateInput): ReadonlySet<str
   const worktreeIds = getWorktreeIdsWithLiveAgent(
     state.agentStatusByPaneKey,
     state.tabsByWorktree,
-    agentStatusNow
+    agentStatusNow,
+    getContestedWorktreeIds(state.worktreesByRepo)
   )
   liveAgentGeneration = {
     agentStatusByPaneKey: state.agentStatusByPaneKey,
     tabsByWorktree: state.tabsByWorktree,
+    worktreesByRepo: state.worktreesByRepo,
     agentStatusNow,
     worktreeIds
   }
@@ -66,10 +79,30 @@ function selectWorktreeIdsWithLiveAgent(state: SleepStateInput): ReadonlySet<str
  * Why `isInactiveWorkspace`: the hide-sleeping filter decides with that same
  * predicate, so the moon and the filter cannot disagree about which workspaces
  * are asleep.
+ *
+ * `hostId` is the card's own row's host (STA-4343): the rows live under the
+ * session row key, so a bare read of a contested id would find no tabs and
+ * paint a moon on a card with a live console.
  */
-export function selectIsSleepingWorktree(state: SleepStateInput, worktreeId: string): boolean {
-  return isInactiveWorkspace(
+export function selectIsSleepingWorktree(
+  state: SleepStateInput,
+  worktreeId: string,
+  hostId?: ExecutionHostId | null
+): boolean {
+  const rowKey = workspaceSessionKey(
     worktreeId,
+    resolveWorkspaceSessionHost(
+      {
+        activeWorktreeId: state.activeWorktreeId ?? null,
+        activeWorkspaceExecutionHostId: state.activeWorkspaceExecutionHostId ?? null
+      },
+      worktreeId,
+      hostId
+    ),
+    getContestedWorktreeIds(state.worktreesByRepo)
+  )
+  return isInactiveWorkspace(
+    rowKey,
     state.tabsByWorktree,
     state.ptyIdsByTabId,
     state.browserTabsByWorktree,
@@ -78,8 +111,11 @@ export function selectIsSleepingWorktree(state: SleepStateInput, worktreeId: str
   )
 }
 
-export function useIsSleepingWorktree(worktreeId: string): boolean {
-  return useAppStore((state) => selectIsSleepingWorktree(state, worktreeId))
+export function useIsSleepingWorktree(
+  worktreeId: string,
+  hostId?: ExecutionHostId | null
+): boolean {
+  return useAppStore((state) => selectIsSleepingWorktree(state, worktreeId, hostId))
 }
 
 export function resetWorktreeSleepStateCacheForTests(): void {

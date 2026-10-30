@@ -138,6 +138,39 @@ it('retains both explicit owners when equal visible workspace IDs exist on two h
       local: [{ ...workspace, hostId: 'local' }],
       remote: [{ ...workspace, hostId: 'ssh:remote' }]
     },
+    // The contested-id (STA-4343) store invariant: the session rows live under
+    // the host keys, not the bare id, so the sleep check must see the browser
+    // tab awake its own row.
+    browserTabsByWorktree: {
+      'local|repo::/repo/feature': [
+        {
+          id: 'browser',
+          worktreeId: workspace.id,
+          url: '',
+          title: '',
+          loading: false,
+          faviconUrl: null,
+          canGoBack: false,
+          canGoForward: false,
+          loadError: null,
+          createdAt: 1
+        }
+      ],
+      'ssh:remote|repo::/repo/feature': [
+        {
+          id: 'browser',
+          worktreeId: workspace.id,
+          url: '',
+          title: '',
+          loading: false,
+          faviconUrl: null,
+          canGoBack: false,
+          canGoForward: false,
+          loadError: null,
+          createdAt: 1
+        }
+      ]
+    },
     sshConnectionStates: new Map([
       ['remote', { targetId: 'remote', status: 'connected', error: null, reconnectAttempt: 0 }]
     ])

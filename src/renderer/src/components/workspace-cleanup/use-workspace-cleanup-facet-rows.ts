@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useAppStore } from '@/store'
 import { getLiveAgentStatusByWorktreeId } from '@/lib/worktree-activity-state'
+import { getContestedWorktreeIds } from '@/store/worktree-repo-index'
 import type { HostedReviewProvider } from '../../../../shared/hosted-review'
 import type { WorkspaceCleanupCandidate } from '../../../../shared/workspace-cleanup'
 import type {
@@ -137,9 +138,16 @@ export function useWorkspaceCleanupFacetRows({
     }),
     [repos, sources.workspaceStatuses, worktreesByRepo]
   )
+  const contestedWorktreeIds = getContestedWorktreeIds(worktreesByRepo)
   const liveAgentStatusByWorktreeId = useMemo(
-    () => getLiveAgentStatusByWorktreeId(sources.agentStatusByPaneKey, sources.tabsByWorktree, now),
-    [now, sources.agentStatusByPaneKey, sources.tabsByWorktree]
+    () =>
+      getLiveAgentStatusByWorktreeId(
+        sources.agentStatusByPaneKey,
+        sources.tabsByWorktree,
+        now,
+        contestedWorktreeIds
+      ),
+    [now, sources.agentStatusByPaneKey, sources.tabsByWorktree, contestedWorktreeIds]
   )
   // Why (STA-4343): dismissals are keyed by host-qualified identity, so the keys
   // ARE identities — comparing them to a bare worktreeId never matched.
@@ -184,6 +192,7 @@ export function useWorkspaceCleanupFacetRows({
           sizeBytesByWorktreeId: sizeByWorktreeId,
           lastVisitedAtByWorktreeId: sources.lastVisitedAtByWorktreeId,
           liveAgentStatusByWorktreeId,
+          contestedWorktreeIds,
           reviewInfoByWorktreeId,
           dismissedIdentities
         },
@@ -191,6 +200,7 @@ export function useWorkspaceCleanupFacetRows({
       }),
     [
       candidates,
+      contestedWorktreeIds,
       dismissedIdentities,
       facetContext,
       liveAgentStatusByWorktreeId,

@@ -5,6 +5,7 @@ import type { Repo } from '../../../../shared/repo-types'
 import type { Worktree } from '../../../../shared/worktree/types'
 import { computeVisibleWorktrees } from './visible-worktrees'
 import { getWorktreeIdsWithLiveAgent } from '@/lib/worktree-activity-state'
+import { getContestedWorktreeIds } from '@/store/worktree-repo-index'
 import { getSettingsFocusedExecutionHostId } from '../../../../shared/execution-host'
 import type { AppState } from '@/store/types'
 import {
@@ -63,16 +64,24 @@ export function useVisibleWorkspaceKanbanWorktreeIds({
   // agent on unrelated store writes; membership changes advance this tick. Keep
   // the epoch itself in the deps — two bumps in one millisecond share a sample,
   // so `agentStatusNow` alone would not re-key the memo.
+  const contestedWorktreeIds = getContestedWorktreeIds(worktreesByRepo)
   const worktreeIdsWithLiveAgent = useMemo(() => {
     void agentStatusEpoch
     return !showSleepingWorkspaces
       ? getWorktreeIdsWithLiveAgent(
           useAppStore.getState().agentStatusByPaneKey,
           tabsByWorktree,
-          agentStatusNow
+          agentStatusNow,
+          contestedWorktreeIds
         )
       : EMPTY_WORKTREE_ID_SET
-  }, [agentStatusEpoch, agentStatusNow, showSleepingWorkspaces, tabsByWorktree])
+  }, [
+    agentStatusEpoch,
+    agentStatusNow,
+    showSleepingWorkspaces,
+    tabsByWorktree,
+    contestedWorktreeIds
+  ])
 
   return useMemo(() => {
     // Why: the board has its own status ordering, but visibility must match
@@ -87,6 +96,7 @@ export function useVisibleWorkspaceKanbanWorktreeIds({
         browserTabsByWorktree,
         worktreeIdsWithLiveAgent,
         worktreeIdsWithStructuredChat,
+        contestedWorktreeIds,
         hideDefaultBranchWorkspace,
         hideAutomationGeneratedWorkspaces,
         hideCliCreatedWorkspaces,
@@ -109,6 +119,7 @@ export function useVisibleWorkspaceKanbanWorktreeIds({
   }, [
     allWorktrees,
     browserTabsByWorktree,
+    contestedWorktreeIds,
     filterRepoIds,
     hideDefaultBranchWorkspace,
     hideAutomationGeneratedWorkspaces,

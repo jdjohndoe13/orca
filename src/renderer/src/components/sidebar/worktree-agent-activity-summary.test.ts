@@ -5,6 +5,9 @@ import {
   type AgentStatusEntry
 } from '../../../../shared/agent-status-types'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
+import { composeWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
+import { toWebTerminalSurfaceTabId } from '../../../../shared/terminal-surface-id'
+import type { Worktree } from '../../../../shared/worktree/types'
 import { resolveWorktreeStatus } from '@/lib/worktree-status'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import {
@@ -639,5 +642,104 @@ describe('selectWorktreeAgentActivitySummary', () => {
     })
 
     expect(status).toBe('active')
+  })
+
+  // The reported multi-host bug (STA-4343): one repo registered on two paired
+  // runtimes publishes the same id, so both cards share the bare id. win-a's
+  // working agent arrives through the mirror with the HOST's own bare
+  // `worktreeId` and the environment id as its transport stamp; the row's
+  // bucket is the `host|id` key the mirror writes. Reading the bare key used
+  // to merge both claimants into one bucket — one host's spinner painted
+  // every claimant's card.
+  const REPO_ID = '2f26b94b-7ab6-458c-a8e1-b711dcc03eb1'
+  const VMD_ID = `${REPO_ID}::C:/vmd`
+  const WIN_A = 'runtime:9937524c-610f-45f2-8a66-68fa9deaac33'
+  const WIN_B = 'runtime:989e103b-98c7-403b-946f-c117ebd72a9d'
+  const ENV_A = WIN_A.slice('runtime:'.length)
+  const KEY_A = composeWorktreeHostIdentity(WIN_A, VMD_ID)
+  const KEY_B = composeWorktreeHostIdentity(WIN_B, VMD_ID)
+
+  function catalogRow(hostId: string): Worktree {
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test fixture carries only the fields the contested gate reads.
+    return { id: VMD_ID, repoId: REPO_ID, hostId } as unknown as Worktree
+  }
+
+  function mirroredWorkingEntry(hostTabId: string): AgentStatusEntry {
+    const tabId = toWebTerminalSurfaceTabId(hostTabId)
+    return {
+      ...makeAgentStatusEntry({
+        paneKey: makePaneKey(tabId, LEAF_ID),
+        state: 'working',
+        worktreeId: VMD_ID
+      }),
+      connectionId: ENV_A
+    }
+  }
+
+  function contestedState(worktreesByRepo: Record<string, Worktree[]>): AgentActivityInput {
+    const entry = mirroredWorkingEntry('host-tab-a')
+    return {
+      tabsByWorktree: {
+        [KEY_A]: [makeTab(toWebTerminalSurfaceTabId('host-tab-a'), KEY_A)],
+        [KEY_B]: [makeTab(toWebTerminalSurfaceTabId('host-tab-b'), KEY_B)]
+      },
+      agentStatusEpoch: 0,
+      agentStatusByPaneKey: { [entry.paneKey]: entry },
+      migrationUnsupportedByPtyId: {},
+      runtimeAgentOrchestrationByPaneKey: {},
+      retainedAgentsByPaneKey: {},
+      worktreesByRepo
+    }
+  }
+
+  it('buckets a contested paired-host working row under the publishing host only', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(2_000)
+    const state = contestedState({ [REPO_ID]: [catalogRow(WIN_A), catalogRow(WIN_B)] })
+
+    expect(selectWorktreeAgentActivitySummary(state, KEY_A).hasLiveWorking).toBe(true)
+    // The co-claimant's card and the bare key must not see the other host's
+    // agent — the bug painted the spinner on every claimant's card.
+    expect(selectWorktreeAgentActivitySummary(state, KEY_B).hasLiveWorking).toBe(false)
+    expect(selectWorktreeAgentActivitySummary(state, VMD_ID).hasLiveWorking).toBe(false)
+  })
+
+  it('buckets a contested retained row under the publishing host only', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(2_000)
+    const entry = mirroredWorkingEntry('host-tab-a')
+    const state: AgentActivityInput = {
+      ...contestedState({ [REPO_ID]: [catalogRow(WIN_A), catalogRow(WIN_B)] }),
+      agentStatusByPaneKey: {},
+      retainedAgentsByPaneKey: {
+        [entry.paneKey]: {
+          entry,
+          worktreeId: VMD_ID,
+          tab: makeTab(toWebTerminalSurfaceTabId('host-tab-a'), KEY_A),
+          agentType: 'claude',
+          startedAt: 1_000
+        }
+      }
+    }
+
+    expect(selectWorktreeAgentActivitySummary(state, KEY_A).hasRetainedDone).toBe(true)
+    expect(selectWorktreeAgentActivitySummary(state, KEY_B).hasRetainedDone).toBe(false)
+    expect(selectWorktreeAgentActivitySummary(state, VMD_ID).hasRetainedDone).toBe(false)
+  })
+
+  it('keeps the bare key byte-identical when the id is uncontested', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(2_000)
+    const entry = mirroredWorkingEntry('host-tab-a')
+    const state: AgentActivityInput = {
+      // The store's uncontested shape: rows under the bare id, and the catalog
+      // names a single host.
+      tabsByWorktree: { [VMD_ID]: [makeTab(toWebTerminalSurfaceTabId('host-tab-a'), VMD_ID)] },
+      agentStatusEpoch: 0,
+      agentStatusByPaneKey: { [entry.paneKey]: entry },
+      migrationUnsupportedByPtyId: {},
+      runtimeAgentOrchestrationByPaneKey: {},
+      retainedAgentsByPaneKey: {},
+      worktreesByRepo: { [REPO_ID]: [catalogRow(WIN_A)] }
+    }
+
+    expect(selectWorktreeAgentActivitySummary(state, VMD_ID).hasLiveWorking).toBe(true)
   })
 })

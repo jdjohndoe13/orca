@@ -17,6 +17,7 @@ import {
   getWorkspaceCleanupCandidateIdentity,
   getWorkspaceCleanupHostIdentity
 } from './workspace-cleanup-host-identity'
+import { workspaceSessionKey } from '../../../../shared/workspace-session-worktree-key'
 import { getWorktreeVisitTimestamp } from '@/lib/worktree-visit-recency'
 
 /**
@@ -110,7 +111,14 @@ export function computeWorkspaceCleanupFacetList(args: {
       id: candidate.worktreeId,
       hostId: getWorkspaceCleanupCandidateHostId(candidate)
     })
-    const agentState = sources.liveAgentStatusByWorktreeId.get(candidate.worktreeId)
+    const agentState = sources.liveAgentStatusByWorktreeId.get(
+      // The row key (STA-4343) — mirrors buildWorkspaceCleanupFacets' lookup.
+      workspaceSessionKey(
+        candidate.worktreeId,
+        getWorkspaceCleanupCandidateHostId(candidate),
+        sources.contestedWorktreeIds
+      )
+    )
     const review =
       sources.reviewInfoByWorktreeId.get(hostIdentity) ??
       sources.reviewInfoByWorktreeId.get(candidate.worktreeId)
