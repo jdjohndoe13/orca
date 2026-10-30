@@ -32,4 +32,14 @@ describe('getRepoOwnedWorktreeMeta', () => {
   it('keeps legacy metadata for a single-owner repo', () => {
     expect(resolve(localRepo, 1)).toBe(localMeta)
   })
+
+  it('rejects a host-stamped bare row when the repo count is stale', () => {
+    // Two paired hosts claim one id, but the co-claimant's repo row is not registered here,
+    // so repoOwnerCount still reads 1 — the row's own hostId is the only host evidence.
+    expect(resolve(sshRepo, 1)).toBeUndefined()
+  })
+
+  it('keeps a host-stamped bare row for its own host at a single-owner count', () => {
+    expect(resolve(localRepo, 1)).toBe(localMeta)
+  })
 })

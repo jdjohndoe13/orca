@@ -18,5 +18,14 @@ export function isWorktreeMetaOwnedByRepo(
   meta: WorktreeMeta | undefined,
   repoOwnerCount: number
 ): meta is WorktreeMeta {
-  return Boolean(meta && (repoOwnerCount === 1 || meta.hostId === getRepoExecutionHostId(repo)))
+  if (!meta) {
+    return false
+  }
+  const expectedHostId = getRepoExecutionHostId(repo)
+  // Why: a host-stamped bare row names its own owner — `repoOwnerCount === 1` is stale evidence
+  // (the co-claimant's repo row may not be registered here), so the row's own hostId wins.
+  if (meta.hostId && meta.hostId !== expectedHostId) {
+    return false
+  }
+  return repoOwnerCount === 1 || meta.hostId === expectedHostId
 }

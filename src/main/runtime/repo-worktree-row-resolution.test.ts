@@ -114,6 +114,65 @@ describe('host-qualified scoped worktree resolution', () => {
       displayName: 'feature'
     })
   })
+
+  it('does not stamp a host-stamped bare row onto a second host at a stale single-owner count', async () => {
+    // Two paired hosts publish this id, but only one repo row for the id is registered here,
+    // so the owner count still reads 1 — the bare row's own hostId must veto the fallback.
+    const deps = createDeps([repo('shared', '/remote/repo', { executionHostId: 'runtime:win-b' })])
+    const worktreeId = 'shared::/same/worktree'
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Fixture omits unrelated required WorktreeMeta fields; the resolver only reads the fields present here.
+    deps.metaById[worktreeId] = {
+      displayName: 'issue-3.5-wip',
+      hostId: 'runtime:win-a',
+      instanceId: 'win-a-instance'
+    } as unknown as WorktreeMeta
+
+    const rows = await resolveRepoWorktreeRows(
+      deps,
+      deps.store.getRepos()[0]!,
+      deps.metaById,
+      new Map(),
+      1
+    )
+
+    expect(rows[0]).toMatchObject({ hostId: 'runtime:win-b', displayName: 'feature' })
+  })
+
+  it('stamps a second host from its per-host entry when the bare row names another host', async () => {
+    const deps = createDeps([repo('shared', '/remote/repo', { executionHostId: 'runtime:win-b' })])
+    const worktreeId = 'shared::/same/worktree'
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Fixture omits unrelated required WorktreeMeta fields; the resolver only reads the fields present here.
+    deps.metaById[worktreeId] = {
+      displayName: 'issue-3.5-wip',
+      hostId: 'runtime:win-a',
+      instanceId: 'win-a-instance'
+    } as unknown as WorktreeMeta
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Fixture omits unrelated required WorktreeMeta fields; the resolver only reads the fields present here.
+    const winBMeta = {
+      displayName: 'win-b workspace',
+      hostId: 'runtime:win-b',
+      instanceId: 'win-b-instance'
+    } as unknown as WorktreeMeta
+    ;(
+      deps.store as Store & {
+        getWorktreeMetaForHost: () => WorktreeMeta
+      }
+    ).getWorktreeMetaForHost = () => winBMeta
+
+    const rows = await resolveRepoWorktreeRows(
+      deps,
+      deps.store.getRepos()[0]!,
+      deps.metaById,
+      new Map(),
+      1
+    )
+
+    expect(rows[0]).toMatchObject({
+      hostId: 'runtime:win-b',
+      displayName: 'win-b workspace',
+      instanceId: 'win-b-instance'
+    })
+  })
   it('uses the host-qualified metadata owner when a legacy row has another host', async () => {
     const deps = createDeps([
       repo('shared', '/remote/repo', {
