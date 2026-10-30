@@ -93,7 +93,11 @@ export function TerminalLegacyTerminalPanes({
                 }
                 const terminalPane = (
                   <TerminalPane
-                    key={`${tab.id}-${tab.generation ?? 0}`}
+                    // Why the row key: the two rows of a contested id can hold the SAME tab id
+                    // (mirrored `web-terminal-<hostTabId>`), so switching hosts must change the
+                    // mount identity or the pane keeps its xterm on the other host's dead stream.
+                    // An uncontested id resolves to the bare row key, keeping the key byte-identical.
+                    key={`${rowKey === workspace.id ? '' : `${rowKey}|`}${tab.id}-${tab.generation ?? 0}`}
                     tabId={tab.id}
                     worktreeId={workspace.id}
                     cwd={tab.startupCwd ?? workspace.path}

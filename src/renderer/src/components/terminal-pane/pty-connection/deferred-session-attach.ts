@@ -11,6 +11,7 @@ import type { ConnectPanePtySession } from './connect-pane-pty-session'
 
 import { runDeferredSessionReattachChoice } from './deferred-session-reattach-choice'
 import { recoverUnverifiableDirectSshReattach } from './direct-ssh-reattach-recovery'
+import { findPaneWorktreeTabForState } from './pane-worktree-row-lookup'
 
 export function runDeferredSessionAttach(session: ConnectPanePtySession): void {
   const isCurrentPaneTransport = (): boolean =>
@@ -35,8 +36,13 @@ export function runDeferredSessionAttach(session: ConnectPanePtySession): void {
         ? (session.deps.restoredPtyIdByLeafId[session.deps.restoredLeafId] ?? null)
         : null
     const deferredTabSessionId = storeState.deferredSshSessionIdsByTabId[session.deps.tabId]
-    const tabPtyId = storeState.tabsByWorktree[session.deps.worktreeId]?.find(
-      (t) => t.id === session.deps.tabId
+    // The row the pane's overlay mounted it from — the ACTIVE host's row for a contested id; the
+    // bare key misses its `host|id` bucket and the gate would read a missing session as a dead one.
+    const tabPtyId = findPaneWorktreeTabForState(
+      storeState,
+      storeState.tabsByWorktree,
+      session.deps.worktreeId,
+      session.deps.tabId
     )?.ptyId
     const gate = resolveSshPaneConnectGate({
       connectionId: session.connectionId,

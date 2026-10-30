@@ -8,6 +8,7 @@ import {
   type ActivityTerminalPortalTarget
 } from '../activity/activity-terminal-portal'
 import { shouldMountBackgroundWorktreeTab } from '../terminal/background-terminal-worktree-mount'
+import { resolveWorkspaceRowKey } from '../terminal-workspace-session-row'
 import { useNativeChatToggleShortcut } from '../native-chat/use-native-chat-toggle-shortcut'
 import { RetainedPaneHost } from '../tab-group/RetainedPaneHost'
 import { TerminalOverlaySlot } from './TerminalOverlaySlot'
@@ -54,13 +55,22 @@ const TerminalPaneOverlayLayer = memo(function TerminalPaneOverlayLayer({
    *  chords — the toggle listener is gated to one live workspace at a time. */
   ownsNativeChatToggleShortcut?: boolean
 }): React.JSX.Element | null {
-  const { terminalTabs, unifiedTabs, groups, activeGroupId } = useAppStore(
-    useShallow((state) => ({
-      terminalTabs: state.tabsByWorktree[worktreeId] ?? EMPTY_TERMINAL_TABS,
-      unifiedTabs: state.unifiedTabsByWorktree[worktreeId] ?? EMPTY_UNIFIED_TABS,
-      groups: state.groupsByWorktree[worktreeId] ?? EMPTY_GROUPS,
-      activeGroupId: state.activeGroupIdByWorktree[worktreeId]
-    }))
+  const { terminalTabs, unifiedTabs, groups, activeGroupId, rowKey } = useAppStore(
+    useShallow((state) => {
+      // Why the row key: the surface is bare-id keyed (one per workspace id) while a contested
+      // id's rows live under `host|id`, so the read is resolved inside the selector — a host
+      // switch keeps the bare id and only the key can re-point it. The key is also the pane's
+      // mount identity: two hosts' rows can hold the SAME tab id (mirrored `web-terminal-<id>`),
+      // and an unchanged key leaves the pane attached to the other host's dead pty stream.
+      const rowKey = resolveWorkspaceRowKey(state, worktreeId)
+      return {
+        terminalTabs: state.tabsByWorktree[rowKey] ?? EMPTY_TERMINAL_TABS,
+        unifiedTabs: state.unifiedTabsByWorktree[rowKey] ?? EMPTY_UNIFIED_TABS,
+        groups: state.groupsByWorktree[rowKey] ?? EMPTY_GROUPS,
+        activeGroupId: state.activeGroupIdByWorktree[rowKey],
+        rowKey
+      }
+    })
   )
   const focusGroup = useAppStore((state) => state.focusGroup)
   const consumeSuppressedPtyExit = useAppStore((state) => state.consumeSuppressedPtyExit)
@@ -129,6 +139,13 @@ const TerminalPaneOverlayLayer = memo(function TerminalPaneOverlayLayer({
     return null
   }
 
+  // Why: the pane's mount identity is its React key, and the two rows of a contested id can
+  // hold the SAME tab id (mirrored `web-terminal-<hostTabId>`), so switching hosts must change
+  // the key or the pane never remounts and its xterm stays attached to the dead pty stream.
+  // An uncontested id resolves to the bare row key, keeping the exact bare key byte-identical.
+  const paneMountKey = (tabId: string): string =>
+    rowKey === worktreeId ? tabId : `${rowKey}|${tabId}`
+
   return (
     <>
       {terminalTabs.map((terminalTab) => {
@@ -139,7 +156,7 @@ const TerminalPaneOverlayLayer = memo(function TerminalPaneOverlayLayer({
           // deferred tab in the same render pass.
           return isVisible ? (
             <RetainedPaneHost
-              key={terminalTab.id}
+              key={paneMountKey(terminalTab.id)}
               groupId={assignment?.groupId}
               isVisible
               onFocusOwningGroup={focusOwningGroup}
@@ -158,7 +175,7 @@ const TerminalPaneOverlayLayer = memo(function TerminalPaneOverlayLayer({
         }
         return (
           <TerminalOverlaySlot
-            key={terminalTab.id}
+            key={paneMountKey(terminalTab.id)}
             terminalTabId={terminalTab.id}
             terminalGeneration={terminalTab.generation}
             worktreeId={worktreeId}

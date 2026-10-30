@@ -9,6 +9,7 @@ import { getConnectionId } from '@/lib/connection-context'
 import { getRemoteRuntimePtyEnvironmentId } from '@/runtime/runtime-terminal-stream'
 import { parseAppSshPtyId } from '../../../../../shared/ssh-pty-id'
 import { isWebTerminalSurfaceTabId } from '@/runtime/web-terminal-surface-id'
+import { findPaneWorktreeTabForState, reconcilePaneRestoredPtyId } from './pane-worktree-row-lookup'
 import type { DirectSshPaneRetryAttempt } from '@/store/slices/direct-ssh-terminal-recovery'
 import { directSshAuthoritiesEqual } from '@/store/slices/direct-ssh-terminal-authority-ledger'
 
@@ -79,13 +80,21 @@ export function installAgentIdleWorkingHandlers(session: ConnectPanePtySession):
   // use the shared resolver instead of only looking up repo-backed worktrees.
   session.worktree = getWorktreeMapFromState(session.state).get(session.deps.worktreeId)
   session.worktreeConnectionId = getConnectionId(session.deps.worktreeId)
-  session.tab = (session.state.tabsByWorktree[session.deps.worktreeId] ?? []).find(
-    (t) => t.id === session.deps.tabId
+  // Why the row key: this is the pane's OWN tab row, and `tab.ptyId` below names the runtime
+  // environment the mirrored pane's transport attaches through — the wrong host's row sends the
+  // attach to the wrong environment.
+  session.tab = findPaneWorktreeTabForState(
+    session.state,
+    session.state.tabsByWorktree,
+    session.deps.worktreeId,
+    session.deps.tabId
   )
-  session.restoredPtyIdForTransport =
+  session.restoredPtyIdForTransport = reconcilePaneRestoredPtyId(
     session.deps.restoredLeafId && session.deps.restoredPtyIdByLeafId
       ? (session.deps.restoredPtyIdByLeafId[session.deps.restoredLeafId] ?? null)
-      : null
+      : null,
+    session.tab?.ptyId
+  )
   // Why: the floating terminal and inline setup/onboarding terminals are host-agnostic synthetic
   // ids with no worktree/repo row, so the strict owner resolver reports them as unresolved. The
   // shared terminal router scopes them to their floating owner (local for the floating terminal,

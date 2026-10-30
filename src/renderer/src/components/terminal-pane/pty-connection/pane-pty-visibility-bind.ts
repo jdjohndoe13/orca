@@ -14,6 +14,7 @@ import {
 } from './agent-task-complete-settings'
 import { isRemoteRuntimePtyId } from './paired-parked-terminal-restore'
 import { shouldIgnoreStalePanePtyLayoutBinding } from './pane-pty-layout-binding'
+import { findPaneWorktreeTabForState } from './pane-worktree-row-lookup'
 
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
 
@@ -46,9 +47,16 @@ export function installPanePtyVisibilityBind(session: ConnectPanePtySession): vo
     const existingPtyId = leafId
       ? state.terminalLayoutsByTabId[session.deps.tabId]?.ptyIdsByLeafId?.[leafId]
       : undefined
-    const tabPtyId = Object.values(state.tabsByWorktree)
-      .flat()
-      .find((tab) => tab.id === session.deps.tabId)?.ptyId
+    // The layout is keyed by tab id alone, which the two rows of a contested id share, so this
+    // leaf's binding can still name the previous host's handle. The row the pane was mounted from
+    // is the vouching identity; the flat scan would return the other host's ptyId and the stale
+    // check would then refuse the live bind (the pane never paints).
+    const tabPtyId = findPaneWorktreeTabForState(
+      state,
+      state.tabsByWorktree,
+      session.deps.worktreeId,
+      session.deps.tabId
+    )?.ptyId
     // A remounted mirrored pane can report a fresh spawn while its tab still
     // carries the previous host handle. Treat that as an in-place replacement
     // so the old identity cannot remain beside the new one in the tab PTY map.

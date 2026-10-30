@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useAppStore } from '../../store'
 import { getCachedTerminalTabForWorktree } from './terminal-tab-lookup'
+import { resolvePaneWorktreeRowKey } from './pty-connection/pane-worktree-row-lookup'
 import { selectTerminalTabAgentTypesByLeaf } from './terminal-tab-agent-type-index'
 import { collectLeafIdsInOrder, EMPTY_LAYOUT } from './layout-serialization'
 import { sanitizeTerminalLayoutPaneTitles } from '@/lib/terminal-pane-title-sanitization'
@@ -42,9 +43,16 @@ export function useTerminalPaneChatState(controller: TerminalPaneTitleController
   const pendingCodexPaneRestartIds = useAppStore((store) => store.pendingCodexPaneRestartIds)
   // Why one selector: five separate subscriptions each re-read the same unified
   // tab, so one publication paid the lookup five times per mounted tab.
+  // Why the row key: the pane gets the BARE worktreeId, and a contested id's rows live under
+  // `host|id` — the same accessor the overlay layer mounted the pane from, so the pane reads the
+  // row the user is looking at.
   const { unifiedTabId, isChatViewMode, unifiedTabLabel, isTabPinned } = useAppStore(
     useShallow((store) =>
-      selectUnifiedTerminalTabFields(store.unifiedTabsByWorktree, worktreeId, tabId)
+      selectUnifiedTerminalTabFields(
+        store.unifiedTabsByWorktree,
+        resolvePaneWorktreeRowKey(store, worktreeId),
+        tabId
+      )
     )
   )
   const effectiveChatViewMode = isChatViewMode
@@ -60,7 +68,11 @@ export function useTerminalPaneChatState(controller: TerminalPaneTitleController
   )
   const savedLayout = useAppStore((store) => store.terminalLayoutsByTabId[tabId] ?? EMPTY_LAYOUT)
   const terminalTab = useAppStore((store) =>
-    getCachedTerminalTabForWorktree(store.tabsByWorktree, worktreeId, tabId)
+    getCachedTerminalTabForWorktree(
+      store.tabsByWorktree,
+      resolvePaneWorktreeRowKey(store, worktreeId),
+      tabId
+    )
   )
   const restoredLayout = useMemo(
     () => (terminalTab ? sanitizeTerminalLayoutPaneTitles(savedLayout, terminalTab) : savedLayout),
