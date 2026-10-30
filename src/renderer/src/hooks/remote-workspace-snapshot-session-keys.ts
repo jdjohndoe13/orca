@@ -1,10 +1,15 @@
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { isWorkspaceSessionRecord } from '../../../shared/workspace-session-host-records'
-import { isHostQualifiableWorkspaceId } from '../../../shared/workspace-session-key-qualification'
 import {
-  getExecutionHostIdFromSessionKey,
-  getWorkspaceIdFromSessionKey,
+  contestedIdsOwnedBy,
+  HOST_ROW_REKEY_TO_BARE,
+  HOST_ROW_REKEY_TO_HOST_FRESH,
+  rekeyRecordForHostDirection,
+  rekeyRowForHost,
+  type HostRowRekeyDirection
+} from '../../../shared/workspace-session-host-row-rekey'
+import {
   workspaceSessionKey,
   type ContestedWorkspaceIds
 } from '../../../shared/workspace-session-worktree-key'
@@ -81,7 +86,7 @@ export function bareWorkspaceRowsForHost(
   if (owned.size === 0) {
     return rows
   }
-  return rekeyRecordForHost(rows, owned, hostId, false)
+  return rekeyRecordForHostDirection(rows, owned, hostId, HOST_ROW_REKEY_TO_BARE)
 }
 
 /**
@@ -134,6 +139,9 @@ function rekeyRemoteSessionRowsForHost(
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the field name comes from the two lists below, which classify it as a worktree-keyed record or array, and the value is that field's own content with its keys re-spelled.
     ;(next as Record<string, unknown>)[field] = value
   }
+  const direction: HostRowRekeyDirection = toHost
+    ? HOST_ROW_REKEY_TO_HOST_FRESH
+    : HOST_ROW_REKEY_TO_BARE
   for (const field of REMOTE_SNAPSHOT_RECORD_FIELDS) {
     const record = session[field]
     if (!isWorkspaceSessionRecord(record)) {
@@ -141,7 +149,7 @@ function rekeyRemoteSessionRowsForHost(
     }
     // The field's own value type is a union across the three records, so the rekey runs on the
     // record-typed view; `assign` is what puts the field's own value back.
-    const rekeyed = rekeyRecordForHost<unknown>(record, owned, hostId, toHost)
+    const rekeyed = rekeyRecordForHostDirection<unknown>(record, owned, hostId, direction)
     if (rekeyed !== record) {
       assign(field, rekeyed)
     }
@@ -156,7 +164,7 @@ function rekeyRemoteSessionRowsForHost(
     const rekeyed = [
       ...new Set(
         ids.map((id) =>
-          typeof id === 'string' ? rekeyRowForHost(id, owned, hostId, toHost).target : id
+          typeof id === 'string' ? rekeyRowForHost(id, owned, hostId, direction).target : id
         )
       )
     ]
@@ -165,99 +173,4 @@ function rekeyRemoteSessionRowsForHost(
     }
   }
   return next ?? session
-}
-
-/** The snapshot's ids that the gate has flagged and that can name more than one workspace. */
-function contestedIdsOwnedBy(
-  worktreeIds: ReadonlySet<string>,
-  contested: ContestedWorkspaceIds
-): Set<string> {
-  return new Set(
-    [...contested].filter((id) => worktreeIds.has(id) && isHostQualifiableWorkspaceId(id))
-  )
-}
-
-/**
- * What one row is to this host's snapshot: `keep` (not the host's to move — a co-claimant's row,
- * the canonical empty-prefix bucket no host can prove, or an id the apply does not own), `loser`
- * (the stale spelling the live row replaces), or `winner` (the row that survives the fold).
- */
-type RowRole = 'keep' | 'loser' | 'winner'
-
-function rowRole(
-  key: string,
-  owned: Set<string>,
-  hostId: ExecutionHostId,
-  toHost: boolean
-): RowRole {
-  const worktreeId = getWorkspaceIdFromSessionKey(key)
-  if (!owned.has(worktreeId)) {
-    return 'keep'
-  }
-  const rowHostId = getExecutionHostIdFromSessionKey(key)
-  if (rowHostId === hostId) {
-    // The host's own row is the live one while the store is the reader (folding to bare); once the
-    // merge has built the bare row it is the stale spelling the merged result replaces.
-    return toHost ? 'loser' : 'winner'
-  }
-  if (rowHostId === null && key === worktreeId) {
-    // The shared bucket: the pre-contest spelling of the SAME workspace, which the host's live row
-    // replaces. The empty-prefix bucket (`|id`) is a row no host can prove — it falls through to
-    // `keep`, so neither direction ever moves it.
-    return toHost ? 'winner' : 'loser'
-  }
-  return 'keep'
-}
-
-/** Where one row goes, and what it is to this host's snapshot. */
-function rekeyRowForHost(
-  key: string,
-  owned: Set<string>,
-  hostId: ExecutionHostId,
-  toHost: boolean
-): { target: string; role: RowRole } {
-  const role = rowRole(key, owned, hostId, toHost)
-  if (role === 'keep') {
-    return { target: key, role }
-  }
-  const worktreeId = getWorkspaceIdFromSessionKey(key)
-  return {
-    target: toHost ? workspaceSessionKey(worktreeId, hostId, owned) : worktreeId,
-    role
-  }
-}
-
-/**
- * One record with this host's rows moved between the bare and the qualified spelling.
- *
- * The loser is placed before the winner so the two rows that end up in one bucket — the host's
- * live row and the shared bucket it displaced — resolve to the winner, the same convention the
- * contested collapse uses everywhere else.
- */
-function rekeyRecordForHost<T>(
-  record: Record<string, T>,
-  owned: Set<string>,
-  hostId: ExecutionHostId,
-  toHost: boolean
-): Record<string, T> {
-  const placed = new Map<string, T>()
-  let changed = false
-  const place = (key: string, target: string, entry: T): void => {
-    changed = changed || target !== key || placed.has(target)
-    placed.set(target, entry)
-  }
-  const pass = (role: RowRole): void => {
-    for (const [key, entry] of Object.entries(record)) {
-      const { target, role: keyRole } = rekeyRowForHost(key, owned, hostId, toHost)
-      if (keyRole === role) {
-        place(key, target, entry)
-      }
-    }
-  }
-  // `keep` rows first: they never collide with the winner's target (the co-claimant's key and the
-  // empty-prefix bucket are neither the bare nor this host's spelling), so their order is moot.
-  pass('keep')
-  pass('loser')
-  pass('winner')
-  return changed ? Object.fromEntries(placed) : record
 }

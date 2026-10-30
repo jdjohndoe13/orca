@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY } from '../../../shared/protocol-version'
 import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-types'
 import type { Tab } from '../../../shared/tab-types'
+import type { Worktree } from '../../../shared/worktree/types'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import type { WorktreeRuntimeOwnerState } from '../lib/worktree-runtime-owner'
 import { buildPersistedUnifiedTabSessionData } from '../lib/workspace-session-unified-tabs'
@@ -399,12 +400,13 @@ describe('local structured session tab projection', () => {
 
   it('forgets publisher versions when a worktree is removed', () => {
     type OwnerState = WebSessionTabsSyncState & WorktreeRuntimeOwnerState
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test fixture carries only the fields the publisher-version owner lookup reads; the sync path never narrows the rest.
     const owner = {
       id: WORKTREE_ID,
       repoId: 'repo-1',
       hostId: undefined,
       runtimeOwnerEnvironmentId: undefined
-    }
+    } as unknown as Worktree
     let state = {
       ...createSnapshot(),
       worktreesByRepo: { 'repo-1': [owner] }
