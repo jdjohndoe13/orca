@@ -4,6 +4,7 @@ import { forgetForegroundTerminalTabs } from '@/lib/foreground-terminal-tabs'
 import { forgetAgentStartupDeliveriesForTabs } from '@/lib/agent-startup-delivery-guards'
 import { forgetAgentPaneAuthorityAliasesByTabIds } from '../../agent-pane-authority'
 import { forgetDetachedHeadAutoDerivedDisplayNamesForWorktree } from '../metadata/detached-head-display-name'
+import { readRecordEntriesByWorktreeId } from './record-key-omission'
 
 export type WorktreePurgeDoomedIds = {
   doomedTabIds: Set<string>
@@ -41,14 +42,17 @@ export function collectWorktreePurgeDoomedIds(
   const doomedPageIds = new Set<string>()
   const removedFileIds = new Set<string>()
   for (const id of worktreeIdSet) {
-    for (const tab of s.tabsByWorktree[id] ?? []) {
+    // Why the decode-aware read: a contested id's rows live under `host|id` (STA-4343),
+    // and a bare-only read would doom no tab — the doomed tabs' PTYs, layouts, and
+    // hibernation state would leak and the purge would leave the rows behind.
+    for (const tab of readRecordEntriesByWorktreeId(s.tabsByWorktree, id).flat()) {
       doomedTabIds.add(tab.id)
       // Null-tolerant like the omit* helpers below: some callers pass partial state omitting this slice (production store always inits to {}).
       addDoomedTabPtyIds(tab.id, tab.ptyId)
       // Why: a removed worktree's panes are gone, so drop their hibernation output epochs from the module-level map (a future pane mints a fresh leafId at epoch 0).
       forgetAgentHibernationTabOutput(tab.id)
     }
-    for (const workspace of s.browserTabsByWorktree[id] ?? []) {
+    for (const workspace of readRecordEntriesByWorktreeId(s.browserTabsByWorktree, id).flat()) {
       doomedBrowserWorkspaceIds.add(workspace.id)
     }
     // Why: drop the auto-derived detached-HEAD display name so the module-level map doesn't retain removed worktrees for the session.

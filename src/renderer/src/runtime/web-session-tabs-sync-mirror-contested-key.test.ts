@@ -23,8 +23,10 @@ import type { AppState } from '../store/types'
 import { toWebTerminalSurfaceTabId } from '../../../shared/terminal-surface-id'
 import { composeWorktreeHostIdentity } from '../../../shared/worktree/host-qualified-identity'
 import { getContestedWorktreeIds } from '../store/worktree-repo-index'
-import { applyWebSessionTabsSnapshot } from './web-session-tabs-sync/snapshot-api'
-import { applyWebSessionTabsSnapshots } from './web-session-tabs-sync/snapshot-api'
+import {
+  applyWebSessionTabsSnapshot,
+  applyWebSessionTabsSnapshots
+} from './web-session-tabs-sync/snapshot-api'
 import type { WebSessionTabsSyncState } from './web-session-tabs-sync/state'
 import {
   LEAF_ID,

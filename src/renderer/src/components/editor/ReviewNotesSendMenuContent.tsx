@@ -69,6 +69,11 @@ export function ReviewNotesSendMenuContent({
   const terminalLayoutsByTabId = useAppStore((s) => s.terminalLayoutsByTabId)
   const ptyIdsByTabId = useAppStore(useShallow((s) => selectLivePtyIdsForWorktree(s, worktreeId)))
   const runtimePaneTitlesByTabId = useAppStore((s) => s.runtimePaneTitlesByTabId)
+  // The row key of a contested id (STA-4343) resolves from the catalog and the
+  // active workspace's host stamp, so the derivation must re-run when either flips.
+  const worktreesByRepo = useAppStore((s) => s.worktreesByRepo)
+  const activeWorktreeId = useAppStore((s) => s.activeWorktreeId)
+  const activeWorkspaceExecutionHostId = useAppStore((s) => s.activeWorkspaceExecutionHostId)
   const agentStatusEpoch = useAppStore((s) => s.agentStatusEpoch)
   const agentRows = useWorktreeAgentRows(worktreeId)
   const now = useNow(30_000)
@@ -81,7 +86,10 @@ export function ReviewNotesSendMenuContent({
         unifiedTabsByWorktree,
         terminalLayoutsByTabId,
         ptyIdsByTabId,
-        runtimePaneTitlesByTabId
+        runtimePaneTitlesByTabId,
+        worktreesByRepo,
+        activeWorktreeId,
+        activeWorkspaceExecutionHostId
       },
       worktreeId
     )
@@ -95,6 +103,9 @@ export function ReviewNotesSendMenuContent({
     terminalLayoutsByTabId,
     runtimePaneTitlesByTabId,
     ptyIdsByTabId,
+    worktreesByRepo,
+    activeWorktreeId,
+    activeWorkspaceExecutionHostId,
     worktreeId
   ])
   const orderedSendTargets = useMemo(

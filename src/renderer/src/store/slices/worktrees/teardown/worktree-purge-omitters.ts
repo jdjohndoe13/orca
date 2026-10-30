@@ -3,7 +3,8 @@ import type { WorkspaceLineage } from '../../../../../../shared/worktree/lineage
 import { isWorkspaceKey, worktreeWorkspaceKey } from '../../../../../../shared/workspace-scope'
 import { normalizeRightSidebarRoute } from '../../../right-sidebar-route'
 import type { WorktreePurgeDoomedIds } from './worktree-purge-doomed-ids'
-import { omitRecordKeys } from './record-key-omission'
+import { getWorkspaceIdFromSessionKey } from '../../../../../../shared/workspace-session-worktree-key'
+import { omitRecordKeys, omitRecordKeysByWorktreeId } from './record-key-omission'
 
 export function createWorktreePurgeOmitters(
   s: AppState,
@@ -12,8 +13,10 @@ export function createWorktreePurgeOmitters(
 ) {
   const { doomedTabIds, doomedPtyIds, doomedBrowserWorkspaceIds, doomedPageIds, removedFileIds } =
     doomed
+  // Decode-aware: a contested id's rows live under `host|id` (STA-4343), and the purge
+  // must not orphan them — see `omitRecordKeysByWorktreeId`.
   const omitByWorktree = <T>(obj: Record<string, T>): Record<string, T> =>
-    omitRecordKeys(obj, worktreeIdSet)
+    omitRecordKeysByWorktreeId(obj, worktreeIdSet)
   const omitWorkspaceLineageByWorktree = (
     obj: Record<string, WorkspaceLineage>
   ): Record<string, WorkspaceLineage> =>
@@ -39,7 +42,7 @@ export function createWorktreePurgeOmitters(
     omitRecordKeys(obj, doomedTabIds)
   const survivingTabIds = new Set(
     Object.entries(s.tabsByWorktree)
-      .filter(([worktreeId]) => !worktreeIdSet.has(worktreeId))
+      .filter(([worktreeKey]) => !worktreeIdSet.has(getWorkspaceIdFromSessionKey(worktreeKey)))
       .flatMap(([, tabs]) => tabs.map((tab) => tab.id))
   )
   const omitRetiredDirectSshLedgerByTabId = <T>(obj: Record<string, T>): Record<string, T> =>

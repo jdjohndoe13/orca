@@ -102,16 +102,33 @@ function assignWorktreeKeyed(
   if (!isWorkspaceSessionRecord(value)) {
     return
   }
+  // Qualified ids that wrote into this field, per partition. A bare key (or the unknown-host
+  // `|id` bucket) of the SAME id that would overwrite one of those slots is the pollution shape
+  // (a controller that re-spelled late): the qualified row wins regardless of entry order. A
+  // bare-only row still routes as before — the split cannot tell which claimant it belongs to.
+  const qualifiedIdsByHost = new Map<ExecutionHostId, Set<string>>()
   for (const [key, entry] of Object.entries(value)) {
     // Why the key's own host wins: a contested id is spelled `host|id` in the unified session, and
     // the key already names the partition that row came from. `assignVisitRecencyByHost` routes the
     // same way for the one field that has always used the qualified spelling.
-    const host = getExecutionHostIdFromSessionKey(key) ?? ctx.hostIdByWorktreeId(key)
+    const keyHost = getExecutionHostIdFromSessionKey(key)
+    const host = keyHost ?? ctx.hostIdByWorktreeId(key)
+    const worktreeId = getWorkspaceIdFromSessionKey(key)
+    if (keyHost !== null) {
+      const qualified = qualifiedIdsByHost.get(host)
+      if (qualified) {
+        qualified.add(worktreeId)
+      } else {
+        qualifiedIdsByHost.set(host, new Set([worktreeId]))
+      }
+    } else if (qualifiedIdsByHost.get(host)?.has(worktreeId)) {
+      continue
+    }
     const slice = ensureSlice(slices, host, templates) as WorkspaceSessionRecord
     const target = (slice[field] ??= {}) as WorkspaceSessionRecord
     // The prefix is stripped on the way in, so every partition keeps the bare id it has always
     // stored — the disk format does not change, and no migration is needed.
-    target[getWorkspaceIdFromSessionKey(key)] = entry
+    target[worktreeId] = entry
   }
 }
 
@@ -279,19 +296,6 @@ export function splitWorkspaceSessionByHost(
           ctx
         )
         break
-      case 'sleepingAgentKeyed':
-        assignKeyedByResolvedWorktree(
-          slices,
-          templates,
-          field,
-          value,
-          (_paneKey, record) =>
-            isWorkspaceSessionRecord(record) && typeof record.worktreeId === 'string'
-              ? record.worktreeId
-              : undefined,
-          ctx
-        )
-        break
       case 'paneKeyed':
         assignKeyedByResolvedWorktree(
           slices,
@@ -302,6 +306,7 @@ export function splitWorkspaceSessionByHost(
           ctx
         )
         break
+      case 'sleepingAgentKeyed':
       case 'surfaceTombstoneKeyed':
         assignKeyedByResolvedWorktree(
           slices,

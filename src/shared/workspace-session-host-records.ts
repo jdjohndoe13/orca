@@ -13,11 +13,14 @@ export function buildWorktreeIdByTabId(state: WorkspaceSessionState): Map<string
       byTab.set(tab.id, worktreeId)
     }
   }
-  // Why: unified-only tabs still need their host-owned layout and PTY records routed correctly.
-  for (const tabs of Object.values(state.unifiedTabs ?? {})) {
+  // Why the record's key and not the tab's `worktreeId` field: the field is the bare id, and a
+  // contested id is spelled `host|id` in the key — the key is what carries the host the split
+  // routes by. A unified-only tab (no `tabsByWorktree` row) would otherwise land in the
+  // catalog's pinned primary partition instead of the publishing host's own.
+  for (const [worktreeId, tabs] of Object.entries(state.unifiedTabs ?? {})) {
     for (const tab of tabs) {
       if (!byTab.has(tab.id)) {
-        byTab.set(tab.id, tab.worktreeId)
+        byTab.set(tab.id, worktreeId)
       }
     }
   }
@@ -44,10 +47,12 @@ export function extendWorktreeIdByTabId(
       }
     }
   }
-  for (const tabs of Object.values(catalog?.unifiedTabsByWorktree ?? {})) {
+  // Same key-over-field rule as `buildWorktreeIdByTabId`: the record's key carries the host
+  // prefix for a contested id, the tab's own `worktreeId` field never does.
+  for (const [worktreeId, tabs] of Object.entries(catalog?.unifiedTabsByWorktree ?? {})) {
     for (const tab of tabs) {
       if (!byTab.has(tab.id)) {
-        byTab.set(tab.id, tab.worktreeId)
+        byTab.set(tab.id, worktreeId)
       }
     }
   }

@@ -5,6 +5,7 @@ import { useAppStore } from '@/store'
 import { usePluginCommands } from '@/store/plugin-panels'
 import { useSettingsNavigationMetadata } from '@/hooks/useSettingsNavigationMetadata'
 import { dedupePaletteWorktrees } from '@/lib/palette-repo-resolution'
+import { getContestedWorktreeIds } from '@/store/worktree-repo-index'
 import {
   selectPaletteIndexStatusSnapshot,
   selectPaletteStatusInputs
@@ -31,6 +32,12 @@ export function useWorktreeJumpPaletteStoreState({
   const worktreesByRepo = useAppStore((state) => state.worktreesByRepo)
   const allWorktrees = useMemo(
     () => dedupePaletteWorktrees(Object.values(worktreesByRepo).flat()),
+    [worktreesByRepo]
+  )
+  // The palette reads worktree-keyed session records by the ROW KEY (STA-4343);
+  // this is the gate that decides which ids are qualified.
+  const contestedWorktreeIds = useMemo(
+    () => getContestedWorktreeIds(worktreesByRepo),
     [worktreesByRepo]
   )
   const repos = useAppStore((state) => state.repos)
@@ -127,6 +134,7 @@ export function useWorktreeJumpPaletteStoreState({
     revealSidebarRow,
     worktreesByRepo,
     allWorktrees,
+    contestedWorktreeIds,
     repos,
     projectGroups,
     projects,

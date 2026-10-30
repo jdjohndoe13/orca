@@ -20,6 +20,7 @@ import {
   type ExecutionHostId
 } from '../../../../shared/execution-host'
 import { getPaletteOwnershipWorktreeIds } from '@/lib/unified-tab-host-ownership'
+import { getContestedWorktreeIds } from '@/store/worktree-repo-index'
 
 export type OpenTabSearchEntries = {
   workspaceTabs: readonly SearchableWorkspaceTab[]
@@ -137,7 +138,10 @@ export function buildOpenTabSearchEntries(
     worktrees,
     ownershipWorktrees: getPaletteOwnershipWorktreeIds(state),
     repoMap: new Map(repo ? [[repo.id, repo]] : []),
-    worktreeOrder: new Map([[worktree.id, 0]])
+    worktreeOrder: new Map([[worktree.id, 0]]),
+    // The palette reads session records by the row key (STA-4343); the gate is the
+    // catalog's contested set, which `worktreesByRepo` already carries.
+    contestedWorktreeIds: getContestedWorktreeIds(state.worktreesByRepo)
   }
 
   return {

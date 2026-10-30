@@ -12,6 +12,7 @@ import {
   deriveRunningAgentSendTargets,
   deriveStatuslessStructuredAgentSendTargets,
   runningAgentMessageTarget,
+  runningAgentRowKey,
   type RunningAgentSendTarget,
   type RunningAgentTargetState
 } from './running-agent-targets'
@@ -79,7 +80,7 @@ export function deriveNotesSendAgentTargets(
     ...deriveStatuslessStructuredAgentSendTargets(state, worktreeId)
   ].map(toNotesSendAgentTarget)
 
-  for (const tab of state.tabsByWorktree[worktreeId] ?? []) {
+  for (const tab of state.tabsByWorktree[runningAgentRowKey(state, worktreeId)] ?? []) {
     const titleHintTarget = deriveTitleHintAgentTarget(state, tab)
     if (!titleHintTarget) {
       continue

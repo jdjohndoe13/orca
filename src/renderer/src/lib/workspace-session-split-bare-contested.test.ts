@@ -1,19 +1,16 @@
 /**
- * STA-4343 fix 2 — the split-collision PIN (asserts CURRENT behavior, not a RED test).
+ * STA-4343 fix 2 + fix 3 — the split's bare-vs-qualified collision.
  *
  * This file documents WHY the controller (the `web-session-tabs-sync` mirror) must never write
  * a contested id under the bare key: `assignWorktreeKeyed` routes a bare key by the catalog's
  * owner — the pinned primary (the lowest runtime id = win-b) — and strips the prefix, so the
- * bare row collides with the primary's own `win-b|id` row in the same bucket and the
- * last-written one wins. If the bare row carried win-a's tabs (the win-a mirror wrote the bare
- * key last), win-b's partition DB-pollutes with win-a's tab.
+ * bare row would land in the same bucket as the primary's own `win-b|id` row.
  *
- * The fix is controller-side (the mirror re-spells the patch to `host|id`), so the split's
- * last-wins rule is deliberately NOT changed here — the unified store must never hold a bare
- * contested key for the split to misroute. This pin asserts the CURRENT hazard so a future
- * controller regression that re-introduces the bare write is caught by the companion
- * `web-session-tabs-sync-mirror-contested-key.test.ts`, and this file stays green as the
- * mechanism's documentation. See C:\temp\orca-diag\fix2-design.md (split guard out of scope).
+ * Fix 3 added the guard: within one worktree-keyed record, a bare key of an id that ALREADY
+ * has a qualified row landing in the same partition is dropped — the qualified row wins
+ * regardless of entry order. A bare-only row still routes to the pinned primary (the split
+ * cannot tell which claimant a lone bare row belongs to, and the bare id is the only spelling
+ * the disk format has ever had). See C:\temp\orca-diag\fix2-design.md.
  */
 import { describe, it, expect } from 'vitest'
 import { splitWorkspaceSessionByHost } from './workspace-session-host-split'
@@ -105,22 +102,88 @@ function session(): WorkspaceSessionState {
   }
 }
 
-describe('the persistence split misroutes a bare contested key to the primary (PIN)', () => {
+describe('the persistence split keeps qualified rows whole against a bare contested key', () => {
   it('the catalog pins the bare id to the lowest runtime id (win-b)', () => {
     const hostIdByWorktreeId = buildHostIdByWorktreeId(persistenceState())
     expect(hostIdByWorktreeId(VMD_ID)).toBe(WIN_B)
   })
 
-  it('the bare row collides into the primary partition and overwrites its own row', () => {
+  it("the bare row cannot overwrite the primary partition's qualified row", () => {
     const hostIdByWorktreeId = buildHostIdByWorktreeId(persistenceState())
     const slices = splitWorkspaceSessionByHost(session(), hostIdByWorktreeId)
 
     // The qualified rows land in their own partitions under the bare id (the disk format).
     expect(slices[WIN_A]?.tabsByWorktree?.[VMD_ID]?.map((t) => t.id)).toEqual(['win-a-tab'])
-    // The bare row is routed to the primary (win-b) and, written last, overwrites the
-    // primary's own row — the win-b partition now holds win-a's tab. This is the pollution.
-    expect(slices[WIN_B]?.tabsByWorktree?.[VMD_ID]?.map((t) => t.id)).toEqual(['win-a-tab'])
+    // Fix 3: the bare row is dropped because the same partition already holds a qualified row
+    // for this id — the win-b partition keeps its own tab regardless of entry order.
+    expect(slices[WIN_B]?.tabsByWorktree?.[VMD_ID]?.map((t) => t.id)).toEqual(['win-b-tab'])
     // Local never sees the contested id.
     expect(slices[LOCAL_EXECUTION_HOST_ID]?.tabsByWorktree?.[VMD_ID]).toBeUndefined()
+  })
+
+  it('a bare-only contested row still routes to the pinned primary (the split cannot guess)', () => {
+    const hostIdByWorktreeId = buildHostIdByWorktreeId(persistenceState())
+    const bareOnly = {
+      ...session(),
+      tabsByWorktree: { [VMD_ID]: [tab('win-a-tab')] }
+    }
+    const slices = splitWorkspaceSessionByHost(bareOnly, hostIdByWorktreeId)
+    // A lone bare row of a contested id has no other evidence — the pinned primary owns it,
+    // the same routing the pollution cleanup relies on.
+    expect(slices[WIN_B]?.tabsByWorktree?.[VMD_ID]?.map((t) => t.id)).toEqual(['win-a-tab'])
+  })
+
+  it('a bare row of an UNCONTESTED id in the same partition is untouched by the guard', () => {
+    const hostIdByWorktreeId = buildHostIdByWorktreeId({
+      repos: [repo(WIN_A), repo(WIN_B), { ...repo(WIN_B), id: 'other-repo' }],
+      worktreesByRepo: { [REPO_ID]: [row(WIN_A), row(WIN_B)] }
+    })
+    const other = {
+      ...session(),
+      tabsByWorktree: {
+        [KEY_A]: [tab('win-a-tab')],
+        [KEY_B]: [tab('win-b-tab')],
+        // win-b's own uncontested id, bare, lands in the same partition as the guarded id.
+        'other-repo::C:/other': [tab('other-tab')]
+      }
+    }
+    const slices = splitWorkspaceSessionByHost(other, hostIdByWorktreeId)
+    expect(slices[WIN_B]?.tabsByWorktree?.['other-repo::C:/other']?.map((t) => t.id)).toEqual([
+      'other-tab'
+    ])
+    expect(slices[WIN_B]?.tabsByWorktree?.[VMD_ID]?.map((t) => t.id)).toEqual(['win-b-tab'])
+  })
+
+  it('routes a unified-only tab of a contested id to the PUBLISHING host, not the pinned primary', () => {
+    // Item 3: the tab→worktree index resolves a unified-only tab through the RECORD
+    // KEY, which carries the host prefix (`win-a|id`). The layout then follows the
+    // publishing host's partition. Reading the tab's own bare `worktreeId` field
+    // instead would route it to the pinned primary (win-b) and cross-pollute.
+    const hostIdByWorktreeId = buildHostIdByWorktreeId(persistenceState())
+    const unifiedOnly = {
+      ...getDefaultWorkspaceSession(),
+      unifiedTabs: {
+        [KEY_A]: [
+          {
+            id: 'win-a-only-tab',
+            entityId: 'win-a-only-tab',
+            groupId: 'g1',
+            worktreeId: VMD_ID,
+            contentType: 'terminal' as const,
+            label: 'win-a-only-tab',
+            customLabel: null,
+            color: null,
+            sortOrder: 0,
+            createdAt: 1
+          }
+        ]
+      },
+      terminalLayoutsByTabId: {
+        'win-a-only-tab': { root: null, activeLeafId: null, expandedLeafId: null }
+      }
+    }
+    const slices = splitWorkspaceSessionByHost(unifiedOnly, hostIdByWorktreeId)
+    expect(slices[WIN_A]?.terminalLayoutsByTabId?.['win-a-only-tab']).toBeDefined()
+    expect(slices[WIN_B]?.terminalLayoutsByTabId?.['win-a-only-tab']).toBeUndefined()
   })
 })

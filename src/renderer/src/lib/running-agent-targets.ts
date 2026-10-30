@@ -9,6 +9,7 @@ import { resolvePaneAgentActivity } from '@/lib/pane-agent-evidence'
 import type { AgentMessageTarget } from './agent-message-target'
 import { detectAgentSendTitleStatus } from './agent-send-title-status'
 import { resolveRuntimePaneTitleLeafResolution } from './runtime-pane-title-leaf-id'
+import { resolveWorkspaceSessionKey } from '@/store/workspace-session-key'
 
 export type RunningAgentTargetState = Pick<
   AppState,
@@ -18,7 +19,15 @@ export type RunningAgentTargetState = Pick<
   | 'terminalLayoutsByTabId'
   | 'ptyIdsByTabId'
 > &
-  Partial<Pick<AppState, 'runtimePaneTitlesByTabId'>>
+  Partial<
+    Pick<
+      AppState,
+      | 'runtimePaneTitlesByTabId'
+      | 'worktreesByRepo'
+      | 'activeWorktreeId'
+      | 'activeWorkspaceExecutionHostId'
+    >
+  >
 
 type RunningAgentSendTargetEligibility = {
   status: 'eligible' | 'disabled'
@@ -62,6 +71,26 @@ export function runningAgentSendTargetAgentType(
   return target.kind === 'terminal' ? target.entry.agentType : target.agentType
 }
 
+/**
+ * The row key (STA-4343) of the worktree these derivations target: a contested id's
+ * tab rows live under `host|id`, so a bare read shows the notes menu nothing. The
+ * catalog is absent from a partial test state, which resolves to the bare key — the
+ * same answer an install without a collision has.
+ */
+export function runningAgentRowKey(state: RunningAgentTargetState, worktreeId: string): string {
+  if (!state.worktreesByRepo) {
+    return worktreeId
+  }
+  return resolveWorkspaceSessionKey(
+    {
+      worktreesByRepo: state.worktreesByRepo,
+      activeWorkspaceExecutionHostId: state.activeWorkspaceExecutionHostId ?? null,
+      activeWorktreeId: state.activeWorktreeId ?? null
+    },
+    worktreeId
+  )
+}
+
 export function deriveRunningAgentSendTargets(
   state: RunningAgentTargetState,
   worktreeId: string,
@@ -86,7 +115,7 @@ function deriveTerminalAgentSendTargets(
   worktreeId: string,
   now: number
 ): TerminalAgentSendTarget[] {
-  const tabs = state.tabsByWorktree[worktreeId] ?? []
+  const tabs = state.tabsByWorktree[runningAgentRowKey(state, worktreeId)] ?? []
   if (tabs.length === 0) {
     return []
   }
@@ -170,7 +199,7 @@ function deriveStructuredAgentSendTargets(
   status: 'with-status' | 'without-status'
 ): StructuredAgentSendTarget[] {
   const targets: StructuredAgentSendTarget[] = []
-  for (const tab of state.unifiedTabsByWorktree[worktreeId] ?? []) {
+  for (const tab of state.unifiedTabsByWorktree[runningAgentRowKey(state, worktreeId)] ?? []) {
     if (!isStructuredTab(tab) || !tab.agentSessionAgent) {
       continue
     }

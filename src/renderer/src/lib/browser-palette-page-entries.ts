@@ -4,6 +4,7 @@ import type { Worktree } from '../../../shared/worktree/types'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import {
   getPaletteWorktreeIdentity,
+  getPaletteWorktreeSessionRowKey,
   isPaletteCurrentWorktree,
   resolvePaletteRepoForWorktree
 } from './palette-repo-resolution'
@@ -35,6 +36,8 @@ export type BuildSearchableBrowserPagesOptions = {
   activeWorktreeId: string | null
   activeWorkspaceExecutionHostId?: ExecutionHostId | null
   activeTabType: BrowserPaletteActiveTabType
+  /** The contested ids (STA-4343): the row keys of these ids carry the host prefix. */
+  contestedWorktreeIds?: ReadonlySet<string>
 }
 
 export function buildSearchableBrowserPages({
@@ -49,7 +52,8 @@ export function buildSearchableBrowserPages({
   activeBrowserTabId,
   activeWorktreeId,
   activeWorkspaceExecutionHostId,
-  activeTabType
+  activeTabType,
+  contestedWorktreeIds
 }: BuildSearchableBrowserPagesOptions): SearchableBrowserPage[] {
   const entries: SearchableBrowserPage[] = []
   const ambiguousWorktreeIds = findAmbiguousWorktreeIds(ownershipWorktrees ?? worktrees)
@@ -66,13 +70,16 @@ export function buildSearchableBrowserPages({
   for (const worktree of worktrees) {
     const repoName =
       resolvePaletteRepoForWorktree(worktree, repoMap, repoMapByHostIdentity)?.displayName ?? ''
+    // The row key of this worktree's session records (STA-4343) — see the workspace
+    // palette builder. A contested id's rows live under `host|id`.
+    const rowKey = getPaletteWorktreeSessionRowKey(worktree, contestedWorktreeIds)
     const worktreeSortIndex =
       worktreeOrder.get(getPaletteWorktreeIdentity(worktree)) ??
       worktreeOrder.get(worktree.id) ??
       Number.MAX_SAFE_INTEGER
     const unifiedBrowserTabsByWorkspaceId = new Map<string, Tab>()
     const focusedAtByWorkspaceId = new Map<string, number>()
-    const unifiedTabs = unifiedTabsByWorktree?.[worktree.id] ?? []
+    const unifiedTabs = unifiedTabsByWorktree?.[rowKey] ?? []
     for (const tab of unifiedTabs) {
       if (tab.contentType === 'browser' && !unifiedBrowserTabsByWorkspaceId.has(tab.entityId)) {
         unifiedBrowserTabsByWorkspaceId.set(tab.entityId, tab)
@@ -85,7 +92,7 @@ export function buildSearchableBrowserPages({
         focusedAtByWorkspaceId.set(tab.entityId, tab.lastFocusedAt)
       }
     }
-    for (const workspace of browserTabsByWorktree[worktree.id] ?? []) {
+    for (const workspace of browserTabsByWorktree[rowKey] ?? []) {
       if (
         duplicateWorkspaceIds.has(workspace.id) ||
         duplicateStoredWorkspaceIds.has(workspace.id)
