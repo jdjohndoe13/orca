@@ -1,6 +1,9 @@
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import type { Worktree } from '../../../../../../shared/worktree/types'
-import type { ContestedWorkspaceIds } from '../../../../../../shared/workspace-session-worktree-key'
+import {
+  hasContestedClaim,
+  type ContestedWorkspaceIds
+} from '../../../../../../shared/workspace-session-worktree-key'
 import {
   composeWorktreeHostIdentity,
   getWorktreeHostIdentity
@@ -35,5 +38,5 @@ export function isWorkspaceRowActive(
       composeWorktreeHostIdentity(activeWorkspaceExecutionHostId, worktree.id)
     )
   }
-  return !contestedWorktreeIds?.has(worktree.id)
+  return !hasContestedClaim(contestedWorktreeIds, worktree.id)
 }

@@ -56,6 +56,7 @@ import {
 } from '@/lib/http-link-routing'
 import { installStoreListenerCensus } from './store-listener-census'
 import { installSettledSortEpoch } from './settled-sort-epoch'
+import { installContestRekey } from './workspace-session-contest-rekey'
 import { withReactCommitCascadeWriteProbe } from './react-commit-cascade-write-probe'
 import { withStoreIdentityChurnProbe } from './store-identity-churn-probe'
 import {
@@ -79,6 +80,9 @@ export const useAppStore = create<AppState>()(
       installSettledSortEpoch(a[2])
       // Why: the inner api is only reachable here, before create() copies subscribe onto the hook.
       installStoreListenerCensus(a[2])
+      // Why: the contested-id gate follows the catalog, and the session rows have to follow the
+      // gate — both directions, before any reader runs (STA-4343).
+      installContestRekey(a[2])
       return {
         ...createRepoSlice(...a),
         ...createSparsePresetsSlice(...a),

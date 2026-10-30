@@ -307,6 +307,22 @@ describe('projectWorkspaceSurfaces never under-selects', () => {
     ])
   })
 
+  it('keeps a byte-faithful folder row id for the surface, so the workbench mounts it', () => {
+    // A folder-workspace row carries the raw `repoId::repo.path` (backslashes on Windows) —
+    // the host byte-compares that id and `activeWorktreeId`/`mountedWorktreeIdsRef` hold it.
+    // The index must not re-spell the surface id, or the mount filter misses and no PTY spawns.
+    const folderRow: Worktree = {
+      ...localWorktree,
+      id: 'repo-shared::B:\\work\\vmd',
+      path: 'B:\\work\\vmd'
+    }
+
+    const surfaces = project({ worktrees: [folderRow] })
+
+    expect(surfaces).toEqual([{ id: 'repo-shared::B:\\work\\vmd', path: 'B:\\work\\vmd' }])
+    expect(surfaces[0]?.id).toBe(folderRow.id)
+  })
+
   it('collapses folder rows across three hosts to one surface without losing the id', () => {
     const sshFolder: FolderWorkspace = {
       ...localFolder,

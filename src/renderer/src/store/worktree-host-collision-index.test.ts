@@ -13,10 +13,12 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { Worktree } from '../../../shared/worktree/types'
+import { hasContestedClaim } from '../../../shared/workspace-session-worktree-key'
 import type { AppState } from './types'
 import {
   getContestedWorktreeIds,
   getIndexedAllWorktrees,
+  getIndexedWorktreeById,
   getIndexedWorktreeMap,
   getIndexedWorktreesById
 } from './worktree-repo-index'
@@ -128,5 +130,72 @@ describe('id-keyed projections fold the two Windows separator spellings', () => 
 
     expect(getIndexedWorktreesById(worktreesByRepo, RAW_ID)).toHaveLength(1)
     expect(getIndexedWorktreesById(worktreesByRepo, WINDOWS_ID)).toHaveLength(1)
+  })
+})
+
+/**
+ * The output maps are keyed by the ROW's own id, never the canonical one.
+ *
+ * A folder-workspace row is byte-faithful by contract — the host byte-compares the id it was
+ * handed against `repoId::repo.path` — and the terminal workbench matches its mount set against
+ * `activeWorktreeId`/`mountedWorktreeIdsRef`, which hold the raw id. Canonicalizing the OUTPUT
+ * keys made the surface id differ from the active id, so the surface never mounted and no
+ * `pty:spawn` was ever issued. Fold at comparison, never at construction.
+ */
+describe('id-keyed projections keep the row byte-faithful and fold the query', () => {
+  const FOLDER_RAW_ID = 'repo-1::B:\\work\\vmd'
+  const FOLDER_CANONICAL_ID = 'repo-1::B:/work/vmd'
+
+  const folderRow: Worktree = {
+    ...baseWorktree,
+    id: FOLDER_RAW_ID,
+    path: 'B:\\work\\vmd',
+    hostId: 'local'
+  }
+  const folderRowOtherHost: Worktree = {
+    ...folderRow,
+    hostId: 'ssh:build-box',
+    // The other host's git scan spells the same checkout with forward slashes.
+    id: FOLDER_CANONICAL_ID
+  }
+
+  it('keys the first-wins map by the row raw id, not the canonical spelling', () => {
+    const worktreesByRepo = { 'repo-1': [folderRow] }
+
+    expect([...getIndexedWorktreeMap(worktreesByRepo).keys()]).toEqual([FOLDER_RAW_ID])
+    expect(getIndexedWorktreeMap(worktreesByRepo).get(FOLDER_RAW_ID)).toBe(folderRow)
+  })
+
+  it('resolves a byte-faithful row from either spelling of the query', () => {
+    const worktreesByRepo = { 'repo-1': [folderRow] }
+
+    expect(getIndexedWorktreesById(worktreesByRepo, FOLDER_RAW_ID)).toEqual([folderRow])
+    expect(getIndexedWorktreesById(worktreesByRepo, FOLDER_CANONICAL_ID)).toEqual([folderRow])
+    expect(getIndexedWorktreeById(worktreesByRepo, FOLDER_RAW_ID)).toBe(folderRow)
+    expect(getIndexedWorktreeById(worktreesByRepo, FOLDER_CANONICAL_ID)).toBe(folderRow)
+  })
+
+  it('keeps the two-host collision byte-faithful and still fires the contested gate', () => {
+    const worktreesByRepo = { 'repo-1': [folderRow, folderRowOtherHost] }
+
+    // The gate holds the canonical id — `hasContestedClaim` folds both sides, so a caller
+    // holding either spelling hits it.
+    expect(getContestedWorktreeIds(worktreesByRepo)).toEqual(new Set([FOLDER_CANONICAL_ID]))
+    expect(hasContestedClaim(getContestedWorktreeIds(worktreesByRepo), FOLDER_RAW_ID)).toBe(true)
+    // The maps stay on the first row's byte-faithful id and hold every host's row.
+    expect([...getIndexedWorktreeMap(worktreesByRepo).keys()]).toEqual([FOLDER_RAW_ID])
+    expect(getIndexedWorktreesById(worktreesByRepo, FOLDER_RAW_ID)).toEqual([
+      folderRow,
+      folderRowOtherHost
+    ])
+    expect(getIndexedWorktreesById(worktreesByRepo, FOLDER_CANONICAL_ID)).toHaveLength(2)
+  })
+
+  it('keeps the first row across hosts for a two-host id, keyed by its own id', () => {
+    const worktreesByRepo = { 'repo-1': [folderRow, folderRowOtherHost] }
+
+    expect(getIndexedWorktreeMap(worktreesByRepo).get(FOLDER_RAW_ID)).toBe(folderRow)
+    // The other host's row is not a second entry: a bare-id lookup cannot name it.
+    expect(getIndexedWorktreeMap(worktreesByRepo).get(FOLDER_CANONICAL_ID)).toBeUndefined()
   })
 })

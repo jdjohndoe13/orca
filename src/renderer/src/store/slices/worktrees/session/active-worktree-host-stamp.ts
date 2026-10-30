@@ -1,4 +1,5 @@
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
+import { hasContestedClaim } from '../../../../../../shared/workspace-session-worktree-key'
 import type { AppState } from '../../../types'
 import { getContestedWorktreeIds, getIndexedWorktreesById } from '../../../worktree-repo-index'
 
@@ -15,7 +16,9 @@ export function getContestedHostStamp(
   state: Pick<AppState, 'worktreesByRepo'>,
   worktreeId: string
 ): ExecutionHostId | null {
-  if (!getContestedWorktreeIds(state.worktreesByRepo).has(worktreeId)) {
+  // The contested set holds the canonical id; the caller may hold the raw Windows spelling.
+  // `hasContestedClaim` folds both sides — the gate must not byte-miss a two-spelling collision.
+  if (!hasContestedClaim(getContestedWorktreeIds(state.worktreesByRepo), worktreeId)) {
     return null
   }
   const hostIds = new Set<ExecutionHostId>()

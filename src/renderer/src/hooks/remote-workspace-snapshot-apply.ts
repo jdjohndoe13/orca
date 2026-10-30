@@ -20,6 +20,13 @@ import {
   waitForSnapshotWorktreePlacement,
   type RemoteWorkspaceSnapshotPlacementStore
 } from './remote-workspace-snapshot-placement'
+import {
+  bareWorkspaceRowsForHost,
+  bareWorkspaceSessionForHost,
+  rekeyRemoteSessionToHostRows,
+  remoteWorkspaceSessionReplaceKeys
+} from './remote-workspace-snapshot-session-keys'
+import { getContestedWorktreeIds } from '../store/worktree-repo-index'
 
 const REMOTE_WORKSPACE_SNAPSHOT_WRITE_SUPPRESS_MS = 1_000
 const SNAPSHOT_TERMINAL_RECONNECT_TIMEOUT_MS = 30_000
@@ -91,13 +98,15 @@ export type RemoteWorkspaceSnapshotApplyResult = 'applied' | 'stale' | 'failed'
 
 function currentRecoveryTabIds(
   state: AppState,
+  liveRows: AppState['tabsByWorktree'],
   authority: DirectSshAuthority,
   worktreeIds: ReadonlySet<string>
 ): Set<string> {
+  // Read the rows the merge sees, not the store's: a contested target's rows live under `host|id`
+  // and the recovery ledger is keyed by tab id, so a bare-only scan would miss every tab the
+  // snapshot is about to replace.
   const targetTabIds = new Set(
-    [...worktreeIds].flatMap((worktreeId) =>
-      (state.tabsByWorktree[worktreeId] ?? []).map((tab) => tab.id)
-    )
+    [...worktreeIds].flatMap((worktreeId) => (liveRows[worktreeId] ?? []).map((tab) => tab.id))
   )
   return new Set(
     [
@@ -175,24 +184,42 @@ export async function applyDirectSshRemoteWorkspaceSnapshot({
       onUnplacedTerminalTabs: (worktreePath) => unplacedTabWorktreePaths.push(worktreePath)
     })
   }
-  const merged = mergeDirectSshRemoteWorkspaceSession(
+  // The merge and the host-unknown reads are bare-id keyed end to end (the shape the host
+  // publishes), so the target's live rows are folded to the bare spelling first and the merged
+  // result is re-spelled to the session key the surface reads. With no contested id in scope
+  // both folds are the identity, so an uncontested install merges exactly as before.
+  const hostId = toSshExecutionHostId(authority.targetId)
+  const contested = getContestedWorktreeIds(state.worktreesByRepo)
+  const liveRows = bareWorkspaceRowsForHost(state.tabsByWorktree, worktreeIds, hostId, contested)
+  const currentSession = bareWorkspaceSessionForHost(
     buildWorkspaceSessionPayload(state),
-    remoteSession,
     worktreeIds,
-    state.tabsByWorktree,
-    currentRecoveryTabIds(state, authority, worktreeIds),
-    toSshExecutionHostId(authority.targetId),
-    state.closedTerminalTabTombstonesByTabId,
-    new Set(
-      [...worktreeIds].flatMap((id) =>
-        (state.tabsByWorktree[id] ?? [])
-          .filter(
-            (tab) =>
-              state.pendingDirectSshLayoutEditsByTabId[tab.id]?.targetId === authority.targetId
-          )
-          .map((tab) => tab.id)
+    hostId,
+    contested
+  )
+  const merged = rekeyRemoteSessionToHostRows(
+    mergeDirectSshRemoteWorkspaceSession(
+      currentSession,
+      remoteSession,
+      worktreeIds,
+      liveRows,
+      currentRecoveryTabIds(state, liveRows, authority, worktreeIds),
+      hostId,
+      state.closedTerminalTabTombstonesByTabId,
+      new Set(
+        [...worktreeIds].flatMap((id) =>
+          (liveRows[id] ?? [])
+            .filter(
+              (tab) =>
+                state.pendingDirectSshLayoutEditsByTabId[tab.id]?.targetId === authority.targetId
+            )
+            .map((tab) => tab.id)
+        )
       )
-    )
+    ),
+    worktreeIds,
+    hostId,
+    contested
   )
   if (!isArrivalCurrent(authority.targetId, arrival) || !isPreparationTokenCurrent(token)) {
     return 'stale'
@@ -202,7 +229,7 @@ export async function applyDirectSshRemoteWorkspaceSnapshot({
   snapshotApplyDepth += 1
   try {
     const currentStore = store.getState()
-    const replaceWorkspaceKeys = [...worktreeIds]
+    const replaceWorkspaceKeys = remoteWorkspaceSessionReplaceKeys(state, worktreeIds, hostId)
     currentStore.hydrateWorkspaceSession(merged, {
       directSshAuthority: authority,
       replaceWorkspaceKeys
