@@ -241,7 +241,8 @@ describe('activity thread host routing', () => {
 
     expect(mocks.activateStructuredAgentSessionTab).toHaveBeenCalledWith({
       worktreeId: thread.worktree.id,
-      tabId: thread.tab.id
+      tabId: thread.tab.id,
+      executionHostId: REMOTE_HOST
     })
     expect(mocks.activateTabAndFocusPane).not.toHaveBeenCalled()
   })

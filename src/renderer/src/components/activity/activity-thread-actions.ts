@@ -12,6 +12,7 @@ import {
 } from '../../../../shared/execution-host'
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import { findKnownWorktreeById } from '@/store/slices/worktrees/listing/detected-worktree-meta'
+import { readWorkspaceSessionRecord } from '@/store/workspace-session-key'
 import type { AppState } from '@/store/types'
 import type { AgentPaneThread } from './activity-thread-types'
 
@@ -107,13 +108,24 @@ export function createActivityThreadActions({
       return
     }
     if (
-      activateStructuredAgentSessionTab({ worktreeId: thread.worktree.id, tabId: thread.tab.id })
+      activateStructuredAgentSessionTab({
+        worktreeId: thread.worktree.id,
+        tabId: thread.tab.id,
+        executionHostId
+      })
     ) {
       return
     }
     // Read post-activation: the tab this thread points at may have only just been revived.
     const activated = useAppStore.getState()
-    const liveTabs = activated.tabsByWorktree[thread.worktree.id] ?? []
+    // A contested id's tabs live under the claimant's row key, not the bare id.
+    const liveTabs =
+      readWorkspaceSessionRecord(
+        activated,
+        activated.tabsByWorktree,
+        thread.worktree.id,
+        executionHostId
+      )?.entry ?? []
     if (!liveTabs.some((tab) => tab.id === thread.tab.id)) {
       // Retained threads outlive their tab; the workspace is still activated, but there is
       // no pane to focus and focusing a sibling would be worse than focusing nothing.

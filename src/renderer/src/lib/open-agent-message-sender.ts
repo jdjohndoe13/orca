@@ -22,6 +22,7 @@ import {
   focusRuntimeTerminalHandle
 } from '@/components/terminal-pane/terminal-handle-links'
 import { showAgentPaneUnavailable } from '@/components/terminal-pane/stale-agent-row'
+import { toRuntimeExecutionHostId } from '../../../shared/execution-host'
 import {
   activateAiVaultStructuredSession,
   structuredSessionOpenFeedback
@@ -101,8 +102,11 @@ async function openSender(
     return
   }
   if (location.kind === 'chat') {
+    // The lookup answered from the host the environmentId names, so the chat's row lives under
+    // that host's session key; a contested id must not be searched at the bare one.
     await activateAiVaultStructuredSession({
-      structuredSession: { workspaceId: location.worktreeId, sessionId: location.sessionId }
+      structuredSession: { workspaceId: location.worktreeId, sessionId: location.sessionId },
+      executionHostId: environmentId ? toRuntimeExecutionHostId(environmentId) : 'local'
     })
     return
   }

@@ -26,7 +26,7 @@ describe('activateAiVaultStructuredSession', () => {
 
     await expect(activateAiVaultStructuredSession(structuredSession, parts)).resolves.toBe(true)
 
-    expect(parts.refresh).toHaveBeenCalledWith('workspace-1')
+    expect(parts.refresh).toHaveBeenCalledWith('workspace-1', undefined)
     expect(parts.activate).toHaveBeenCalledTimes(2)
     // Why: the refresh alone answered, so the host was never asked to republish anything.
     expect(parts.reveal).not.toHaveBeenCalled()

@@ -167,8 +167,10 @@ describe("opening a message's sender", () => {
       location: { kind: 'chat', sessionId: 'live-session', worktreeId: 'wt-sender' }
     })
     await open(chat)
+    // The lookup host rides along so a contested workspace id resolves its own row.
     expect(mocks.activateChat).toHaveBeenCalledWith({
-      structuredSession: { workspaceId: 'wt-sender', sessionId: 'live-session' }
+      structuredSession: { workspaceId: 'wt-sender', sessionId: 'live-session' },
+      executionHostId: 'runtime:env-host'
     })
   })
 
@@ -205,7 +207,8 @@ describe("opening a message's sender", () => {
     mocks.tabs.set('current', { 'wt-sender': [{ contentType: 'agent-session', entityId: ROOT }] })
     await open(chat)
     expect(mocks.activateChat).toHaveBeenCalledWith({
-      structuredSession: { workspaceId: 'wt-sender', sessionId: ROOT }
+      structuredSession: { workspaceId: 'wt-sender', sessionId: ROOT },
+      executionHostId: 'runtime:env-host'
     })
     mocks.focusRenderer.mockReturnValue(true)
     await open(terminal)

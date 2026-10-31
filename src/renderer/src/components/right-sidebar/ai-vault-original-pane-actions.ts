@@ -43,7 +43,8 @@ export function useAiVaultOriginalPaneActions(): {
         ? Boolean(
             findStructuredAgentSessionTab(originalPaneLookupState.unifiedTabsByWorktree, {
               workspaceId: structured.workspaceId,
-              sessionId: structured.sessionId
+              sessionId: structured.sessionId,
+              executionHostId: session.executionHostId
             })
           )
         : false
@@ -86,7 +87,11 @@ export function useAiVaultOriginalPaneActions(): {
         return
       }
 
-      if (!activateAndRevealWorktree(target.worktreeId)) {
+      // The session's own host names the row: without it a contested id activates un-stamped
+      // and the active-row guard matches no claimant, so the pane would not reveal.
+      if (
+        !activateAndRevealWorktree(target.worktreeId, { executionHostId: session.executionHostId })
+      ) {
         toast.error(
           translate(
             'auto.components.right.sidebar.AiVaultPanel.worktreeUnavailable',

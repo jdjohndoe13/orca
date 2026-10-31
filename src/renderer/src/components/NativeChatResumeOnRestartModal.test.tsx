@@ -591,8 +591,10 @@ it('lists a chat the resume could not carry on when the dialog reopens, with wha
   expect(chatBox('b').getAttribute('data-state')).toBe('unchecked')
 
   await act(async () => button('Open chat').click())
+  // The offer row's own host rides along so a contested workspace resolves its own chat row.
   expect(activate).toHaveBeenCalledWith({
-    structuredSession: { workspaceId: 'workspace', sessionId: 'b' }
+    structuredSession: { workspaceId: 'workspace', sessionId: 'b' },
+    executionHostId: 'local'
   })
   // Opening is read-only: the record stays with the host, the dialog just gets out of the way.
   expect(rpc.mock.calls.map((call) => call[1])).not.toContain(

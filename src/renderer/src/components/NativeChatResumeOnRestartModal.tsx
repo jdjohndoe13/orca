@@ -257,7 +257,8 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
     consumeNativeChatResumeOnRestartDialogRequest()
     releaseFinishedNativeChatRestartRun()
     await activateAiVaultStructuredSession({
-      structuredSession: { workspaceId: failure.workspaceId, sessionId }
+      structuredSession: { workspaceId: failure.workspaceId, sessionId },
+      executionHostId: failure.executionHostId
     })
   }
 

@@ -206,7 +206,13 @@ const WorktreeCardAgentsBody = React.memo(function WorktreeCardAgentsBody({
           flashFocusedPane: true,
           scrollToBottomIfOutputSinceLastView: true
         })
-      } else if (!activateStructuredAgentSessionTab({ worktreeId, tabId })) {
+      } else if (
+        !activateStructuredAgentSessionTab({
+          worktreeId,
+          tabId,
+          executionHostId: executionHostId ?? undefined
+        })
+      ) {
         const liveEntry = useAppStore.getState().agentStatusByPaneKey[paneKey]
         if (liveEntry?.worktreeId === worktreeId) {
           // Why: orchestration worker status can be worktree-attributed before the renderer knows its tab; keep the live row instead of dismissing as stale.

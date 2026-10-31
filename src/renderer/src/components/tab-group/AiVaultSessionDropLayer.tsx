@@ -180,7 +180,10 @@ export default function AiVaultSessionDropLayer({
       if (payload.structuredSession) {
         // Same row, same reveal as clicking Resume. Activating by id alone cannot reach a chat
         // whose tab is closed, which is the case this drop is most often used for.
-        void activateAiVaultStructuredSession(payload)
+        void activateAiVaultStructuredSession({
+          structuredSession: payload.structuredSession,
+          executionHostId: payload.sessionExecutionHostId
+        })
         return true
       }
 
