@@ -100,6 +100,24 @@ export class OrcaRuntimeWithMergePreservedHeadlessMobileSessionTabs extends Orca
     return next
   }
 
+  // Why vacuous-without-groups: pre-group sessions and single-host installs have
+  // no group authority; the guard only fires on the record-vs-group divergence
+  // that is the ghost's definition.
+  protected persistedGroupMembershipAllowsPreservedTab(
+    worktreeId: string,
+    parentTabId: string
+  ): boolean {
+    const groups = this.getWorkspaceSessionForWorktree(worktreeId)?.tabGroups?.[worktreeId]
+    if (!groups || groups.length === 0) {
+      return true
+    }
+    if (groups.some((group) => group.tabOrder.includes(parentTabId))) {
+      return true
+    }
+    // Belt-and-braces: a relabeled leaf the host's own graph still lists is live.
+    return this.tabs.has(parentTabId)
+  }
+
   protected releaseRuntimeSessionOwnershipForRendererRetiredTabs(
     incoming: RuntimeMobileSessionTabsSnapshot,
     existing: RuntimeMobileSessionTabsSnapshot | undefined
@@ -130,6 +148,22 @@ export class OrcaRuntimeWithMergePreservedHeadlessMobileSessionTabs extends Orca
       const persistedParent = persistedTabsById.get(tab.parentTabId)
       if (!persistedParent) {
         this.clearRuntimeSessionOwnershipForMobileTab(existing.worktree, existing, tab.parentTabId)
+        continue
+      }
+      if (!this.persistedGroupMembershipAllowsPreservedTab(existing.worktree, tab.parentTabId)) {
+        // Why: the host's own group retired the tab, so the surviving layout
+        // binding no longer proves the tab lives; the ghost's pty must not be
+        // re-rescued by the paired-ownership restore on every inventory call.
+        for (const ptyId of [
+          tab.ptyId,
+          ...Object.values(tab.parentLayout?.ptyIdsByLeafId ?? {})
+        ].filter((id): id is string => typeof id === 'string')) {
+          const pty = this.ptysById.get(ptyId)
+          if (pty?.worktreeId === existing.worktree && pty.tabId === tab.parentTabId) {
+            pty.runtimeSessionOwned = false
+            this.setPairedRendererSessionOwnership(ptyId, false)
+          }
+        }
         continue
       }
       const layout = session.terminalLayoutsByTabId?.[tab.parentTabId]
