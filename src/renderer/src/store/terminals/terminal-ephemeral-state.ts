@@ -2,6 +2,7 @@ import { isClaudeAgent as isClaudeAgentDefault } from '../../../../shared/agent-
 import { recordTerminalInputActivity } from '@/lib/terminal/input/terminal-input-activity-coalescing'
 import { detectAgentStatusFromTitle } from '../../../../shared/agent-status/title/agent-title-status'
 import type { TerminalSlice, TerminalStoreGet, TerminalStoreSet } from './terminal-state'
+import { resolveWorkspaceSessionRowKey } from '../workspace-session-key'
 
 export function createTerminalEphemeralActions(
   set: TerminalStoreSet,
@@ -30,13 +31,16 @@ export function createTerminalEphemeralActions(
   return {
     markDefaultTerminalTabsApplied: (worktreeId) =>
       set((s) => {
-        if (s.defaultTerminalTabsAppliedByWorktreeId[worktreeId]) {
+        // The projection routes this field by session key, so an unqualified write would mark
+        // one host's workspace as applied for every host sharing the id (STA-4343).
+        const rowKey = resolveWorkspaceSessionRowKey(s, worktreeId)
+        if (s.defaultTerminalTabsAppliedByWorktreeId[rowKey]) {
           return s
         }
         return {
           defaultTerminalTabsAppliedByWorktreeId: {
             ...s.defaultTerminalTabsAppliedByWorktreeId,
-            [worktreeId]: true
+            [rowKey]: true
           }
         }
       }),

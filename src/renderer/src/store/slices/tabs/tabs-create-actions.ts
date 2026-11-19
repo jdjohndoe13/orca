@@ -23,6 +23,7 @@ import {
   replaceRecordEntries,
   replaceTabBuckets
 } from '../../record-transitions/keyed-record-transitions'
+import { resolveWorkspaceSessionRowKey } from '../../workspace-session-key'
 
 export function createTabsCreateActions(
   set: TabsSliceSet,
@@ -36,6 +37,8 @@ export function createTabsCreateActions(
       let created!: Tab
       set((current) => {
         init?.validatePlacement?.(current)
+        // The rows live under the session key, `host|id` for a contested workspace id (STA-4343).
+        const rowKey = resolveWorkspaceSessionRowKey(current, worktreeId)
         // Every write below lands on this worktree's entries, so each record is built once at the end.
         const split =
           init?.split && splitGroupId
@@ -43,13 +46,14 @@ export function createTabsCreateActions(
                 current,
                 worktreeId,
                 init.split,
-                emptySplitGroup(worktreeId, splitGroupId)
+                emptySplitGroup(worktreeId, splitGroupId),
+                rowKey
               )
             : null
-        const worktreeGroups = split ? split.groups : current.groupsByWorktree[worktreeId]
+        const worktreeGroups = split ? split.groups : current.groupsByWorktree[rowKey]
         const worktreeActiveGroupId =
-          split?.activeGroupId ?? current.activeGroupIdByWorktree[worktreeId]
-        const existingTabs = current.unifiedTabsByWorktree[worktreeId] ?? []
+          split?.activeGroupId ?? current.activeGroupIdByWorktree[rowKey]
+        const existingTabs = current.unifiedTabsByWorktree[rowKey] ?? []
         const placement = resolveUnifiedTabCreatePlacement({
           groups: worktreeGroups ?? [],
           tabs: existingTabs,
@@ -144,11 +148,11 @@ export function createTabsCreateActions(
         // The split insert and ensureGroup touch only this workspace.
         return {
           unifiedTabsByWorktree: replaceTabBuckets(current.unifiedTabsByWorktree, [
-            [worktreeId, [...nextTabs, created]]
+            [rowKey, [...nextTabs, created]]
           ]),
           groupsByWorktree: replaceRecordEntries(current.groupsByWorktree, [
             [
-              worktreeId,
+              rowKey,
               updateGroup(groupCreated ? [group] : (worktreeGroups ?? []), {
                 ...group,
                 activeTabId: nextActiveTabId,
@@ -159,19 +163,19 @@ export function createTabsCreateActions(
           ]),
           activeGroupIdByWorktree: nextActiveGroupId
             ? replaceRecordEntries(current.activeGroupIdByWorktree, [
-                [worktreeId, nextActiveGroupId]
+                [rowKey, nextActiveGroupId]
               ])
             : current.activeGroupIdByWorktree,
           layoutByWorktree: replaceRecordEntries(current.layoutByWorktree, [
             [
-              worktreeId,
+              rowKey,
               split
                 ? split.layout
                 : // A created group is the workspace's only group, so any layout left over (its
                   // groups closed under another owner, e.g. a remote host's mirrored tabs) points
                   // at groups that no longer exist. Keeping it hides the new tab: an empty strip
                   // and a 0-size pane until a workspace switch rebuilds the layout.
-                  ((groupCreated ? undefined : current.layoutByWorktree[worktreeId]) ?? {
+                  ((groupCreated ? undefined : current.layoutByWorktree[rowKey]) ?? {
                     type: 'leaf',
                     groupId: group.id
                   })
@@ -197,15 +201,12 @@ export function createTabsCreateActions(
       let created: Tab | null = null
       let moved = false
       set((state) => {
-        const sourceGroup = findGroupForTab(
-          state.groupsByWorktree,
-          worktreeId,
-          target.sourceGroupId
-        )
+        const rowKey = resolveWorkspaceSessionRowKey(state, worktreeId)
+        const sourceGroup = findGroupForTab(state.groupsByWorktree, rowKey, target.sourceGroupId)
         if (!sourceGroup) {
           return state
         }
-        const existingTabs = state.unifiedTabsByWorktree[worktreeId] ?? []
+        const existingTabs = state.unifiedTabsByWorktree[rowKey] ?? []
         const shouldActivate = init?.activate ?? true
         const createdAt = Date.now()
         const executionHostId =
@@ -243,13 +244,19 @@ export function createTabsCreateActions(
         }
         created = createdTab
         const nextUnifiedTabsByWorktree = replaceTabBuckets(state.unifiedTabsByWorktree, [
-          [worktreeId, [...existingTabs, createdTab]]
+          [rowKey, [...existingTabs, createdTab]]
         ])
         const {
           groupsByWorktree: nextGroupsByWorktree,
           layoutByWorktree: nextLayoutByWorktree,
           activeGroupIdByWorktree: nextActiveGroupIdByWorktree
-        } = insertSplitGroup(state, worktreeId, { ...target, activate: shouldActivate }, newGroup)
+        } = insertSplitGroup(
+          state,
+          worktreeId,
+          { ...target, activate: shouldActivate },
+          newGroup,
+          rowKey
+        )
         moved = true
         return {
           unifiedTabsByWorktree: nextUnifiedTabsByWorktree,
@@ -266,7 +273,8 @@ export function createTabsCreateActions(
                   activeGroupIdByWorktree: nextActiveGroupIdByWorktree
                 },
                 worktreeId,
-                newGroupId
+                newGroupId,
+                rowKey
               )
             : {})
         }

@@ -21,8 +21,14 @@ export function isSplitLandingGroup(
 }
 
 /** A waiting chooser keeps its workspace open when the last tab beside it closes. */
-export function hasSplitLandingGroup(state: SplitLandingMarks, worktreeId: string): boolean {
-  return (state.groupsByWorktree?.[worktreeId] ?? []).some((group) =>
+export function hasSplitLandingGroup(
+  state: SplitLandingMarks,
+  worktreeId: string,
+  // Where this workspace's groups live: `host|id` for a contested id (STA-4343). The marks
+  // themselves store the bare id, so `isSplitLandingGroup` keeps comparing that.
+  rowKey: string = worktreeId
+): boolean {
+  return (state.groupsByWorktree?.[rowKey] ?? []).some((group) =>
     isSplitLandingGroup(state, worktreeId, group)
   )
 }

@@ -14,6 +14,7 @@ import type { AppState } from '@/store/types'
 import { callRuntimeRpc } from '@/runtime/rpc/calls/runtime-rpc-call'
 import { runtimeEnvironmentIdOrLocalUnlessTwin } from '@/lib/workspace/ownership/worktree-runtime-owner'
 import type { WorktreeRuntimeOwnerState } from '@/lib/workspace/ownership/worktree-runtime-owner-state'
+import { resolveWorkspaceSessionKey } from '@/store/workspace-session-key'
 import { toRuntimeWorktreeSelector } from '@/runtime/rpc/targets/runtime-worktree-selector'
 import {
   isTerminalLeafId,
@@ -54,13 +55,37 @@ export type ActiveTerminalNoteTargetState = {
   >
   runtimePaneTitlesByTabId?: Record<string, Record<number, string> | undefined>
   agentStatusByPaneKey?: ReadonlyMap<string, AgentStatusEntry | undefined>
-} & Pick<WorktreeRuntimeOwnerState, 'repos' | 'worktreesByRepo'>
+  // The note target only ever resolves for the ACTIVE worktree (the guard below), so
+  // the row key needs the active host stamp and the catalog's contested set — read
+  // from the store rather than threaded through every caller. The contested-set
+  // helper (`resolveWorkspaceSessionKey`) wants the store's full row type, so the
+  // field carries that spelling rather than the owner-state `Pick`.
+  activeWorkspaceExecutionHostId?: AppState['activeWorkspaceExecutionHostId']
+  worktreesByRepo?: AppState['worktreesByRepo']
+} & Pick<WorktreeRuntimeOwnerState, 'repos'>
 
 type ActiveAgentRuntimeProbeDescriptor = {
   key: string
   worktreeId: string
   runtimeTarget: RuntimeClientTarget
   noteTarget: ActiveTerminalNoteTarget
+}
+
+/**
+ * The tab rows live under the worktree's SESSION ROW KEY (STA-4343): a contested
+ * id's rows carry the host prefix, so a bare read would find no tab and the note
+ * send would silently target nothing. The host here is the active workspace's own
+ * stamp, which the callers' guard just proved applies.
+ */
+function noteTargetRowKey(state: ActiveTerminalNoteTargetState, worktreeId: string): string {
+  return resolveWorkspaceSessionKey(
+    {
+      worktreesByRepo: state.worktreesByRepo ?? {},
+      activeWorkspaceExecutionHostId: state.activeWorkspaceExecutionHostId ?? null,
+      activeWorktreeId: state.activeWorktreeId
+    },
+    worktreeId
+  )
 }
 
 export function getActiveTerminalNoteTarget(
@@ -71,11 +96,12 @@ export function getActiveTerminalNoteTarget(
     return null
   }
 
+  const rowKey = noteTargetRowKey(state, worktreeId)
   const tabId =
     state.activeTabType === 'terminal'
-      ? (state.activeTabId ?? state.activeTabIdByWorktree[worktreeId])
-      : state.activeTabIdByWorktree[worktreeId]
-  if (!tabId || !(state.tabsByWorktree[worktreeId] ?? []).some((tab) => tab.id === tabId)) {
+      ? (state.activeTabId ?? state.activeTabIdByWorktree[rowKey])
+      : state.activeTabIdByWorktree[rowKey]
+  if (!tabId || !(state.tabsByWorktree[rowKey] ?? []).some((tab) => tab.id === tabId)) {
     return null
   }
 
@@ -214,7 +240,7 @@ function hasFocusedPaneAgentHint(
   worktreeId: string,
   noteTarget: ActiveTerminalNoteTarget
 ): boolean {
-  const tab = (state.tabsByWorktree[worktreeId] ?? []).find(
+  const tab = (state.tabsByWorktree[noteTargetRowKey(state, worktreeId)] ?? []).find(
     (entry) => entry.id === noteTarget.tabId
   )
   const runtimeTitle = getFocusedRuntimePaneTitle(state, noteTarget)

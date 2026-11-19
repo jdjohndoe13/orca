@@ -6,7 +6,7 @@ import type { WorktreeSliceSet } from '../listing/worktree-slice-types'
 import { removeDeleteStatesForWorktreeIds } from './worktree-delete-state'
 import { removeWorktreeVisitEntries } from '@/lib/workspace/activation/worktree-visit-recency'
 import { forgetAmbiguousOwnerWarnings } from '@/lib/workspace/ownership/ambiguous-owner-warning'
-import { omitRecordKeys } from './record-key-omission'
+import { omitRecordKeys, omitRecordKeysByWorktreeId } from './record-key-omission'
 import { removeWorkspaceUnreadState } from '../../workspace-attention/workspace-unread-removal'
 import { removeWorktreeLayout } from '../../tabs/worktree-layout-lifecycle'
 import { omitSleepingAgentSessionsForWorktrees } from './sleeping-agent-session-omission'
@@ -29,7 +29,13 @@ export function applyRemoveWorktreeSuccessState(
   forgetDisplayedPanesForWorktrees([{ id: worktreeId }])
   set((s) => {
     const worktreeIds = [worktreeId]
-    const omitByWorktree = <T>(m: Record<string, T> | undefined) => omitRecordKeys(m, worktreeIds)
+    // Why the decode-aware omit: a contested id's rows live under `host|id` (STA-4343), and a
+    // mid-flight contest flip can reach this full teardown while those rows are still
+    // qualified — a bare-only omit leaves them orphaned, and the contest-rekey pass would
+    // resurrect them as the bare key when the contest clears.
+    const worktreeIdSet = new Set(worktreeIds)
+    const omitByWorktree = <T>(m: Record<string, T> | undefined) =>
+      omitRecordKeysByWorktreeId(m, worktreeIdSet)
     const omitByTabId = <T>(m: Record<string, T> | undefined) => omitRecordKeys(m, tabIds)
     const nextWorktreesByRepo = { ...s.worktreesByRepo }
     for (const repoId of Object.keys(nextWorktreesByRepo)) {

@@ -15,6 +15,7 @@ import {
 } from '../../ownership/terminal-tab-owner-index'
 import { getTabIdFromPaneKey } from '../../pty/terminal-pty-identities'
 import type { AppState } from '../../../types'
+import { resolveWorkspaceSessionRowKey } from '../../../workspace-session-key'
 import type { TerminalSlice, TerminalStoreGet, TerminalStoreSet } from '../../terminal-state'
 import { sameAiVaultSessionTitle } from '../../../../../../shared/ai-vault/contracts/ai-vault-session-title'
 
@@ -188,7 +189,10 @@ export function createTerminalTabPresentationActions(
         const ownerWorktreeId = hadClassification
           ? getTerminalTabOwnerWorktreeId(s.tabsByWorktree, tabId)
           : null
-        const isActive = ownerWorktreeId !== null && ownerWorktreeId === s.activeWorktreeId
+        const isActive =
+          ownerWorktreeId !== null &&
+          ownerWorktreeId ===
+            (s.activeWorktreeId ? resolveWorkspaceSessionRowKey(s, s.activeWorktreeId) : null)
         const shouldBump = hadClassification && ownerWorktreeId !== null && !isActive
         return {
           runtimePaneTitlesByTabId: replaceRecordEntries(s.runtimePaneTitlesByTabId, [
@@ -222,7 +226,13 @@ function runtimePaneTitlePatch(
   const ownerWorktreeId = classificationChanged
     ? getTerminalTabOwnerWorktreeId(s.tabsByWorktree, tabId)
     : null
-  const isActive = ownerWorktreeId !== null && ownerWorktreeId === s.activeWorktreeId
+  // The owner lookup names the record key, which is `host|id` for a contested workspace id
+  // (STA-4343); `activeWorktreeId` is the bare id, so compare the owner to the active
+  // workspace's own row key rather than to the bare id, which two hosts share.
+  const isActive =
+    ownerWorktreeId !== null &&
+    ownerWorktreeId ===
+      (s.activeWorktreeId ? resolveWorkspaceSessionRowKey(s, s.activeWorktreeId) : null)
   const shouldBump = classificationChanged && ownerWorktreeId !== null && !isActive
   return {
     runtimePaneTitlesByTabId: replaceRecordEntries(s.runtimePaneTitlesByTabId, [

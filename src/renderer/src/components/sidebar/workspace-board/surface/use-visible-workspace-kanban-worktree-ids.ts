@@ -6,6 +6,7 @@ import type { Worktree } from '../../../../../../shared/worktree/types'
 import '../../worktree-list/listing/visible-worktrees'
 import { computeVisibleWorktrees } from '../../worktree-list/listing/compute-visible-worktrees'
 import { createLiveAgentWorktreeIdsSelector } from '@/lib/workspace/activity/worktree-activity-state'
+import { getContestedWorktreeIds } from '@/store/slices/worktrees/listing/worktree-catalog-index'
 import { getSettingsFocusedExecutionHostId } from '../../../../../../shared/execution-host/execution-host'
 import type { AppState } from '@/store/types'
 import type { RuntimeStatuses } from '@/store/slices/runtime-status/views/runtime-status-owner'
@@ -68,10 +69,11 @@ export function useVisibleWorkspaceKanbanWorktreeIds({
   const agentStatusNow = showSleepingWorkspaces ? 0 : getAgentStatusEpochNow(agentStatusEpoch)
   // Recompute on epoch, not every hook ping; key on the epoch too since ticks can share a millisecond sample.
   const [selectLiveAgentWorktreeIds] = useState(createLiveAgentWorktreeIdsSelector)
+  const contestedWorktreeIds = getContestedWorktreeIds(worktreesByRepo)
   const worktreeIdsWithLiveAgent = useAppStore((s) =>
     showSleepingWorkspaces
       ? EMPTY_WORKTREE_ID_SET
-      : selectLiveAgentWorktreeIds(s, tabsByWorktree, agentStatusNow)
+      : selectLiveAgentWorktreeIds(s, tabsByWorktree, agentStatusNow, contestedWorktreeIds)
   )
 
   return useMemo(() => {
@@ -87,6 +89,7 @@ export function useVisibleWorkspaceKanbanWorktreeIds({
         browserTabsByWorktree,
         worktreeIdsWithLiveAgent,
         worktreeIdsWithStructuredChat,
+        contestedWorktreeIds,
         hideDefaultBranchWorkspace,
         hideAutomationGeneratedWorkspaces,
         hideCliCreatedWorkspaces,
@@ -109,6 +112,7 @@ export function useVisibleWorkspaceKanbanWorktreeIds({
   }, [
     allWorktrees,
     browserTabsByWorktree,
+    contestedWorktreeIds,
     filterRepoIds,
     hideDefaultBranchWorkspace,
     hideAutomationGeneratedWorkspaces,

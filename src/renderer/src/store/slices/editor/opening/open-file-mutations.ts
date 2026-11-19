@@ -19,6 +19,7 @@ import { captureEditorFileOperationProvenance } from '@/lib/editor/file-operatio
 import { isSameEditorFileOperationIdentity } from '@/lib/editor/file-operations/editor-file-operation-owner'
 import { editorBufferSiblingViewIds } from '../buffers/editor-buffer-views'
 import { replaceTabBuckets } from '../../../record-transitions/keyed-record-transitions'
+import { resolveWorkspaceSessionRowKey } from '../../../workspace-session-key'
 import type { AppState } from '../../../types'
 
 function withoutKeys<T>(record: Record<string, T>, keys: readonly string[]): Record<string, T> {
@@ -113,8 +114,12 @@ export function createOpenFileMutations(
         const scopeWorktreeId = targetWorktreeId ?? worktreeId ?? s.activeWorktreeId
         return {
           ...(scopeWorktreeId === s.activeWorktreeId ? { activeFileId: fileId } : {}),
+          // The slot lives under the session key, `host|id` for a contested workspace id (STA-4343).
           activeFileIdByWorktree: scopeWorktreeId
-            ? { ...s.activeFileIdByWorktree, [scopeWorktreeId]: fileId }
+            ? {
+                ...s.activeFileIdByWorktree,
+                [resolveWorkspaceSessionRowKey(s, scopeWorktreeId)]: fileId
+              }
             : s.activeFileIdByWorktree
         }
       })
@@ -126,8 +131,10 @@ export function createOpenFileMutations(
       if (!worktreeId) {
         return
       }
+      // The group slots live under the session key (STA-4343).
+      const rowKey = resolveWorkspaceSessionRowKey(state, worktreeId)
       const groupId =
-        state.activeGroupIdByWorktree?.[worktreeId] ?? state.groupsByWorktree?.[worktreeId]?.[0]?.id
+        state.activeGroupIdByWorktree?.[rowKey] ?? state.groupsByWorktree?.[rowKey]?.[0]?.id
       if (!groupId) {
         return
       }

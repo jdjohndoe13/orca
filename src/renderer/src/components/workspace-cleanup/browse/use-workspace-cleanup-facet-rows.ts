@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useAppStore } from '@/store/index'
 import { getLiveAgentStatusByWorktreeId } from '@/lib/workspace/activity/worktree-activity-state'
+import { getContestedWorktreeIds } from '@/store/slices/worktrees/listing/worktree-catalog-index'
 import { translateWorkspaceBoardStatusLabel } from '@/components/sidebar/workspace-status/presentation/workspace-board-status-label'
 import type { HostedReviewProvider } from '../../../../../shared/source-control/hosted-review/hosted-review-contracts'
 import type { WorkspaceCleanupCandidate } from '../../../../../shared/workspace-cleanup/workspace-cleanup'
@@ -130,9 +131,16 @@ export function useWorkspaceCleanupFacetRows({
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- cached facet search text holds translated git labels.
     [repos, sources.workspaceStatuses, worktreesByRepo, languageRevision]
   )
+  const contestedWorktreeIds = getContestedWorktreeIds(worktreesByRepo)
   const liveAgentStatusByWorktreeId = useMemo(
-    () => getLiveAgentStatusByWorktreeId(sources.agentStatusByPaneKey, sources.tabsByWorktree, now),
-    [now, sources.agentStatusByPaneKey, sources.tabsByWorktree]
+    () =>
+      getLiveAgentStatusByWorktreeId(
+        sources.agentStatusByPaneKey,
+        sources.tabsByWorktree,
+        now,
+        contestedWorktreeIds
+      ),
+    [now, sources.agentStatusByPaneKey, sources.tabsByWorktree, contestedWorktreeIds]
   )
   // Dismissals use host-qualified identities; bare worktree IDs never match (STA-4343).
   const dismissedIdentities = useMemo(
@@ -176,6 +184,7 @@ export function useWorkspaceCleanupFacetRows({
           sizeBytesByWorktreeId: sizeByWorktreeId,
           lastVisitedAtByWorktreeId: sources.lastVisitedAtByWorktreeId,
           liveAgentStatusByWorktreeId,
+          contestedWorktreeIds,
           reviewInfoByWorktreeId,
           dismissedIdentities
         },
@@ -183,6 +192,7 @@ export function useWorkspaceCleanupFacetRows({
       }),
     [
       candidates,
+      contestedWorktreeIds,
       dismissedIdentities,
       facetContext,
       liveAgentStatusByWorktreeId,

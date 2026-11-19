@@ -32,6 +32,7 @@ import { useWindowBackdropActive } from '@/app-shell/appearance/window-backdrop'
 import { EditorRevealFlash } from './editor-reveal/EditorRevealFlash'
 import { SplitPaneLanding } from './landing/SplitPaneLanding'
 import { isSplitLandingGroup } from '@/store/slices/tabs/split-landing-groups'
+import { resolveWorkspaceRowKey } from '../terminal-workspace-session-row'
 
 const EditorPanel = lazy(() => import('../editor/EditorPanel'))
 const EMPTY_GROUPS: readonly TabGroup[] = []
@@ -99,10 +100,13 @@ export default function TabGroupPanel({
     isSplitLandingGroup(state, worktreeId, model.group ?? undefined)
   )
   // Why: one strip owns the worktree's client-hosted rows, or every split repeats them.
+  // Why the row key: the panel gets the bare worktree id (the workbench mounts one surface per
+  // id), while a contested id's group rows live under `host|id`. Resolved inside the selector so
+  // a host switch — which keeps the bare id — re-points the read.
   const ownsClientHostedRows = useAppStore(
     (state) =>
       resolveClientHostedBrowserRowStripGroupId(
-        state.groupsByWorktree[worktreeId] ?? EMPTY_GROUPS
+        state.groupsByWorktree[resolveWorkspaceRowKey(state, worktreeId)] ?? EMPTY_GROUPS
       ) === groupId
   )
   const worktreeClientHostedRows = useClientHostedBrowserRows(worktreeId)

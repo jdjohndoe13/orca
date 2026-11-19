@@ -1,6 +1,7 @@
 import type { BrowserSlice, BrowserSliceGet, BrowserSliceSet } from '../browser-slice-contract'
 import { mirrorWorkspaceFromActivePage } from './browser-page-records'
 import { isLocalBrowserPageOwner } from '../hosts/browser-host-state'
+import { resolveWorkspaceSessionRowKey } from '../../../workspace-session-key'
 
 export function createBrowserPageFocusActions(
   set: BrowserSliceSet,
@@ -9,7 +10,9 @@ export function createBrowserPageFocusActions(
   return {
     focusBrowserTabInWorktree: (worktreeId, browserPageId, options) => {
       // Why: bridge targets a browserPageId but tabs activate a workspace; find the owning workspace (they differ for multi-page tabs).
-      const tabsForWorktree = get().browserTabsByWorktree[worktreeId] ?? []
+      // The row lives under the session key, `host|id` for a contested workspace id (STA-4343).
+      const rowKey = resolveWorkspaceSessionRowKey(get(), worktreeId)
+      const tabsForWorktree = get().browserTabsByWorktree[rowKey] ?? []
       const workspace = tabsForWorktree.find((tab) => (tab.pageIds ?? []).includes(browserPageId))
       if (!workspace) {
         // Best-effort: worktree state may not be hydrated yet, or the page closed between bridge switch and this IPC arriving.
@@ -27,16 +30,14 @@ export function createBrowserPageFocusActions(
         // Per-worktree slots: always update — safe pre-staging, only visible when user navigates here.
         const nextTabsByWorktree = {
           ...s.browserTabsByWorktree,
-          [worktreeId]: tabsForWorktree.map((tab) =>
-            tab.id === workspace.id ? nextWorkspace : tab
-          )
+          [rowKey]: tabsForWorktree.map((tab) => (tab.id === workspace.id ? nextWorkspace : tab))
         }
         const nextActiveTabIdByWorktree = {
           ...s.activeBrowserTabIdByWorktree,
-          [worktreeId]: workspace.id
+          [rowKey]: workspace.id
         }
         const nextActiveTabTypeByWorktree = surfacePane
-          ? { ...s.activeTabTypeByWorktree, [worktreeId]: 'browser' as const }
+          ? { ...s.activeTabTypeByWorktree, [rowKey]: 'browser' as const }
           : s.activeTabTypeByWorktree
         // Globals: mutate only when the targeted worktree is active — keeps cross-worktree --focus silent.
         return {
@@ -59,7 +60,7 @@ export function createBrowserPageFocusActions(
       }
 
       // Why: sync the unified-tab strip's active entry; activateTab only mutates per-worktree slices, so it's cross-worktree-safe.
-      const item = (get().unifiedTabsByWorktree[worktreeId] ?? []).find(
+      const item = (get().unifiedTabsByWorktree[rowKey] ?? []).find(
         (entry) => entry.contentType === 'browser' && entry.entityId === workspace.id
       )
       if (item) {

@@ -72,6 +72,8 @@ import '../orca-profiles/profile-index-store'
 // oxfmt-ignore
 import { getProfileUserDataPath, initOrcaProfilePaths } from '../orca-profiles/profile-storage-paths'
 import { recoverPendingProfileProjectMoves } from '../orca-profiles/project-transfer/profile-project-move-intent'
+import { electronRuntimeWindowBroadcastSurface } from '../host/electron-window-broadcast-surface'
+import { setRuntimeWindowBroadcastSurface } from '../runtime/runtime-window-broadcast-surface'
 import { initStatsPath } from '../stats/collector'
 import { registerDocPreviewSchemePrivileges } from '../browser/document-preview/doc-preview-protocol'
 import { PRIVILEGED_CUSTOM_SCHEMES } from './chromium-policy/privileged-custom-schemes'
@@ -265,6 +267,10 @@ function initializeMainProcessPreflight(options: MainProcessPreflightOptions): b
   selectLinuxKeyringBackend()
   setSecretStore(new ElectronSecretStore())
   installElectronNativeServices()
+  // Why here too: the runtime-environment connection code publishes connection diagnostics
+  // to renderers without importing electron; on a Node host nothing is published, which is
+  // correct — there are no renderers to reach.
+  setRuntimeWindowBroadcastSurface(electronRuntimeWindowBroadcastSurface)
   // Couple only dev desktop lifetime; serve must outlive its CLI shim/background-shell parent.
   const shouldCoupleToDevParent = isDev && !state.isServeMode
   installDevParentDisconnectQuit(shouldCoupleToDevParent)

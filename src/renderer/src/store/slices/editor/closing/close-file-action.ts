@@ -23,6 +23,7 @@ import { isSameOwnedDocument } from '../file-ids/same-owned-editor-document'
 import { isEditorTabContentType } from '../tabs/editor-tab-content-type'
 import { closeFileTabsThroughLayoutOwner } from '../tabs/editor-tab-close-through-layout-owner'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../../shared/workspace-layout/layout-owner-switch'
+import { resolveWorkspaceSessionRowKey } from '../../../workspace-session-key'
 
 export function createCloseFileAction(
   set: EditorSet,
@@ -70,7 +71,9 @@ export function createCloseFileAction(
                     preClose.readOnly !== true &&
                     file.readOnly !== true &&
                     isSameOwnedDocument(file, preClose) &&
-                    !get().unifiedTabsByWorktree[file.worktreeId]?.some(
+                    // The pinned-tab check reads the workspace's session row (STA-4343);
+                    // a bare read would miss a contested id's pinned tab.
+                    !get().unifiedTabsByWorktree[resolveWorkspaceSessionRowKey(get(), file.worktreeId)]?.some(
                       (tab) => tab.entityId === file.id && tab.isPinned
                     ) &&
                     ![
@@ -155,43 +158,53 @@ export function createCloseFileAction(
           if (s.activeFileId && fileIdsToClose.has(s.activeFileId)) {
             const worktreeId = placementId ?? closedFile?.worktreeId ?? s.activeWorktreeId
             const worktreeFiles = worktreeId
-              ? workspaceEditorFiles(s.openFiles, s.unifiedTabsByWorktree[worktreeId])
+              ? workspaceEditorFiles(
+                  s.openFiles,
+                  s.unifiedTabsByWorktree[resolveWorkspaceSessionRowKey(s, worktreeId)]
+                )
               : s.openFiles
             newActiveId = findAdjacentOpenFileId(worktreeFiles, fileIdsToClose, s.activeFileId)
           }
 
           const closedWorktreeId = placementId ?? closedFile?.worktreeId
           if (closedWorktreeId) {
+            // The per-worktree slot lives under the session key, `host|id` for a contested
+            // workspace id (STA-4343); the open-file entity keeps the bare id.
+            const closedRowKey = resolveWorkspaceSessionRowKey(s, closedWorktreeId)
             const worktreeFiles = workspaceEditorFiles(
               s.openFiles,
-              s.unifiedTabsByWorktree[closedWorktreeId]
+              s.unifiedTabsByWorktree[closedRowKey]
             )
-            const worktreeActiveFileId = s.activeFileIdByWorktree[closedWorktreeId]
+            const worktreeActiveFileId = s.activeFileIdByWorktree[closedRowKey]
             if (worktreeActiveFileId && fileIdsToClose.has(worktreeActiveFileId)) {
-              newActiveFileIdByWorktree[closedWorktreeId] = findAdjacentOpenFileId(
+              newActiveFileIdByWorktree[closedRowKey] = findAdjacentOpenFileId(
                 worktreeFiles,
                 fileIdsToClose,
                 worktreeActiveFileId
               )
             } else if (s.activeFileId && fileIdsToClose.has(s.activeFileId)) {
-              newActiveFileIdByWorktree[closedWorktreeId] = newActiveId
+              newActiveFileIdByWorktree[closedRowKey] = newActiveId
             }
           }
 
           // Why: editors share a mixed tab strip with browser tabs; closing the last editor should reveal a browser tab before falling back to a terminal.
           const activeWorktreeId = s.activeWorktreeId
+          // The active workspace's own row: stamped host for a contested id (STA-4343).
+          const activeRowKey = activeWorktreeId
+            ? resolveWorkspaceSessionRowKey(s, activeWorktreeId)
+            : null
           const remainingForWorktree = activeWorktreeId
-            ? workspaceEditorFiles(newFiles, s.unifiedTabsByWorktree[activeWorktreeId])
+            ? workspaceEditorFiles(newFiles, s.unifiedTabsByWorktree[activeRowKey ?? ''])
             : newFiles
-          const browserTabsForWorktree = activeWorktreeId
-            ? (s.browserTabsByWorktree[activeWorktreeId] ?? [])
+          const browserTabsForWorktree = activeRowKey
+            ? (s.browserTabsByWorktree[activeRowKey] ?? [])
             : []
-          const terminalTabsForWorktree = activeWorktreeId
-            ? (s.tabsByWorktree[activeWorktreeId] ?? [])
+          const terminalTabsForWorktree = activeRowKey
+            ? (s.tabsByWorktree[activeRowKey] ?? [])
             : []
           const fallbackBrowserTabId =
-            activeWorktreeId && browserTabsForWorktree.length > 0
-              ? (s.activeBrowserTabIdByWorktree[activeWorktreeId] ??
+            activeRowKey && browserTabsForWorktree.length > 0
+              ? (s.activeBrowserTabIdByWorktree[activeRowKey] ??
                 browserTabsForWorktree[0]?.id ??
                 null)
               : s.activeBrowserTabId
@@ -207,15 +220,15 @@ export function createCloseFileAction(
                 ? 'browser'
                 : 'terminal'
           const newActiveTabTypeByWorktree = { ...s.activeTabTypeByWorktree }
-          if (activeWorktreeId && remainingForWorktree.length === 0 && !closesBackgroundFile) {
-            newActiveTabTypeByWorktree[activeWorktreeId] =
+          if (activeRowKey && remainingForWorktree.length === 0 && !closesBackgroundFile) {
+            newActiveTabTypeByWorktree[activeRowKey] =
               browserTabsForWorktree.length > 0 ? 'browser' : 'terminal'
           }
           // Structured chats have no legacy terminal row to keep their workspace selected.
           const hasRemainingUnifiedTabs =
-            activeWorktreeId !== null &&
+            activeRowKey !== null &&
             unifiedTabsKeepWorktreeSelected(
-              s.unifiedTabsByWorktree?.[activeWorktreeId],
+              s.unifiedTabsByWorktree?.[activeRowKey],
               fileIdsToClose
             )
           const shouldDeactivateWorktree =
@@ -228,6 +241,9 @@ export function createCloseFileAction(
 
           // Why: prune the closed id from tabBarOrderByWorktree so stale ids don't shift positions on the next reconcile.
           const worktreeId = placementId ?? closedFile?.worktreeId ?? activeWorktreeId
+          // The order list is keyed by the session row (STA-4343); qualifying an already-qualified
+          // placement id is a no-op, so a caller that arrived through a row key stays on it.
+          const tabBarRowKey = worktreeId ? resolveWorkspaceSessionRowKey(s, worktreeId) : null
 
           let nextRecentlyClosed = s.recentlyClosedEditorTabsByWorktree
           let nextRecentlyClosedKinds = s.recentlyClosedTabKindsByWorktree
@@ -285,7 +301,7 @@ export function createCloseFileAction(
             markdownTableOfContentsVisible: newMarkdownTableOfContentsVisible,
             ...closedEditorTabOrder(
               s,
-              worktreeId ? new Map([[worktreeId, closedTabOrderIds]]) : new Map()
+              tabBarRowKey ? new Map([[tabBarRowKey, closedTabOrderIds]]) : new Map()
             ),
             pendingEditorReveal: null,
             pendingEditorFocusRequest:

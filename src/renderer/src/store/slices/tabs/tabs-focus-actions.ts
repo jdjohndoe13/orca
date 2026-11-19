@@ -11,6 +11,8 @@ import {
   replaceRecordEntries,
   replaceTabBuckets
 } from '../../record-transitions/keyed-record-transitions'
+import { getWorkspaceIdFromSessionKey } from '../../../../../shared/workspace-session-worktree-key'
+import { resolveWorkspaceSessionRowKey } from '../../workspace-session-key'
 
 /** Activation ends a preview unless it preserves it; main's frame ends one main owns. */
 function withPreviewOnActivation(tab: Tab, preservePreview: boolean, endsHere: boolean): Tab {
@@ -32,14 +34,16 @@ export function tabActivationPatch(
   tab: Tab,
   worktreeId: string,
   opts: { preservePreview?: boolean; recordFocus?: boolean } | undefined,
-  endsPreview: boolean
+  endsPreview: boolean,
+  // Where this workspace's rows live: `host|id` for a contested id (STA-4343).
+  rowKey: string = worktreeId
 ): ActivationState {
   const tabId = tab.id
   return {
     unifiedTabsByWorktree: replaceTabBuckets(state.unifiedTabsByWorktree, [
       [
-        worktreeId,
-        (state.unifiedTabsByWorktree[worktreeId] ?? []).map((item) =>
+        rowKey,
+        (state.unifiedTabsByWorktree[rowKey] ?? []).map((item) =>
           item.id === tabId
             ? {
                 ...withPreviewOnActivation(item, opts?.preservePreview === true, endsPreview),
@@ -51,8 +55,8 @@ export function tabActivationPatch(
     ]),
     groupsByWorktree: replaceRecordEntries(state.groupsByWorktree, [
       [
-        worktreeId,
-        (state.groupsByWorktree[worktreeId] ?? []).map((group) =>
+        rowKey,
+        (state.groupsByWorktree[rowKey] ?? []).map((group) =>
           group.id === tab.groupId
             ? {
                 ...group,
@@ -68,7 +72,7 @@ export function tabActivationPatch(
       ]
     ]),
     activeGroupIdByWorktree: replaceRecordEntries(state.activeGroupIdByWorktree, [
-      [worktreeId, tab.groupId]
+      [rowKey, tab.groupId]
     ])
   }
 }
@@ -81,12 +85,20 @@ export function createTabsFocusActions(
   return {
     getTab: (tabId) => findTabAndWorktree(get().unifiedTabsByWorktree, tabId)?.tab ?? null,
 
-    getActiveTab: (worktreeId) => selectActiveTabForWorktree(get(), worktreeId),
+    getActiveTab: (worktreeId) => {
+      const state = get()
+      // The rows live under the session key, `host|id` for a contested workspace id (STA-4343).
+      return selectActiveTabForWorktree(
+        state,
+        worktreeId,
+        resolveWorkspaceSessionRowKey(state, worktreeId)
+      )
+    },
 
     findTabForEntityInGroup: (worktreeId, groupId, entityId, contentType) =>
       findTabByEntityInGroup(
         get().unifiedTabsByWorktree,
-        worktreeId,
+        resolveWorkspaceSessionRowKey(get(), worktreeId),
         groupId,
         entityId,
         contentType
@@ -98,22 +110,52 @@ export function createTabsFocusActions(
         const scopedWorktreeId = opts?.worktreeId
         let found: ReturnType<typeof findTabAndWorktree>
         if (scopedWorktreeId !== undefined) {
-          const scopedTabs = Object.hasOwn(state.unifiedTabsByWorktree, scopedWorktreeId)
-            ? state.unifiedTabsByWorktree[scopedWorktreeId]
+          // A caller names the workspace by its bare id; the record may key it `host|id`.
+          const scopedKey = resolveWorkspaceSessionRowKey(state, scopedWorktreeId)
+          const scopedTabs = Object.hasOwn(state.unifiedTabsByWorktree, scopedKey)
+            ? state.unifiedTabsByWorktree[scopedKey]
             : []
           const scopedTab = scopedTabs.find((tab) => tab.id === tabId)
-          found = scopedTab ? { tab: scopedTab, worktreeId: scopedWorktreeId } : null
+          found = scopedTab ? { tab: scopedTab, worktreeId: scopedKey } : null
         } else {
           found = findTabAndWorktree(state.unifiedTabsByWorktree, tabId)
         }
         if (!found) {
           return state
         }
-        const { tab, worktreeId } = found
+        const { tab } = found
+        const rowKey = found.worktreeId
+        const worktreeId = getWorkspaceIdFromSessionKey(rowKey)
         if (ORCA_LAYOUT_OWNER_IS_MAIN && tab.isPreview && !opts?.preservePreview) {
           promoted.push(tab)
         }
-        return tabActivationPatch(state, tab, worktreeId, opts, endsPreviewHere(state, worktreeId))
+        // Why: activating a terminal tab dismisses its tab-level bell — the user has moved their eyes here.
+        // Why (activeWorktree guard below): only when the tab is in the active worktree, else the unseen signal is lost (mirrors focusGroup).
+        const terminalEntityId = tab.contentType === 'terminal' ? tab.entityId : null
+        const nextUnreadTerminalTabs =
+          state.activeWorktreeId === worktreeId &&
+          terminalEntityId &&
+          state.unreadTerminalTabs[terminalEntityId]
+            ? (() => {
+                const copy = { ...state.unreadTerminalTabs }
+                delete copy[terminalEntityId]
+                return copy
+              })()
+            : state.unreadTerminalTabs
+        return {
+          ...tabActivationPatch(
+            state,
+            tab,
+            worktreeId,
+            opts,
+            endsPreviewHere(state, worktreeId),
+            rowKey
+          ),
+          // Why: skip writing unreadTerminalTabs when the reference is unchanged, avoiding a no-op alloc that re-runs full-state selectors.
+          ...(nextUnreadTerminalTabs !== state.unreadTerminalTabs
+            ? { unreadTerminalTabs: nextUnreadTerminalTabs }
+            : {})
+        }
       })
       // Switch point: main makes the activated preview permanent; its frame clears the flag.
       if (ORCA_LAYOUT_OWNER_IS_MAIN && promoted.length > 0) {

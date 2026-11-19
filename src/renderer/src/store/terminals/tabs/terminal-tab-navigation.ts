@@ -3,6 +3,8 @@ import { getTerminalTabOwnerWorktreeId } from '../ownership/terminal-tab-owner-i
 import type { TerminalSlice, TerminalStoreGet, TerminalStoreSet } from '../terminal-state'
 import { ownsGlobalSelection } from '../../workspaces/selection/global-selection-owner'
 import { replaceTabBuckets } from '../../record-transitions/keyed-record-transitions'
+import { getWorkspaceIdFromSessionKey } from '../../../../../shared/workspace-session-worktree-key'
+import { resolveWorkspaceSessionRowKey } from '../../workspace-session-key'
 
 export function createTerminalTabNavigationActions(
   set: TerminalStoreSet,
@@ -18,7 +20,8 @@ export function createTerminalTabNavigationActions(
   return {
     reorderTabs: (worktreeId, tabIds) => {
       set((s) => {
-        const tabs = s.tabsByWorktree[worktreeId] ?? []
+        const rowKey = resolveWorkspaceSessionRowKey(s, worktreeId)
+        const tabs = s.tabsByWorktree[rowKey] ?? []
         const tabMap = new Map(tabs.map((t) => [t.id, t]))
         const orderedSet = new Set(tabIds)
         const missingTabs = tabs.filter((t) => !orderedSet.has(t.id))
@@ -27,15 +30,17 @@ export function createTerminalTabNavigationActions(
           ...missingTabs
         ].map((tab, i) => ({ ...tab, sortOrder: i }))
         return {
-          tabsByWorktree: replaceTabBuckets(s.tabsByWorktree, [[worktreeId, reordered]])
+          tabsByWorktree: replaceTabBuckets(s.tabsByWorktree, [[rowKey, reordered]])
         }
       })
     },
     setTabBarOrder: (worktreeId, order) => {
       set((s) => {
-        const newTabBarOrder = { ...s.tabBarOrderByWorktree, [worktreeId]: order }
+        const rowKey = resolveWorkspaceSessionRowKey(s, worktreeId)
+        // Update unified visual order
+        const newTabBarOrder = { ...s.tabBarOrderByWorktree, [rowKey]: order }
         // Keep terminal tab sortOrder in sync for persistence
-        const tabs = s.tabsByWorktree[worktreeId]
+        const tabs = s.tabsByWorktree[rowKey]
         if (!tabs) {
           return { tabBarOrderByWorktree: newTabBarOrder }
         }
@@ -49,20 +54,34 @@ export function createTerminalTabNavigationActions(
         ].map((tab, i) => ({ ...tab, sortOrder: i }))
         return {
           tabBarOrderByWorktree: newTabBarOrder,
-          tabsByWorktree: replaceTabBuckets(s.tabsByWorktree, [[worktreeId, updatedTabs]])
+          tabsByWorktree: replaceTabBuckets(s.tabsByWorktree, [[rowKey, updatedTabs]])
         }
       })
     },
     setActiveTab: (tabId) => {
       let tabOwnerWorktreeId: string | null = null
       set((s) => {
+        // Why: clear bells only for visible tabs; background bells must persist.
+        // The owner lookup scans the record, so it names the row key — `host|id` for a contested
+        // workspace id (STA-4343). The maps below are keyed by that; the global selection is
+        // compared against the bare id, which is what `activeWorktreeId` holds.
         tabOwnerWorktreeId = resolveActiveTabOwnerWorktreeId(
           s.tabsByWorktree,
-          s.activeWorktreeId,
+          s.activeWorktreeId ? resolveWorkspaceSessionRowKey(s, s.activeWorktreeId) : null,
           tabId
         )
         const isActiveWorktreeTab =
-          tabOwnerWorktreeId !== null && ownsGlobalSelection(s, tabOwnerWorktreeId)
+          tabOwnerWorktreeId !== null &&
+          ownsGlobalSelection(s, getWorkspaceIdFromSessionKey(tabOwnerWorktreeId))
+        // Why: activeTabId marks the visible tab, so background bells remain unread.
+        const nextUnreadTerminalTabs =
+          isActiveWorktreeTab && s.unreadTerminalTabs[tabId]
+            ? (() => {
+                const copy = { ...s.unreadTerminalTabs }
+                delete copy[tabId]
+                return copy
+              })()
+            : s.unreadTerminalTabs
         const activeTabId = isActiveWorktreeTab ? tabId : s.activeTabId
         // Preserve map identity on redundant activation; duplicate tab IDs can prevent convergence and retrigger Terminal’s repair effect into React #185.
         const activeTabIdByWorktree =
@@ -70,9 +89,11 @@ export function createTerminalTabNavigationActions(
             ? { ...s.activeTabIdByWorktree, [tabOwnerWorktreeId]: tabId }
             : s.activeTabIdByWorktree
         // Unchanged selection publishes nothing; every publication wakes every store subscriber.
-        return activeTabId === s.activeTabId && activeTabIdByWorktree === s.activeTabIdByWorktree
+        return activeTabId === s.activeTabId &&
+          activeTabIdByWorktree === s.activeTabIdByWorktree &&
+          nextUnreadTerminalTabs === s.unreadTerminalTabs
           ? s
-          : { activeTabId, activeTabIdByWorktree }
+          : { activeTabId, activeTabIdByWorktree, unreadTerminalTabs: nextUnreadTerminalTabs }
       })
       const state = get()
       const ownerUnifiedTabs =
@@ -101,7 +122,7 @@ export function createTerminalTabNavigationActions(
       set((s) => ({
         activeTabIdByWorktree: {
           ...s.activeTabIdByWorktree,
-          [worktreeId]: tabId
+          [resolveWorkspaceSessionRowKey(s, worktreeId)]: tabId
         }
       }))
     }

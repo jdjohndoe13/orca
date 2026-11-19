@@ -55,6 +55,7 @@ import {
   selectDetectedWorktreesByRepo,
   selectFolderWorkspaces
 } from '@/store/workspaces/catalog/workspace-record-fields'
+import { getContestedWorktreeIds } from '@/store/slices/worktrees/listing/worktree-catalog-index'
 
 type WorktreeListProps = {
   scrollOffsetRef: React.MutableRefObject<number>
@@ -94,6 +95,8 @@ const WorktreeList = React.memo(function WorktreeList({
   const detectedWorktreesByRepo = useAppStore((s) => selectDetectedWorktreesByRepo(s))
   const activeWorktreeId = useAppStore((s) => s.activeWorktreeId)
   const activeWorkspaceExecutionHostId = useAppStore((s) => s.activeWorkspaceExecutionHostId)
+  // WeakMap-cached per catalog reference, so the selector is identity-stable across unrelated writes.
+  const contestedWorktreeIds = useAppStore((s) => getContestedWorktreeIds(s.worktreesByRepo))
   const activeWorkspaceKey = useAppStore((s) => s.activeWorkspaceKey)
   const currentSidebarWorktreeId = useMemo(
     () => getActiveSidebarWorkspaceId(activeWorkspaceKey, activeWorktreeId),
@@ -326,6 +329,7 @@ const WorktreeList = React.memo(function WorktreeList({
         visibleProjectRepoIdsBySection={visibleProjectRepoIdsBySection}
         activeWorktreeId={activeCardWorktreeId}
         activeWorkspaceExecutionHostId={activeWorkspaceExecutionHostId}
+        contestedWorktreeIds={contestedWorktreeIds}
         currentWorktreeId={currentSidebarWorktreeId}
         groupBy={groupBy}
         pinnedDisplayPolicy={pinnedDisplayPolicy}

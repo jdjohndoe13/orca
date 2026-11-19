@@ -18,6 +18,7 @@ import {
   hasStructuredAgentSessionLaunchCancellationTombstone,
   shouldRetainStructuredAgentSessionLaunchTab
 } from '@/lib/agent-session/launch/structured-agent-session-launch-registry'
+import { getWorkspaceIdFromSessionKey } from '../../../../../shared/workspace-session-worktree-key'
 import { clearWebSessionFocusIntentIfMatches } from '@/runtime/web-session-tabs-sync/navigation/web-session-focus-intent'
 import { ownsGlobalSelection } from '../../workspaces/selection/global-selection-owner'
 import {
@@ -50,16 +51,20 @@ export function createTabsCloseActions(
       if (!found) {
         return null
       }
-      const { tab, worktreeId } = found
+      // The lookup walked the record, so it hands back the row key — `host|id` for a contested
+      // workspace id (STA-4343). The bare id is what the entity-level owners below key on, and the
+      // key is the authoritative spelling of both halves.
+      const { tab, worktreeId: rowKey } = found
+      const worktreeId = getWorkspaceIdFromSessionKey(rowKey)
       const retireEditor = opts?.editorRetirementHandled
         ? () => {}
         : editorTabRetirement(set, get, state, tab)
       forgetDesktopCreatedServerTab(tab.id)
       forgetDesktopCreatedServerTab(tab.entityId)
-      const group = findGroupForTab(state.groupsByWorktree, worktreeId, tab.groupId)
+      const group = findGroupForTab(state.groupsByWorktree, rowKey, tab.groupId)
       // Why: a tab whose group record vanished must still close; its order is the worktree's tabs.
       const groupOrder =
-        group?.tabOrder ?? (state.unifiedTabsByWorktree[worktreeId] ?? []).map((item) => item.id)
+        group?.tabOrder ?? (state.unifiedTabsByWorktree[rowKey] ?? []).map((item) => item.id)
 
       if (tab.contentType === 'terminal' && !opts?.terminalRetirementHandled) {
         const dedupedGroupOrder = dedupeTabOrder(groupOrder)
@@ -126,7 +131,7 @@ export function createTabsCloseActions(
                 dedupedGroupOrder,
                 group.recentTabIds,
                 tabId,
-                state.unifiedTabsByWorktree[worktreeId]
+                state.unifiedTabsByWorktree[rowKey]
               )
           : (group?.activeTabId ?? null)
       const nextRecentTabIds = sanitizeRecentTabIds(
@@ -138,7 +143,7 @@ export function createTabsCloseActions(
       const closeHere = (): void =>
         settleAttentionRemovedBy(set, get, () =>
           set((current) => {
-            const nextTabs = (current.unifiedTabsByWorktree[worktreeId] ?? []).filter((item) => {
+            const nextTabs = (current.unifiedTabsByWorktree[rowKey] ?? []).filter((item) => {
               if (item.id === tabId) {
                 retireRemovedNativeChatTabs([item], [])
               }
@@ -151,7 +156,7 @@ export function createTabsCloseActions(
             // Why: a structured chat tab owns its markers directly; nothing else retires them.
             const structuredAttention =
               tab.contentType === 'agent-session' ? removeTabsAttention(current, [tabId]) : null
-            let nextGroups = (current.groupsByWorktree[worktreeId] ?? []).map((candidate) =>
+            let nextGroups = (current.groupsByWorktree[rowKey] ?? []).map((candidate) =>
               candidate.id === group?.id
                 ? {
                     ...candidate,
@@ -163,32 +168,32 @@ export function createTabsCloseActions(
             )
             let nextLayoutByWorktree = current.layoutByWorktree
             let nextActiveGroupIdByWorktree = current.activeGroupIdByWorktree
-            const currentLayout = current.layoutByWorktree[worktreeId]
+            const currentLayout = current.layoutByWorktree[rowKey]
             if (group && wasLastTab && currentLayout && nextGroups.length > 1) {
               nextGroups = nextGroups.filter((candidate) => candidate.id !== group.id)
               const collapsed = collapseWorktreeGroupLayout(
                 currentLayout,
-                current.activeGroupIdByWorktree[worktreeId],
+                current.activeGroupIdByWorktree[rowKey],
                 group.id,
                 nextGroups[0]?.id ?? null
               )
               nextLayoutByWorktree = replaceRecordEntries(current.layoutByWorktree, [
-                [worktreeId, collapsed.layout]
+                [rowKey, collapsed.layout]
               ])
               nextActiveGroupIdByWorktree = replaceRecordEntries(current.activeGroupIdByWorktree, [
-                [worktreeId, collapsed.activeGroupId]
+                [rowKey, collapsed.activeGroupId]
               ])
             }
             const nextUnifiedTabsByWorktree = replaceTabBuckets(current.unifiedTabsByWorktree, [
-              [worktreeId, nextTabs]
+              [rowKey, nextTabs]
             ])
             const nextGroupsByWorktree = replaceRecordEntries(current.groupsByWorktree, [
-              [worktreeId, nextGroups]
+              [rowKey, nextGroups]
             ])
             // Unwinding a failed create added no tab; preserve the original selection instead of landing on welcome.
             const shouldDeactivateWorktree =
               !opts?.preserveWorktreeSelection &&
-              landsOnEmptiedWorktree(current, worktreeId, nextTabs.length)
+              landsOnEmptiedWorktree(current, worktreeId, nextTabs.length, rowKey)
             return {
               unifiedTabsByWorktree: nextUnifiedTabsByWorktree,
               groupsByWorktree: nextGroupsByWorktree,
@@ -200,7 +205,9 @@ export function createTabsCloseActions(
                 : {}),
               ...structuredAttention,
               // Why: closing the last tab can leave the worktree selected but render-empty, so write the landing-state fallback directly.
-              ...(shouldDeactivateWorktree ? emptiedWorktreeLandingPatch(current, worktreeId) : {}),
+              ...(shouldDeactivateWorktree
+                ? emptiedWorktreeLandingPatch(current, worktreeId, rowKey)
+                : {}),
               ...(!shouldDeactivateWorktree && ownsGlobalSelection(current, worktreeId)
                 ? buildActiveSurfacePatch(
                     {
@@ -211,7 +218,8 @@ export function createTabsCloseActions(
                       activeGroupIdByWorktree: nextActiveGroupIdByWorktree
                     },
                     worktreeId,
-                    nextActiveGroupIdByWorktree[worktreeId] ?? null
+                    nextActiveGroupIdByWorktree[rowKey] ?? null,
+                    rowKey
                   )
                 : {})
             }
@@ -229,7 +237,7 @@ export function createTabsCloseActions(
           // An editor close lands through closeFile, which owns its content.
           ...(isEditorTabContentType(tab.contentType) || opts?.preserveWorktreeSelection
             ? {}
-            : { landIfEmptied: () => landOnEmptiedWorktree(set, get, worktreeId) }),
+            : { landIfEmptied: () => landOnEmptiedWorktree(set, get, worktreeId, rowKey) }),
           // A chat tab owns its markers; nothing else retires them.
           ...(tab.contentType === 'agent-session'
             ? {

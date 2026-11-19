@@ -11,6 +11,15 @@ const XTERM_MOUSE_REPORTING_CLASS = 'enable-mouse-events'
 const REPLAYED_WHEEL_EVENT_PROPERTY = '__orcaReplayedTerminalWheelEvent'
 const DOM_DELTA_LINE = 1
 
+/** Why: xterm toggles this class while the TUI owns the mouse, so it is the
+ *  shared signal for "app-level chords belong to the TUI"; other callers must
+ *  reuse this predicate rather than re-reading the class themselves. */
+export function hasTerminalMouseReportingMode(
+  terminalElement: HTMLElement | null | undefined
+): boolean {
+  return terminalElement?.classList.contains(XTERM_MOUSE_REPORTING_CLASS) === true
+}
+
 type TerminalWheelTarget = Pick<Terminal, 'attachCustomWheelEventHandler' | 'element' | 'rows'> & {
   modes: Pick<Terminal['modes'], 'mouseTrackingMode'>
 }

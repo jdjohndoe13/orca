@@ -3,11 +3,10 @@ import { terminalPaneViewport } from '../session/pane-layout/mobile-terminal-pan
 import { useCallback, useEffect, useRef } from 'react'
 import { AppState, Platform, useWindowDimensions, type AppStateStatus } from 'react-native'
 import { shouldRecoverTerminalOnAppStateChange } from '../webview/terminal-foreground-recovery'
-import { terminalViewportUpdate } from '../host-operations/mobile-terminal-operations'
+import { attemptTerminalViewportUpdate } from './terminal-viewport-update-attempt'
 import {
   isTerminalViewportRefitTargetCurrent,
   reduceTerminalFrameHeightRefit,
-  resolveTerminalUpdateViewportCapability,
   type TerminalFrameHeightRefitEvent,
   type TerminalFrameHeightRefitState,
   type TerminalUpdateViewportCapability
@@ -33,7 +32,8 @@ export function useTerminalViewportRefit(options: TerminalViewportRefitOptions) 
     tabStripVisible,
     fontMetricsKey,
     unsubscribeTerminal,
-    subscribeToTerminal
+    subscribeToTerminal,
+    sessionRelay
   } = options
 
   const invalidateViewports = useCallback(() => {
@@ -114,7 +114,7 @@ export function useTerminalViewportRefit(options: TerminalViewportRefitOptions) 
             }
             const frame = terminalFrameRef.current
             const dims = frame ? ref.fitDimensions(frame) : null
-            if (!dims) {
+            if (!dims || !frame) {
               return
             }
             const prev = viewportRef.current
@@ -128,28 +128,23 @@ export function useTerminalViewportRefit(options: TerminalViewportRefitOptions) 
             // Why: prefer in-place updateViewport over resubscribe to keep the mobile subscriber record alive. See docs/mobile-presence-lock.md.
             const rpc = clientRef.current
             const deviceToken = deviceTokenRef.current
-            if (rpc && deviceToken && updateViewportCapabilityRef.current !== 'unsupported') {
-              try {
-                const reply = await terminalViewportUpdate.request(rpc, {
-                  terminal: handle,
-                  client: { id: deviceToken, type: 'mobile' as const },
-                  viewport: dims
-                })
-                if (!isCurrentTarget()) {
-                  return
+            if (rpc && deviceToken) {
+              const outcome = await attemptTerminalViewportUpdate({
+                rpc,
+                deviceToken,
+                capability: updateViewportCapabilityRef.current,
+                handle,
+                dims,
+                frame,
+                ref,
+                sessionRelay,
+                isCurrentTarget,
+                onCapability: (capability) => {
+                  updateViewportCapabilityRef.current = capability
                 }
-                updateViewportCapabilityRef.current = resolveTerminalUpdateViewportCapability(reply)
-                const outcome = terminalViewportUpdate.interpret(reply)
-                if (outcome?.updated) {
-                  rpc.updateTerminalSubscriptionViewport(handle, dims)
-                  if (outcome.applied) {
-                    // Why: updateViewport re-streams only the visible screen, so local scrollback stays wrapped at the old width — reflow it locally.
-                    ref.reflow(dims.cols, dims.rows, frame)
-                  }
-                  return
-                }
-              } catch {
-                // Fall through to legacy resubscribe.
+              })
+              if (outcome.kind !== 'fallthrough') {
+                return
               }
             }
             if (!isCurrentTarget()) {
@@ -171,7 +166,8 @@ export function useTerminalViewportRefit(options: TerminalViewportRefitOptions) 
       clientRef,
       deviceTokenRef,
       unsubscribeTerminal,
-      subscribeToTerminal
+      subscribeToTerminal,
+      sessionRelay
     ]
   )
   const scheduleForcedViewportRefit = useCallback(() => {

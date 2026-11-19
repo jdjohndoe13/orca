@@ -12,6 +12,7 @@ import {
 } from '@/store/workspaces/catalog/workspace-record-fields'
 import { openDesktopStructuredSession } from '@/lib/agent-session/open/activate-ai-vault-structured-session'
 import { findStructuredAgentSessionTab } from '@/lib/agent-session/structured-agent-session-tab-activation'
+import { structuredAgentSessionTargetForHost } from '@/runtime/native-chat/session-ownership/structured-agent-session-owner'
 import { flashChatPaneRim } from '@/components/terminal-pane/input/focus/focused-pane-rim-flash'
 import { translate } from '@/i18n/i18n'
 import { parseWorkspaceKey } from '../../../../../../shared/workspace/identity/workspace-scope'
@@ -23,6 +24,7 @@ import {
 } from './ai-vault-original-pane-index'
 import type { AgentDotState } from '@/components/agent/status/AgentStateDot'
 import type { AiVaultSession } from '../../../../../../shared/ai-vault/contracts/ai-vault-types'
+import type { ExecutionHostId } from '../../../../../../shared/execution-host/execution-host'
 
 export function useAiVaultOriginalPaneActions(): {
   getOriginalPaneTarget: (
@@ -64,7 +66,11 @@ export function useAiVaultOriginalPaneActions(): {
         ? Boolean(
             findStructuredAgentSessionTab(originalPaneLookupState.unifiedTabsByWorktree, {
               workspaceId: structured.workspaceId,
-              sessionId: structured.sessionId
+              sessionId: structured.sessionId,
+              // The chat's row lives under the session row key (STA-4343); the
+              // session's own host names it, so a contested id reads its own row.
+              // Upstream's lookup takes the runtime target derived from that host.
+              target: structuredAgentSessionTargetForHost(session.executionHostId) ?? undefined
             })
           )
         : false
@@ -116,7 +122,7 @@ export function useAiVaultOriginalPaneActions(): {
         return false
       }
 
-      if (!revealSessionWorkspace(target.worktreeId)) {
+      if (!revealSessionWorkspace(target.worktreeId, session.executionHostId)) {
         return false
       }
       const state = useAppStore.getState()
@@ -143,8 +149,14 @@ export function useAiVaultOriginalPaneActions(): {
   }
 }
 
-function revealSessionWorkspace(workspaceId: string): boolean {
-  if (activateAndRevealWorkspace(workspaceId) !== false) {
+function revealSessionWorkspace(workspaceId: string, executionHostId?: ExecutionHostId): boolean {
+  if (
+    activateAndRevealWorkspace(workspaceId, {
+      // The session's own host names the row (STA-4343): without it a contested
+      // id activates un-stamped and the active-row guard matches no claimant.
+      executionHostId
+    }) !== false
+  ) {
     return true
   }
   // Folder activation explains a refusal itself once it resolves the folder; anything else is gone.

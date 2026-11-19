@@ -5,7 +5,8 @@ import { forgetAgentHibernationTabOutput } from '@/lib/agent-session/hibernation
 import { forgetForegroundTerminalTabs } from '@/components/terminal-pane/parking/retention/foreground-terminal-tabs'
 import { forgetAgentStartupDeliveriesForTabs } from '@/lib/agent-session/launch/startup/agent-startup-delivery-guards'
 import { forgetAgentPaneAuthorityAliasesByTabIds } from '../../agent-status/pane-authority/agent-pane-authority'
-import { forgetDetachedHeadAutoDerivedDisplayName } from '../metadata/detached-head-display-name'
+import { forgetDetachedHeadAutoDerivedDisplayNamesForWorktree } from '../metadata/detached-head-display-name'
+import { readRecordEntriesByWorktreeId } from './record-key-omission'
 
 export type WorktreePurgeDoomedIds = {
   doomedTabIds: Set<string>
@@ -23,9 +24,12 @@ export function collectWorktreePurgeDoomedIds(
   const browserWorkspaceIds: string[] = []
   const fileIds: string[] = []
   for (const id of worktreeIdSet) {
-    tabs.push(...(s.tabsByWorktree[id] ?? []))
+    // Decode-aware: a contested id's rows live under `host|id` (STA-4343), and a
+    // bare-only read would doom no tab — the doomed tabs' PTYs, layouts, and
+    // hibernation state would leak and the purge would leave the rows behind.
+    tabs.push(...readRecordEntriesByWorktreeId(s.tabsByWorktree, id).flat())
     // Why unifiedTabs too: chat tabs live only there, and a slot tab's panes are keyed by its session address.
-    for (const tab of s.unifiedTabsByWorktree?.[id] ?? []) {
+    for (const tab of readRecordEntriesByWorktreeId(s.unifiedTabsByWorktree, id).flat()) {
       tabs.push({ id: tab.id, ptyId: null })
       if (tab.contentType === 'agent-session') {
         const addressTabId = structuredAgentSessionAddressTabId(tab.id, tab.entityId)
@@ -34,10 +38,12 @@ export function collectWorktreePurgeDoomedIds(
         }
       }
     }
-    for (const workspace of s.browserTabsByWorktree[id] ?? []) {
+    for (const workspace of readRecordEntriesByWorktreeId(s.browserTabsByWorktree, id).flat()) {
       browserWorkspaceIds.push(workspace.id)
     }
-    forgetDetachedHeadAutoDerivedDisplayName(id)
+    // Why: drop the auto-derived detached-HEAD display name so the module-level map doesn't
+    // retain removed worktrees for the session — including a contested id's `host|id` spellings.
+    forgetDetachedHeadAutoDerivedDisplayNamesForWorktree(id)
   }
   for (const file of s.openFiles) {
     if (worktreeIdSet.has(file.worktreeId)) {
@@ -84,6 +90,8 @@ export function collectSurfacePurgeDoomedIds(
   for (const tab of surfaces.tabs) {
     doomedTabIds.add(tab.id)
     addDoomedTabPtyIds(tab.id, tab.ptyId)
+    // Why: a removed worktree's panes are gone, so drop their hibernation output epochs from the
+    // module-level map (a future pane mints a fresh leafId at epoch 0).
     forgetAgentHibernationTabOutput(tab.id)
   }
   forgetForegroundTerminalTabs(doomedTabIds)

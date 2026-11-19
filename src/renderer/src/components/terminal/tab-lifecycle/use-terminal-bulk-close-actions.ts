@@ -13,6 +13,7 @@ import { isWebRuntimeSessionActive } from '@/runtime/web-session-tabs-sync/ident
 import { closeBrowserWorkspaceTabOnHosts } from '@/runtime/browser/closing/browser-workspace-tab-close'
 import { destroyWorkspaceWebviews } from '../../../store/slices/browser/cleanup/browser-webview-cleanup'
 import { getActiveWorktreeRuntimeEnvironmentId } from '../workbench/terminal-workspace-model'
+import { resolveWorktreeSessionRowKeyFromStore } from '../../terminal-workspace-session-row'
 import type { TerminalCloseController } from './use-terminal-close-actions'
 import { useBulkTabCloseConfirmation } from './use-bulk-tab-close-confirmation'
 
@@ -30,7 +31,10 @@ export function useTerminalBulkCloseActions(
         return
       }
       const state = useAppStore.getState()
-      const tabs = state.unifiedTabsByWorktree[activeWorktreeId] ?? []
+      // Why the row key: these are the tab rows the strip is showing, and a contested id's rows
+      // live under `host|id` — closing the other host's row would leave this host's tabs open.
+      const rowKey = resolveWorktreeSessionRowKeyFromStore(activeWorktreeId)
+      const tabs = state.unifiedTabsByWorktree[rowKey] ?? []
       const byId = new Map(tabs.map((tab) => [tab.id, tab]))
       const byEntity = new Map(tabs.map((tab) => [tab.entityId, tab]))
       const selectedEditors = [
@@ -88,10 +92,10 @@ export function useTerminalBulkCloseActions(
           state.closeUnifiedTab(unifiedTab.id)
           continue
         }
-        if ((state.tabsByWorktree[activeWorktreeId] ?? []).some((tab) => tab.id === id)) {
+        if ((state.tabsByWorktree[rowKey] ?? []).some((tab) => tab.id === id)) {
           closeTab(id)
         } else if (
-          (state.browserTabsByWorktree[activeWorktreeId] ?? []).some((tab) => tab.id === id)
+          (state.browserTabsByWorktree[rowKey] ?? []).some((tab) => tab.id === id)
         ) {
           closeBrowserTab(id, browserCloseOptions)
           // closeBrowserTab announces the MRU target before guest teardown can trigger bridge fallback.
@@ -110,7 +114,11 @@ export function useTerminalBulkCloseActions(
   const closeTabBarTabs = useCallback(
     (tabIds: string[]) => {
       const state = useAppStore.getState()
-      const tabs = activeWorktreeId ? (state.unifiedTabsByWorktree[activeWorktreeId] ?? []) : []
+      const tabs = activeWorktreeId
+        ? (state.unifiedTabsByWorktree[
+            resolveWorktreeSessionRowKeyFromStore(activeWorktreeId)
+          ] ?? [])
+        : []
       const entityByTab = new Map(tabs.map((tab) => [tab.id, tab.entityId]))
       const fileIdOf = (id: string): string => entityByTab.get(id) ?? id
       // Why: a custom editor frame may still hold edits the dirty checks must see; only its tabs wait.
@@ -130,7 +138,8 @@ export function useTerminalBulkCloseActions(
         return []
       }
       const state = useAppStore.getState()
-      const order = state.tabBarOrderByWorktree[activeWorktreeId] ?? []
+      const rowKey = resolveWorktreeSessionRowKeyFromStore(activeWorktreeId)
+      const order = state.tabBarOrderByWorktree[rowKey] ?? []
       const index = order.indexOf(tabId)
       if (index === -1) {
         return []
@@ -141,7 +150,7 @@ export function useTerminalBulkCloseActions(
       } else if (scope === 'left') {
         ids = order.slice(0, index)
       }
-      const tabs = state.unifiedTabsByWorktree[activeWorktreeId] ?? []
+      const tabs = state.unifiedTabsByWorktree[rowKey] ?? []
       const pinnedIds = new Set(tabs.flatMap((tab) => (tab.isPinned ? [tab.id, tab.entityId] : [])))
       return ids.filter((id) => !pinnedIds.has(id))
     },
@@ -172,7 +181,11 @@ export function useTerminalBulkCloseActions(
     confirmBulkClose(
       'editors',
       () =>
-        (useAppStore.getState().unifiedTabsByWorktree[activeWorktreeId] ?? [])
+        (
+          useAppStore.getState().unifiedTabsByWorktree[
+            resolveWorktreeSessionRowKeyFromStore(activeWorktreeId)
+          ] ?? []
+        )
           .filter((tab) => isEditorTabContentType(tab.contentType) && !tab.isPinned)
           .map((tab) => tab.id),
       closeTabBarTabs

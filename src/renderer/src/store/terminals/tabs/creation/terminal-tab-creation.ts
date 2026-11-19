@@ -33,6 +33,7 @@ import {
   replaceRecordEntries,
   replaceTabBuckets
 } from '../../../record-transitions/keyed-record-transitions'
+import { resolveWorkspaceSessionRowKey } from '../../../workspace-session-key'
 import { applyRecordOperations } from './terminal-companion-record-operations'
 import type { TerminalTab } from '../../../../../../shared/workspace-layout/terminal-tab-types'
 import type { TerminalSlice, TerminalStoreGet, TerminalStoreSet } from '../../terminal-state'
@@ -50,6 +51,11 @@ export function createTerminalTabCreationActions(
       const splitGroupId = split ? createBrowserUuid() : undefined
       set((current) => {
         const s = current
+        // Why the row key and not the bare id: a contested workspace id (one repo registered on
+        // several execution hosts, STA-4343) keys its session rows `host|id`, and the read path
+        // already asks for exactly that. Writing the bare id here put the tab in a bucket no
+        // reader reads — and re-created the shared bucket the next hydration would resurrect.
+        const rowKey = resolveWorkspaceSessionRowKey(s, worktreeId)
         // The split's per-worktree group, layout and focus; each record is built once in the patch below.
         const splitEntries =
           split && splitGroupId
@@ -57,22 +63,23 @@ export function createTerminalTabCreationActions(
                 current,
                 worktreeId,
                 split,
-                emptySplitGroup(worktreeId, splitGroupId)
+                emptySplitGroup(worktreeId, splitGroupId),
+                rowKey
               )
             : null
-        const worktreeGroups = splitEntries?.groups ?? current.groupsByWorktree[worktreeId]
+        const worktreeGroups = splitEntries?.groups ?? current.groupsByWorktree[rowKey]
         const worktreeActiveGroupId =
-          splitEntries?.activeGroupId ?? current.activeGroupIdByWorktree[worktreeId]
-        const worktreeLayout = splitEntries?.layout ?? current.layoutByWorktree[worktreeId]
+          splitEntries?.activeGroupId ?? current.activeGroupIdByWorktree[rowKey]
+        const worktreeLayout = splitEntries?.layout ?? current.layoutByWorktree[rowKey]
         const requestedGroupId = splitGroupId ?? targetGroupId
-        const orphanTerminalIds = getOrphanTerminalIds(s, worktreeId)
+        const orphanTerminalIds = getOrphanTerminalIds(s, rowKey)
         // Seam records are built once below from the orphan IDs; this cleans only the orphans' caches.
         const orphanCleanupPatch = buildOrphanTerminalCompanionCleanupPatch(
           s,
-          worktreeId,
+          rowKey,
           orphanTerminalIds
         )
-        const existing = (s.tabsByWorktree[worktreeId] ?? []).filter(
+        const existing = (s.tabsByWorktree[rowKey] ?? []).filter(
           (entry) => !orphanTerminalIds.has(entry.id)
         )
         // Trim ID hints: IPC can include empty IDs, which break pane-key routing.
@@ -157,10 +164,10 @@ export function createTerminalTabCreationActions(
             : createdGroup
               ? group.id
               : worktreeActiveGroupId
-        const existingUnifiedTabs = s.unifiedTabsByWorktree[worktreeId] ?? []
+        const existingUnifiedTabs = s.unifiedTabsByWorktree[rowKey] ?? []
         const existingTerminalTab = findTabByEntityInGroup(
           s.unifiedTabsByWorktree,
-          worktreeId,
+          rowKey,
           group.id,
           id,
           'terminal'
@@ -216,7 +223,7 @@ export function createTerminalTabCreationActions(
         const nextRecent = shouldActivate
           ? pushRecentTabId(sanitizeRecentTabIds(group.recentTabIds, nextGroupOrder), unifiedTab.id)
           : sanitizeRecentTabIds(cleanedTargetGroup.recentTabIds, nextGroupOrder)
-        const cleanedActiveTabIdForWorktree = orphanCleanupPatch.activeTabIdByWorktree[worktreeId]
+        const cleanedActiveTabIdForWorktree = orphanCleanupPatch.activeTabIdByWorktree[rowKey]
         const cleanedGroupActiveTabId =
           cleanedTargetGroup.activeTabId && !orphanTerminalIds.has(cleanedTargetGroup.activeTabId)
             ? cleanedTargetGroup.activeTabId
@@ -229,18 +236,18 @@ export function createTerminalTabCreationActions(
         return {
           ...orphanCleanupPatch,
           tabsByWorktree: replaceTabBuckets(current.tabsByWorktree, [
-            [worktreeId, [...existing, tab]]
+            [rowKey, [...existing, tab]]
           ]),
           // Why: publish the unified tab atomically with the runtime tab so a transient legacy mount can't race the split host.
           unifiedTabsByWorktree: replaceTabBuckets(current.unifiedTabsByWorktree, [
             [
-              worktreeId,
+              rowKey,
               existingTerminalTab ? existingUnifiedTabs : [...existingUnifiedTabs, unifiedTab]
             ]
           ]),
           groupsByWorktree: replaceRecordEntries(current.groupsByWorktree, [
             [
-              worktreeId,
+              rowKey,
               updateGroup(cleanedGroups, {
                 ...cleanedTargetGroup,
                 activeTabId: shouldActivate
@@ -252,10 +259,10 @@ export function createTerminalTabCreationActions(
             ]
           ]),
           activeGroupIdByWorktree: applyRecordOperations(current.activeGroupIdByWorktree, [
-            [worktreeId, nextActiveGroupId ?? null]
+            [rowKey, nextActiveGroupId ?? null]
           ]),
           layoutByWorktree: replaceRecordEntries(current.layoutByWorktree, [
-            [worktreeId, worktreeLayout ?? { type: 'leaf', groupId: group.id }]
+            [rowKey, worktreeLayout ?? { type: 'leaf', groupId: group.id }]
           ]),
           activeTabId:
             shouldActivate && ownsGlobalSelection(s, worktreeId)
@@ -263,7 +270,7 @@ export function createTerminalTabCreationActions(
               : orphanCleanupPatch.activeTabId,
           activeTabIdByWorktree: {
             ...orphanCleanupPatch.activeTabIdByWorktree,
-            [worktreeId]: nextActiveTabIdForWorktree
+            [rowKey]: nextActiveTabIdForWorktree
           },
           ptyIdsByTabId: applyRecordOperations(current.ptyIdsByTabId, [
             ...orphanDeletes,

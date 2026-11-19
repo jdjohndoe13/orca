@@ -33,7 +33,8 @@ function chatPaneKey(tab: Tab): string {
 
 function getActivePaneKeyForWorktree(
   state: FocusedAgentRowHighlightState,
-  worktreeId: string
+  worktreeId: string,
+  rowKey?: string
 ): string | null {
   if (state.activeTabType === 'agent-session') {
     const activeTab = state.getActiveTab(worktreeId)
@@ -48,7 +49,8 @@ function getActivePaneKeyForWorktree(
     return null
   }
 
-  const activeTabBelongsToWorktree = (state.tabsByWorktree[worktreeId] ?? []).some(
+  // The focus fields stay bare; the tabs record is keyed by the session row key (STA-4343).
+  const activeTabBelongsToWorktree = (state.tabsByWorktree[rowKey ?? worktreeId] ?? []).some(
     (tab) => tab.id === activeTabId
   )
   if (!activeTabBelongsToWorktree) {
@@ -65,13 +67,14 @@ function getActivePaneKeyForWorktree(
 
 export function getFocusedAgentPaneKeyForWorktree(
   state: FocusedAgentRowHighlightState,
-  worktreeId: string
+  worktreeId: string,
+  rowKey?: string
 ): string | null {
   if (state.activeWorktreeId !== worktreeId) {
     return null
   }
 
-  const activePaneKey = getActivePaneKeyForWorktree(state, worktreeId)
+  const activePaneKey = getActivePaneKeyForWorktree(state, worktreeId, rowKey)
   if (!activePaneKey) {
     return null
   }
@@ -87,6 +90,7 @@ export function getFocusedAgentPaneKeyForWorktree(
   return hasMigrationUnsupportedRow ? activePaneKey : null
 }
 
-export function useFocusedAgentPaneKey(worktreeId: string): string | null {
-  return useAppStore((state) => getFocusedAgentPaneKeyForWorktree(state, worktreeId))
+/** `rowKey` is the workspace's session row key (STA-4343); the tabs record is keyed by it. */
+export function useFocusedAgentPaneKey(worktreeId: string, rowKey?: string): string | null {
+  return useAppStore((state) => getFocusedAgentPaneKeyForWorktree(state, worktreeId, rowKey))
 }

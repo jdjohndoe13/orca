@@ -272,6 +272,15 @@ export type WebSessionTabsSyncState = Pick<
     Pick<
       AppState,
       | 'agentSenderPublicationsByHost'
+      // Why: the contested-id gate (STA-4343) reads the worktree catalog to decide whether a
+      // snapshot's rows must be spelled `host|id`. Every production commit site passes the full
+      // store state (it carries the catalog at runtime); the optional spelling keeps the
+      // catalog-less test harnesses compiling, and the absent catalog is the same answer as a
+      // store with no collision — every key stays bare.
+      | 'worktreesByRepo'
+      | 'acknowledgedAgentsByPaneKey'
+      | 'activityClearedAtByPaneKey'
+      | 'agentLaunchConfigByPaneKey'
       | 'automaticAgentResumeClaimsByTabId'
       // Client draft proves dirty-flag ownership (#21392); without one, follow host save state.
       | 'editorDrafts'

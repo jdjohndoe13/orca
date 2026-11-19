@@ -844,6 +844,12 @@ import {
 } from './projects/repo-params'
 import { ReferenceFind, ReferenceList } from './references/reference-params'
 import { BrowserTarget, ExpectUrlBrowserTarget } from './rpc-param-primitives'
+import {
+  RuntimeEnvironmentDownstreamListParamsSchema,
+  RuntimeEnvironmentGatewayCallParamsSchema,
+  RuntimeEnvironmentGatewaySubscribeParamsSchema,
+  RuntimeEnvironmentGatewayUnsubscribeParamsSchema
+} from './runtime-environment-relay-params'
 import { SessionTabsUnsubscribeAllParams } from './session-tabs/session-tabs-params'
 import {
   ActivateTab,
@@ -2164,6 +2170,10 @@ export const RPC_PARAMS_BY_METHOD = {
   'runtime.clientCapabilities.update': ClientCapabilitiesUpdate,
   'runtime.clientEvents.subscribe': ClientEventsSubscribeParams,
   'runtime.clientEvents.unsubscribe': ClientEventsUnsubscribeParams,
+  'runtimeEnvironment.call': RuntimeEnvironmentGatewayCallParamsSchema,
+  'runtimeEnvironment.downstream.list': RuntimeEnvironmentDownstreamListParamsSchema,
+  'runtimeEnvironment.downstream.subscribe': RuntimeEnvironmentGatewaySubscribeParamsSchema,
+  'runtimeEnvironment.downstream.unsubscribe': RuntimeEnvironmentGatewayUnsubscribeParamsSchema,
   'runtimeEnvironment.wakeRecipeVm': RecipeVmWakeParams,
   'session.readTerminalScrollback': SessionReadTerminalScrollbackParams,
   'session.tabs.activate': BotLinkActivateTab,

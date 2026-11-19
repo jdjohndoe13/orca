@@ -6,18 +6,18 @@ import {
   parseExecutionHostId,
   type ExecutionHostId
 } from '../../../../../shared/execution-host/execution-host'
-import {
-  normalizeWorkspaceSessionKeyToWorkspaceId,
-  normalizeWorkspaceSessionKeyToWorkspaceId as normalizeWorkspaceSessionKeyToWorktreeId
-} from '../../../../../shared/workspace/identity/workspace-scope'
+import { normalizeWorkspaceSessionKeyToWorkspaceId } from '../../../../../shared/workspace/identity/workspace-scope'
 import {
   adoptStrandedHostPartitionSession,
   partitionRowsTheWriteWontReturn,
   workspaceIdsNamedByPartition
 } from '../../../../../shared/workspace-session/workspace-session-stranded-partition-adoption'
 import { mergeWorkspaceSessionsWithHostShadow } from './workspace-session-host-contention'
-
-import { nonLocalHostSessionEntries, type HostSessionSlices } from './workspace-session-host-split'
+import {
+  buildRuntimeHostIdByWorkspaceSessionKey,
+  qualifyHostWorkspaceSessionSlice
+} from '../../../../../shared/workspace-session-key-qualification'
+import type { HostSessionSlices } from './workspace-session-host-split'
 import {
   sshPartitionCatalogAttribution,
   workspacesHeldByManagedServers
@@ -37,78 +37,6 @@ export type WorkspaceSessionHostRead = {
   contestedPrimaryHostBySessionKey: Record<string, ExecutionHostId>
   /** Runtime partitions this read actually loaded, so a later write may speak for all of their rows. */
   hydratedRuntimeSessionHostIds: ExecutionHostId[]
-}
-
-const WORKSPACE_SESSION_KEYED_FIELDS = [
-  'tabsByWorktree',
-  'openFilesByWorktree',
-  'activeFileIdByWorktree',
-  'activeBrowserTabIdByWorktree',
-  'activeTabTypeByWorktree',
-  'activeTabIdByWorktree',
-  'browserTabsByWorktree',
-  'unifiedTabs',
-  'tabGroups',
-  'tabGroupLayouts',
-  'activeGroupIdByWorktree',
-  'lastVisitedAtByWorktreeId',
-  'defaultTerminalTabsAppliedByWorktreeId'
-] as const satisfies readonly (keyof WorkspaceSessionState)[]
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
-}
-
-function addWorkspaceSessionKeyForOwnerMap(ids: Set<string>, value: unknown): void {
-  if (typeof value === 'string') {
-    ids.add(normalizeWorkspaceSessionKeyToWorktreeId(value))
-  }
-}
-
-function collectWorkspaceSessionKeysFromHostSession(session: WorkspaceSessionState): string[] {
-  const ids = new Set<string>()
-  for (const field of WORKSPACE_SESSION_KEYED_FIELDS) {
-    const value = session[field]
-    if (isPlainRecord(value)) {
-      for (const id of Object.keys(value)) {
-        addWorkspaceSessionKeyForOwnerMap(ids, id)
-      }
-    }
-  }
-  for (const id of session.activeWorktreeIdsOnShutdown ?? []) {
-    addWorkspaceSessionKeyForOwnerMap(ids, id)
-  }
-  for (const pages of Object.values(session.browserPagesByWorkspace ?? {})) {
-    if (!Array.isArray(pages)) {
-      continue
-    }
-    for (const page of pages) {
-      addWorkspaceSessionKeyForOwnerMap(ids, page.worktreeId)
-    }
-  }
-  for (const record of Object.values(session.sleepingAgentSessionsByPaneKey ?? {})) {
-    // Sleeping agent records can prove a restored runtime workspace before its catalog answers.
-    addWorkspaceSessionKeyForOwnerMap(ids, record.worktreeId)
-  }
-  return [...ids]
-}
-
-function buildRuntimeHostIdByWorkspaceSessionKey(
-  slices: HostSessionSlices
-): Record<string, ExecutionHostId> {
-  const owners: Record<string, ExecutionHostId> = {}
-  const ambiguous = new Set<string>()
-  for (const [hostId, slice] of nonLocalHostSessionEntries(slices)) {
-    for (const worktreeId of collectWorkspaceSessionKeysFromHostSession(slice)) {
-      if (owners[worktreeId] && owners[worktreeId] !== hostId) {
-        ambiguous.add(worktreeId)
-        delete owners[worktreeId]
-      } else if (!ambiguous.has(worktreeId)) {
-        owners[worktreeId] = hostId
-      }
-    }
-  }
-  return owners
 }
 
 export function listKnownRuntimeHostIds(
@@ -204,7 +132,14 @@ export async function fetchWorkspaceSessionWithRuntimeHostOwners(
   // Give excluded SSH partitions their own shadows so nonadopted rows survive the next write.
   const shadow: HostSessionSlices = { ...merged.shadow }
   for (const [hostId, slice] of sshPartitions) {
-    const adoption = adoptStrandedHostPartitionSession(session, slice, {
+    // Why the ssh slice is qualified too: the contention split deliberately never sees it, so this
+    // is the only place its rows meet a contested id. A contested id has no bare key in the unified
+    // session, so an unqualified ssh row would be gap-filled into a bucket no reader reads — and the
+    // write would then route it to 'local'. The partition's own host is the host its rows belong to.
+    const qualified = slice
+      ? qualifyHostWorkspaceSessionSlice(slice, hostId, attribution.contestedSessionKeys)
+      : slice
+    const adoption = adoptStrandedHostPartitionSession(session, qualified, {
       contestedSessionKeys: attribution.contestedSessionKeys,
       ownedSessionKeys: attribution.ownedSessionKeysByHostId.get(hostId),
       foreignSessionKeys: unownedSessionKeys(
@@ -227,8 +162,14 @@ export async function fetchWorkspaceSessionWithRuntimeHostOwners(
   }
   return {
     session,
-    // Derive owners from surviving merged rows, never parked raw rows, or startup creates runtime placeholders for local winners.
-    runtimeHostIdByWorkspaceSessionKey: buildRuntimeHostIdByWorkspaceSessionKey(merged.slices),
+    // Why the merged slices and not the raw ones: a row parked out of the renderer session must not
+    // still name its host as the owner, or startup builds runtime placeholders for a local row.
+    // Why the contested set: a contested id is named by no host at all — its rows live on more than
+    // one, and every reader of this map is keyed by the bare id.
+    runtimeHostIdByWorkspaceSessionKey: buildRuntimeHostIdByWorkspaceSessionKey(
+      merged.slices,
+      merged.contestedSessionKeys
+    ),
     contestedHostWorkspaceSessions: shadow,
     contestedPrimaryHostBySessionKey: primaryHostBySessionKey,
     hydratedRuntimeSessionHostIds: [...runtimeHostIds].filter((hostId) => slices[hostId])

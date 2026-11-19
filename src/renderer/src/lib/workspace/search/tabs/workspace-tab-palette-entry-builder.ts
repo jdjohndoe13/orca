@@ -5,6 +5,7 @@ import {
 import { getEditorDisplayLabel } from '@/components/editor/panel/header/editor-labels'
 import {
   getPaletteWorktreeIdentity,
+  getPaletteWorktreeSessionRowKey,
   isPaletteCurrentWorktree,
   resolvePaletteRepoForWorktree
 } from '../palette-repo-resolution'
@@ -63,7 +64,8 @@ export function buildWorktreeTabEntries(
     generatedTitlesEnabled,
     chatNames,
     terminalLayoutsByTabId,
-    paneForegroundAgentByPaneKey
+    paneForegroundAgentByPaneKey,
+    contestedWorktreeIds
   }: BuildSearchableWorkspaceTabsOptions,
   { openFilesById, agentIndex, documentFor, ambiguousWorktreeIds }: WorkspaceTabBuildScope,
   seenTabIdentities: Set<string>,
@@ -82,25 +84,28 @@ export function buildWorktreeTabEntries(
     activeWorktreeId,
     activeWorkspaceExecutionHostId
   )
+  // Why the row key: a contested id's groups/tabs/unified-tabs rows live under
+  // `host|id` (STA-4343); the bare read showed both claimants an empty palette.
+  const rowKey = getPaletteWorktreeSessionRowKey(worktree, contestedWorktreeIds)
   const activeUnifiedTabId = getActiveUnifiedTabId({
-    worktreeId: worktree.id,
+    rowKey,
     isCurrentWorktree,
     activeTabType,
     activeGroupIdByWorktree,
     groupsByWorktree
   })
-  const groups = groupsByWorktree[worktree.id] ?? []
+  const groups = groupsByWorktree[rowKey] ?? []
   const groupOrder = new Map(groups.map((group, index) => [group.id, index]))
   const tabOrder = new Map<string, number>()
   for (const group of groups) {
     group.tabOrder.forEach((tabId, index) => tabOrder.set(tabId, index))
   }
   const terminalTabs = new Map<string, TerminalTab | null>()
-  for (const terminalTab of tabsByWorktree[worktree.id] ?? []) {
+  for (const terminalTab of tabsByWorktree[rowKey] ?? []) {
     terminalTabs.set(terminalTab.id, terminalTabs.has(terminalTab.id) ? null : terminalTab)
   }
 
-  const unifiedTabs = unifiedTabsByWorktree[worktree.id] ?? []
+  const unifiedTabs = unifiedTabsByWorktree[rowKey] ?? []
   const duplicateTabIds = findDuplicateIds(unifiedTabs)
   for (const rawTab of unifiedTabs) {
     if (
@@ -127,6 +132,7 @@ export function buildWorktreeTabEntries(
       tabSortIndex: tabOrder.get(tab.id) ?? tab.sortOrder,
       isCurrentTab: isCurrentWorkspaceTab({
         tab,
+        rowKey,
         isCurrentWorktree,
         activeTabType,
         activeTabId,

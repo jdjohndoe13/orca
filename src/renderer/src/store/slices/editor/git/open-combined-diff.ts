@@ -70,6 +70,9 @@ export function createOpenCombinedDiff(
       const intent = editorPlacementIntent(get, placementId)
       const groupId = resolveEditorOpenTargetGroupId(get(), placementId, options?.targetGroupId)
       set((s) => {
+        // The per-worktree active-file slot lives under the session key, `host|id` for a contested
+        // workspace id (STA-4343) — `buildEditorActiveResult` resolves it; the git-status caches
+        // and the open-file entity keep the bare id.
         const branchSummary = s.gitBranchCompareSummaryByWorktree[worktreeId]
         const branchCompare =
           !areaFilter && !uncommittedOnly && hasCombinableBranchCompare(branchSummary)

@@ -10,6 +10,8 @@ import {
   type HostedReviewClearUpdates
 } from '../../../../../../shared/worktree/hosted-review/hosted-review-branch-ownership'
 import { observeDetachedHostedReviewOwner } from './detached-hosted-review-owners'
+import { getContestedWorktreeIds } from '../listing/worktree-catalog-index'
+import { hasContestedClaim } from '../../../../../../shared/workspace-session-worktree-key'
 import {
   applyHostedReviewLinkClear,
   getHostedReviewLinkMutationGeneration,
@@ -36,7 +38,10 @@ import {
   parseExecutionHostId,
   type ExecutionHostId
 } from '../../../../../../shared/execution-host/execution-host'
-import { hostWorktreeTarget } from '../../../../../../shared/worktree/host-qualified-identity'
+import {
+  composeWorktreeHostIdentity,
+  hostWorktreeTarget
+} from '../../../../../../shared/worktree/host-qualified-identity'
 import {
   selectWorkspaceByHostTarget,
   type WorkspaceRecordState
@@ -102,6 +107,12 @@ export function createUpdateWorktreeGitIdentity(
     const nextHeadFor = (worktree: Worktree): string => identity.head ?? worktree.head
     const nextBranchFor = (worktree: Worktree): string =>
       identity.branch === null ? '' : (identity.branch ?? worktree.branch)
+    // Keep the detached-title cache per host only where the id is contested (STA-4343), so a
+    // patch for one host cannot re-derive another host's auto title; the bare key is the
+    // byte-identical spelling for every other install.
+    const contested = hasContestedClaim(getContestedWorktreeIds(get().worktreesByRepo), worktreeId)
+    const detachedKey =
+      contested && ownerHostId ? composeWorktreeHostIdentity(ownerHostId, worktreeId) : worktreeId
     const initialTargets = gitIdentityTargets(get(), worktreeId, ownerHostId)
     const anyTargetChanges = [...initialTargets.rows].some(
       (worktree) =>
@@ -193,7 +204,10 @@ export function createUpdateWorktreeGitIdentity(
           worktree,
           worktreeId,
           nextBranch,
-          identity.branch
+          identity.branch,
+          // A contested id's per-host cache entry only when the answering host is named;
+          // otherwise the bare key (the byte-identical spelling for every other install).
+          detachedKey
         )
         return {
           ...worktree,

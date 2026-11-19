@@ -8,6 +8,8 @@ import {
 } from '../../../../../shared/agent-status/presentation/dashboard-snapshot'
 import type { RepoIcon } from '../../../../../shared/repository/appearance/repo-icon'
 import type { DashboardCardTerminalInputState } from './dashboard-card-terminal-input'
+import { workspaceSessionKey } from '../../../../../shared/workspace-session-worktree-key'
+import { getContestedWorktreeIds } from '@/store/slices/worktrees/listing/worktree-catalog-index'
 import { readDashboardClientHost } from './dashboard-client-host'
 import { selectTerminalLayoutsForWorktree } from '../../sidebar/workspace-card/activity/worktree-agent-row-selectors'
 import { selectRuntimePaneTitlesForWorktree } from '../../sidebar/workspace-card/activity/worktree-card-status-inputs'
@@ -127,13 +129,20 @@ export function buildDashboardSnapshot(
   for (const workspace of rebuildWorkspaces) {
     const { repo, worktree } = workspace
     const worktreeId = worktree.id
+    // Why the row key: the shared per-worktree index buckets by the session row key, so a
+    // contested id must be read per claimant — the bare id would show every host's rows.
+    const rowKey = workspaceSessionKey(
+      worktreeId,
+      worktree.hostId,
+      getContestedWorktreeIds(state.worktreesByRepo)
+    )
     const previous = dirtyWorktrees ? reuse?.workspaces.get(workspace) : undefined
     const firstCard = cards.length
     const nextRows: DashboardWorkspaceBuild['rows'] = new Map()
-    const terminalLayoutsByTabId = selectTerminalLayoutsForWorktree(state, worktreeId)
-    const paneTitlesByTabId = selectRuntimePaneTitlesForWorktree(state, worktreeId)
+    const terminalLayoutsByTabId = selectTerminalLayoutsForWorktree(state, rowKey)
+    const paneTitlesByTabId = selectRuntimePaneTitlesForWorktree(state, rowKey)
 
-    const rows = state.agentStatusByPaneKey.projection.list(worktreeId)
+    const rows = state.agentStatusByPaneKey.projection.list(rowKey)
     const subagentsByParentPaneKey = includeCardDetails
       ? groupSubagentsByParentPaneKey(rows)
       : undefined

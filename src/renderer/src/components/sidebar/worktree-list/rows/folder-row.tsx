@@ -3,8 +3,9 @@ import type { VirtualItem } from '@tanstack/react-virtual'
 import type { AppState } from '@/store/types'
 import type { Repo } from '../../../../../../shared/repository/repo-types'
 import type { Worktree } from '../../../../../../shared/worktree/types'
+import type { ContestedWorkspaceIds } from '../../../../../../shared/workspace-session-worktree-key'
 import { getWorktreeHostIdentity } from '../../../../../../shared/worktree/host-qualified-identity'
-import { isActiveSidebarWorkspace } from '../../../../../../shared/sidebar-list/selection/active-workspace'
+import { isWorkspaceRowActive } from './workspace-row-activation'
 
 import {
   type FolderWorkspacePathStatus,
@@ -36,6 +37,8 @@ export type FolderWorkspaceRowContext = {
   settings: AppState['settings']
   activeWorktreeId: string | null
   activeWorkspaceExecutionHostId: AppState['activeWorkspaceExecutionHostId']
+  // Gate for the contested-id guard in `isWorkspaceRowActive`; the store selector is identity-stable.
+  contestedWorktreeIds: ContestedWorkspaceIds
   currentWorktreeId: string | null
   selectedWorktreeIds: ReadonlySet<string>
   repoMap: Map<string, Repo>
@@ -91,10 +94,18 @@ export function renderFolderWorkspaceOption(args: {
   const { ctx, row, vItem, lineage, frame } = args
   const folderWorktree = folderWorkspaceToWorktree(row.folderWorkspace)
   const folderWorktreeIdentity = getWorktreeHostIdentity(folderWorktree)
-  const isActiveWorktree = isActiveSidebarWorkspace(folderWorktree, {
-    worktreeId: ctx.activeWorktreeId,
-    hostId: ctx.activeWorkspaceExecutionHostId ?? null
-  })
+  const isActiveWorktree = isWorkspaceRowActive(
+    ctx.activeWorktreeId,
+    ctx.activeWorkspaceExecutionHostId,
+    folderWorktree,
+    ctx.contestedWorktreeIds
+  )
+  const isCurrentWorktree = isWorkspaceRowActive(
+    ctx.currentWorktreeId,
+    ctx.activeWorkspaceExecutionHostId,
+    folderWorktree,
+    ctx.contestedWorktreeIds
+  )
   const pathStatus = ctx.getCachedFolderWorkspacePathStatus({
     scope: 'folder-workspace',
     folderWorkspaceId: row.folderWorkspace.id
@@ -154,7 +165,7 @@ export function renderFolderWorkspaceOption(args: {
           isMultiSelected={ctx.selectedWorktreeIds.has(folderWorktreeIdentity)}
           // A child-active folder looks active without the active card's side effects.
           isActiveSurface={lineage?.childIsActive === true || isActiveWorktree}
-          isCurrentWorktree={ctx.currentWorktreeId === folderWorktree.id}
+          isCurrentWorktree={isCurrentWorktree}
           contentIndent={cardContentIndent}
           flushSurface
           nativeDragEnabled={false}

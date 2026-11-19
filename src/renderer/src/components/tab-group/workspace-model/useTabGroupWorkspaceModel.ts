@@ -3,6 +3,7 @@ import type { BrowserWorkspace } from '../../../../../shared/browser/workspaces/
 import type { Tab, TabGroup } from '../../../../../shared/workspace-layout/tab-groups/tab-types'
 import type { TerminalTab } from '../../../../../shared/workspace-layout/terminal-tab-types'
 import { useAppStore } from '../../../store/index'
+import { resolveWorkspaceRowKey } from '../../terminal-workspace-session-row'
 import { useTabGroupItemProjections } from './useTabGroupItemProjections'
 import { useTabGroupTabCloseCommands } from './useTabGroupTabCloseCommands'
 import { useTabGroupCloseScopeCommands } from './useTabGroupCloseScopeCommands'
@@ -25,18 +26,24 @@ export function useTabGroupWorkspaceModel({
   worktreeId: string
 }) {
   const worktreeState = useAppStore(
-    useShallow((state) => ({
-      // Why: reuse stable EMPTY_* fallbacks; fresh `?? []` arrays break Zustand v5 snapshot identity and cause an infinite render loop.
-      groups: state.groupsByWorktree[worktreeId] ?? EMPTY_GROUPS,
-      unifiedTabs: state.unifiedTabsByWorktree[worktreeId] ?? EMPTY_UNIFIED_TABS,
-      terminalTabs: state.tabsByWorktree[worktreeId] ?? EMPTY_TERMINAL_TABS,
-      openFiles: state.openFiles,
-      browserTabs: state.browserTabsByWorktree[worktreeId] ?? EMPTY_BROWSER_TABS,
-      expandedPaneByTabId: state.expandedPaneByTabId,
-      terminalLayoutsByTabId: state.terminalLayoutsByTabId ?? EMPTY_TERMINAL_LAYOUTS_BY_TAB_ID,
-      generatedTabTitlesEnabled: state.settings?.tabAutoGenerateTitle === true,
-      mobileEmulatorEnabled: state.settings?.mobileEmulatorEnabled !== false
-    }))
+    useShallow((state) => {
+      // Why the row key: the split surface hands this hook the bare worktree id (the workbench
+      // mounts one surface per id), while a contested id's rows live under `host|id`. Resolved
+      // inside the selector so a host switch — which keeps the bare id — re-points the read.
+      const rowKey = resolveWorkspaceRowKey(state, worktreeId)
+      return {
+        // Why: reuse stable EMPTY_* fallbacks; fresh `?? []` arrays break Zustand v5 snapshot identity and cause an infinite render loop.
+        groups: state.groupsByWorktree[rowKey] ?? EMPTY_GROUPS,
+        unifiedTabs: state.unifiedTabsByWorktree[rowKey] ?? EMPTY_UNIFIED_TABS,
+        terminalTabs: state.tabsByWorktree[rowKey] ?? EMPTY_TERMINAL_TABS,
+        openFiles: state.openFiles,
+        browserTabs: state.browserTabsByWorktree[rowKey] ?? EMPTY_BROWSER_TABS,
+        expandedPaneByTabId: state.expandedPaneByTabId,
+        terminalLayoutsByTabId: state.terminalLayoutsByTabId ?? EMPTY_TERMINAL_LAYOUTS_BY_TAB_ID,
+        generatedTabTitlesEnabled: state.settings?.tabAutoGenerateTitle === true,
+        mobileEmulatorEnabled: state.settings?.mobileEmulatorEnabled !== false
+      }
+    })
   )
 
   const focusGroup = useAppStore((state) => state.focusGroup)

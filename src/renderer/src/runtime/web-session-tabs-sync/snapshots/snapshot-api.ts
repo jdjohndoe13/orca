@@ -1,10 +1,18 @@
 import { publishPresentationRecords } from './presentation-record-drafts'
 import type { RuntimeMobileSessionTabsResult } from '../../../../../shared/remote-runtime/session-graph/runtime-session-contracts'
+import { isHostQualifiableWorkspaceId } from '../../../../../shared/workspace-session-key-qualification'
+import { hasContestedClaim } from '../../../../../shared/workspace-session-worktree-key'
 import type {
   WebSessionTabsBatchContext,
   WebSessionTabsSnapshotApplyOptions,
   WebSessionTabsSyncState
 } from '../state'
+import { executionHostIdForSessionTabsOwner } from '@/runtime/native-chat/local-sessions/local-structured-session-owner'
+import { getContestedWorktreeIds } from '@/store/slices/worktrees/listing/worktree-catalog-index'
+import {
+  foldWebSessionTabsRowsToBareView,
+  rekeyWebSessionTabsPatchToHost
+} from '../mirror-host-row-rekey'
 import { applyWebSessionTabsSnapshotWithContext } from './apply-snapshot'
 import {
   decideWebSessionTabsSnapshot,
@@ -56,7 +64,22 @@ export function applyWebSessionTabsSnapshots(
   changedAgentPaneKeys?: Set<string>,
   options?: WebSessionTabsSnapshotApplyOptions
 ): WebSessionTabsSyncState | Partial<WebSessionTabsSyncState> {
-  const nextState = { ...state }
+  // Why the fold happens here rather than per frame: the batch mutates its record copies in
+  // place on the state object it owns, so the fold must be the object the loop runs on. The
+  // merged patch (bare, the host's spelling) is re-spelled to the host's key at the end — the
+  // single-frame wrapper is the same mechanism for one frame (see `apply-snapshot.ts`).
+  const contested = getContestedWorktreeIds(state.worktreesByRepo)
+  const batchIds = new Set(
+    snapshots
+      .map((snapshot) => snapshot.worktree)
+      .filter((id) => hasContestedClaim(contested, id) && isHostQualifiableWorkspaceId(id))
+  )
+  const hostId = executionHostIdForSessionTabsOwner(environmentId)
+  const view =
+    batchIds.size === 0
+      ? state
+      : foldWebSessionTabsRowsToBareView(state, batchIds, hostId, contested)
+  const nextState = { ...view }
   const batchContext: WebSessionTabsBatchContext = {
     changedAgentPaneKeys,
     changedRecords: new Set(),
@@ -84,7 +107,19 @@ export function applyWebSessionTabsSnapshots(
     mutableMergedPatch[recordKey] = mutableNextState[recordKey]
   }
   publishPresentationRecords(batchContext, mergedPatch)
-  return Object.keys(mergedPatch).length === 0 ? state : mergedPatch
+  const noOp = Object.keys(mergedPatch).length === 0
+  if (batchIds.size === 0) {
+    return noOp ? state : mergedPatch
+  }
+  // The no-op still owes the tombstone when the real store holds a bare row for a contested
+  // id; the rekey turns it into a real patch or returns the real `state` (never the folded view).
+  return rekeyWebSessionTabsPatchToHost(
+    state,
+    noOp ? state : mergedPatch,
+    batchIds,
+    hostId,
+    contested
+  )
 }
 
 export function applyFreshWebSessionTabsSnapshot(

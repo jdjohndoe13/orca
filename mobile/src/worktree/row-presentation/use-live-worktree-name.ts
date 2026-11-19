@@ -33,6 +33,8 @@ export type LiveWorktreeName = {
   /** The checked-out branch without refs/heads/; null for folders, detached heads and until the record arrives. */
   branch: string | null
   resolution: WorktreeShowResolution
+  /** True once a successful read has answered the stamp (absent means local). */
+  stampKnown: boolean
 }
 
 export function useLiveWorktreeName({
@@ -59,6 +61,13 @@ export function useLiveWorktreeName({
   }>(() => ({ worktreeId, resolution: 'unknown' }))
   // Repo-scan failures can misreport live workspaces as missing; require a confirming fallback read.
   const missingStreakRef = useRef({ worktreeId, count: 0 })
+  // Why: the same reply already carries the execution-host stamp the session
+  // screen needs to decide relay vs local tabs; a second read would race itself.
+  const [stamp, setStamp] = useState<{
+    worktreeId: string
+    hostId: string | null
+    stampKnown: boolean
+  }>(() => ({ worktreeId, hostId: null, stampKnown: false }))
 
   // Reset during render on route change; an effect would commit and re-render the session screen.
   const [routeSource, setRouteSource] = useState({ worktreeId, routeNameHint })
@@ -127,6 +136,13 @@ export function useLiveWorktreeName({
             return
           }
           const worktree = accepted.value
+          setStamp((current) =>
+            current.worktreeId === worktreeId &&
+            current.stampKnown &&
+            current.hostId === (worktree?.hostId ?? null)
+              ? current
+              : { worktreeId, hostId: worktree?.hostId ?? null, stampKnown: true }
+          )
           const liveName = worktree ? getLiveWorktreeDisplayName([worktree], worktreeId) : null
           if (liveName) {
             const path = worktree?.path || null
@@ -217,19 +233,22 @@ export function useLiveWorktreeName({
   )
 
   if (isFloatingWorkspace) {
+    // The sentinel has no worktree record to resolve, so nothing is ever proven about it.
     return {
       name: getFloatingWorkspaceTitle(t),
       path: null,
       hostId: 'local',
       branch: null,
-      resolution: 'unknown'
+      resolution: 'unknown',
+      stampKnown: true
     }
   }
   return {
     name: worktreeName.worktreeId === worktreeId ? worktreeName.name : routeNameHint,
     path: worktreeName.worktreeId === worktreeId ? (worktreeName.path ?? null) : null,
-    hostId: worktreeName.worktreeId === worktreeId ? (worktreeName.hostId ?? null) : null,
+    hostId: stamp.worktreeId === worktreeId ? stamp.hostId : null,
     branch: worktreeName.worktreeId === worktreeId ? (worktreeName.branch ?? null) : null,
-    resolution: resolved.worktreeId === worktreeId ? resolved.resolution : 'unknown'
+    resolution: resolved.worktreeId === worktreeId ? resolved.resolution : 'unknown',
+    stampKnown: stamp.worktreeId === worktreeId ? stamp.stampKnown : false
   }
 }

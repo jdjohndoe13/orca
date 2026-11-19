@@ -12,6 +12,8 @@ import {
 } from '../../../../../shared/execution-host/execution-host'
 import { parsePaneKey } from '../../../../../shared/workspace-layout/stable-pane-id'
 import { findKnownWorktreeById } from '@/store/slices/worktrees/listing/detected-worktree-meta'
+import { readWorkspaceSessionRecord } from '@/store/workspace-session-key'
+import { structuredAgentSessionTargetForHost } from '@/runtime/native-chat/session-ownership/structured-agent-session-owner'
 import type { AppState } from '@/store/types'
 import type { AgentPaneThread } from '../threads/activity-thread-types'
 
@@ -100,7 +102,13 @@ export function createActivityThreadActions({
       return
     }
     if (
-      activateStructuredAgentSessionTab({ worktreeId: thread.worktree.id, tabId: thread.tab.id })
+      activateStructuredAgentSessionTab({
+        worktreeId: thread.worktree.id,
+        tabId: thread.tab.id,
+        // The host the thread row already holds, as upstream's runtime target; the
+        // activation resolves the contested row key from it (STA-4343).
+        target: structuredAgentSessionTargetForHost(executionHostId) ?? undefined
+      })
     ) {
       if (isFloatingTerminal) {
         revealFloatingWorkspacePanel(useAppStore.getState())
@@ -109,7 +117,14 @@ export function createActivityThreadActions({
     }
     // Read post-activation: the tab this thread points at may have only just been revived.
     const activated = useAppStore.getState()
-    const liveTabs = activated.tabsByWorktree[thread.worktree.id] ?? []
+    // A contested id's tabs live under the claimant's row key, not the bare id.
+    const liveTabs =
+      readWorkspaceSessionRecord(
+        activated,
+        activated.tabsByWorktree,
+        thread.worktree.id,
+        executionHostId
+      )?.entry ?? []
     if (!liveTabs.some((tab) => tab.id === thread.tab.id)) {
       // Retained threads may outlive their tab; keep the workspace activated without focusing an unrelated sibling.
       return

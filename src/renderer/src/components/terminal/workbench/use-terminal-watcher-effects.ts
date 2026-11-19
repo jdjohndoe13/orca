@@ -18,6 +18,7 @@ import {
 import { useAppStore } from '@/store'
 import type { TerminalColdActivationController } from '../workspace-mounting/terminal-cold-activation'
 import { selectParkedEquivalentMountTabIds } from '../workspace-mounting/startup-terminal-tab-hold'
+import { resolveWorkspaceRowKeyFromStore } from '../../terminal-workspace-session-row'
 
 // Why shared: surfaces without watchable live tabs need no per-pass allocation.
 const NO_PARKED_TAB_IDS: ReadonlySet<string> = new Set()
@@ -190,7 +191,7 @@ export function useTerminalWatcherEffects(controller: TerminalWatcherController)
       ) {
         continue
       }
-      const tabs = tabsByWorktree[workspaceId] ?? []
+      const tabs = tabsByWorktree[resolveWorkspaceRowKeyFromStore(workspaceId)] ?? []
       let parkedTabIds: ReadonlySet<string> = NO_PARKED_TAB_IDS
       let deferredTabIds: ReadonlySet<string> | null = null
       if (!anyMountedWorktreeHasLayout && mountedWorktreeIdsRef.current.has(workspaceId)) {

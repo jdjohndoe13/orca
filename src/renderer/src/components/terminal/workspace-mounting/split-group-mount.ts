@@ -83,13 +83,21 @@ export function getEffectiveLayoutForWorktree(
   return { type: 'leaf', groupId: fallbackGroupId } as const
 }
 
-/** The container owns every mounted worktree’s panes; gating on the active layout alone destroys background PaneManagers, buffers and PTYs during switches. */
+/**
+ * The container owns every mounted worktree's panes; gating on the active layout alone destroys
+ * background PaneManagers, buffers and PTYs during switches.
+ *
+ * `rowKeyOf` maps a surface's bare id to the key its row lives under. The mount list is bare-id
+ * keyed (one surface per workspace id), so without it a contested id reads the primary host's
+ * layout and every other host's pane tree is judged by the wrong row.
+ */
 export function anyMountedWorktreeHasLayout(
   allWorktreeIds: string[],
   mountedWorktreeIds: ReadonlySet<string>,
   layoutByWorktree: Record<string, TabGroupLayoutNode | undefined>,
   groupsByWorktree: Record<string, TabGroup[]>,
-  activeGroupIdByWorktree: Record<string, string | undefined>
+  activeGroupIdByWorktree: Record<string, string | undefined>,
+  rowKeyOf: (worktreeId: string) => string = (worktreeId) => worktreeId
 ): boolean {
   const previous = layoutPresenceByMounts.get(mountedWorktreeIds)
   const catalogIds =
@@ -123,7 +131,12 @@ export function anyMountedWorktreeHasLayout(
     if (
       catalogIds.has(id) &&
       mountedWorktreeIds.has(id) &&
-      getEffectiveLayoutForWorktree(id, layoutByWorktree, groupsByWorktree, activeGroupIdByWorktree)
+      getEffectiveLayoutForWorktree(
+        rowKeyOf(id),
+        layoutByWorktree,
+        groupsByWorktree,
+        activeGroupIdByWorktree
+      )
     ) {
       present.add(id)
     } else {

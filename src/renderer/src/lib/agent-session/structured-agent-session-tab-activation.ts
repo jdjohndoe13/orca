@@ -1,6 +1,7 @@
 import { runtimeEnvironmentIdOrLocalUnlessTwin } from '../workspace/ownership/worktree-runtime-owner'
 import { requestNativeChatComposerFocus } from '@/components/native-chat/composer/focus/native-chat-composer-focus-intent'
 import { useAppStore } from '@/store/index'
+import { readWorkspaceSessionRecord } from '@/store/workspace-session-key'
 import { callRuntimeRpc } from '@/runtime/rpc/calls/runtime-rpc-call'
 import type { RuntimeClientTarget } from '../../../../shared/remote-runtime/host-catalog/runtime-client-target'
 import { runtimeTargetForOwnerEnvironment } from '@/runtime/rpc/targets/runtime-client-target'
@@ -11,18 +12,31 @@ import {
 import { toRuntimeWorktreeSelector } from '@/runtime/rpc/targets/runtime-worktree-selector'
 import type { Tab } from '../../../../shared/workspace-layout/tab-groups/tab-types'
 
+/**
+ * The structured-chat row lives under the workspace's SESSION ROW KEY (`host|id` for a contested
+ * id, STA-4343), never the bare id. The caller's explicit target wins; otherwise the store's own
+ * evidence (the active workspace's stamp, the catalog) resolves it — and a contested id whose
+ * host cannot be named is a deliberate miss, not a fallback to the bare key.
+ */
 export function findStructuredAgentSessionTab(
   unifiedTabsByWorktree: Readonly<Record<string, readonly Tab[]>>,
   args: { workspaceId: string; sessionId: string; target?: RuntimeClientTarget }
 ): Tab | null {
+  const state = useAppStore.getState()
+  const row = readWorkspaceSessionRecord(
+    state,
+    unifiedTabsByWorktree,
+    args.workspaceId,
+    args.target ? executionHostIdForStructuredTarget(args.target) : null
+  )
   return (
-    unifiedTabsByWorktree[args.workspaceId]?.find(
+    (row?.entry ?? []).find(
       (candidate) =>
         candidate.worktreeId === args.workspaceId &&
         candidate.contentType === 'agent-session' &&
         candidate.entityId === args.sessionId &&
         (!args.target ||
-          structuredAgentSessionOwnerForTab(useAppStore.getState(), candidate) ===
+          structuredAgentSessionOwnerForTab(state, candidate) ===
             executionHostIdForStructuredTarget(args.target))
     ) ?? null
   )
@@ -34,7 +48,13 @@ export function activateStructuredAgentSessionTab(args: {
   target?: RuntimeClientTarget
 }): boolean {
   const state = useAppStore.getState()
-  const tab = (state.unifiedTabsByWorktree[args.worktreeId] ?? []).find(
+  const row = readWorkspaceSessionRecord(
+    state,
+    state.unifiedTabsByWorktree,
+    args.worktreeId,
+    args.target ? executionHostIdForStructuredTarget(args.target) : null
+  )
+  const tab = (row?.entry ?? []).find(
     (candidate) =>
       candidate.id === args.tabId &&
       candidate.contentType === 'agent-session' &&
@@ -45,6 +65,8 @@ export function activateStructuredAgentSessionTab(args: {
   if (!tab) {
     return false
   }
+  // The store actions below resolve the row key themselves from the same state; the runtime
+  // selector stays the BARE id because the host indexes its own session tabs by it.
   state.focusGroup(args.worktreeId, tab.groupId)
   state.activateTab(tab.id, { worktreeId: args.worktreeId })
   state.setActiveTabType('agent-session', args.worktreeId)

@@ -36,8 +36,20 @@ import {
   getPairedDeviceIdsByEnvironment,
   isWorkspaceOwnedBySomeoneElse
 } from '../../../../../../shared/workspace-view/workspace-creator-visibility'
-import { createSleepingSweepHiddenCheck } from './sleeping-sweep-visibility'
+import { isSleepingSweepExempt } from '../../../../../../shared/workspace-view/workspace-row-filters'
 import { selectFolderWorkspaces } from '@/store/workspaces/catalog/workspace-record-fields'
+import { getAgentStatusEpochNow } from '@/lib/agent-status/evidence/agent-status-epoch-clock'
+import {
+  getWorktreeIdsWithLiveAgent,
+  isInactiveWorkspace
+} from '@/lib/workspace/activity/worktree-activity-state'
+import { getContestedWorktreeIds } from '@/store/slices/worktrees/listing/worktree-catalog-index'
+import { workspaceSessionKey } from '../../../../../../shared/workspace-session-worktree-key'
+import {
+  getVisibleWorktreeBrowserActivityTabs,
+  getVisibleWorktreeTerminalActivityTabs,
+  getWorktreeIdsWithStructuredChat
+} from './visible-worktree-activity-inputs'
 
 export type SidebarWorktreeFilters = ReturnType<typeof useSidebarWorktreeFilters>
 
@@ -91,8 +103,35 @@ const REVEAL_WORKSPACE: Record<keyof WorkspaceRowFilters, (context: RevealContex
       state.setHideWorkspacesFromOtherDevices(false)
     }
   },
-  hideSleepingWorkspaces: ({ state, worktree }) => {
-    if (createSleepingSweepHiddenCheck(state)(worktree)) {
+  hideSleepingWorkspaces: ({ state, worktree, targetHostId }) => {
+    // Why the row key (STA-4343): a contested id's rows live under `host|id`,
+    // so the bare read would call this card asleep and flip the wrong
+    // user-facing filter on.
+    const contested = getContestedWorktreeIds(state.worktreesByRepo)
+    const tabsByWorktree = getVisibleWorktreeTerminalActivityTabs(state.tabsByWorktree)
+    const browserTabsByWorktree = getVisibleWorktreeBrowserActivityTabs(
+      state.browserTabsByWorktree
+    )
+    const liveAgentWorktrees = getWorktreeIdsWithLiveAgent(
+      state.agentStatusByPaneKey,
+      tabsByWorktree,
+      getAgentStatusEpochNow(state.agentStatusEpoch),
+      contested
+    )
+    if (
+      !isSleepingSweepExempt(worktree.isMainWorktree, state.alwaysShowDefaultBranchWorkspace) &&
+      isInactiveWorkspace(
+        workspaceSessionKey(worktree.id, targetHostId, contested),
+        tabsByWorktree,
+        state.ptyIdsByTabId,
+        browserTabsByWorktree,
+        liveAgentWorktrees,
+        getWorktreeIdsWithStructuredChat(
+          state.unifiedTabsByWorktree,
+          state.structuredChatSleptAtByPaneKey
+        )
+      )
+    ) {
       state.setShowSleepingWorkspaces(true)
     }
   },

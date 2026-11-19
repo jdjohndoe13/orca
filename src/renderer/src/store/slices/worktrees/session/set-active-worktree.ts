@@ -26,6 +26,8 @@ import {
 } from './activation-terminal-prep'
 import type { WorktreeSlice } from '../worktree-slice-contract'
 import type { WorktreeSliceGet, WorktreeSliceSet } from '../listing/worktree-slice-types'
+import { resolveWorkspaceSessionKey } from '../../../workspace-session-key'
+import { getContestedHostStamp } from './active-worktree-host-stamp'
 
 export function createSetActiveWorktree(
   set: WorktreeSliceSet,
@@ -57,8 +59,19 @@ export function createSetActiveWorktree(
     let shouldTagTerminalTabs = false
     set((current) => {
       const transitioned = stateTransition ? { ...current, ...stateTransition.patch } : current
+      // A contested id activated without a host derives its stamp from the catalog when the
+      // catalog proves one, so the row guard below matches exactly one claimant instead of all.
+      const effectiveHostId =
+        executionHostId ?? (worktreeId ? getContestedHostStamp(transitioned, worktreeId) : null)
+      // The activation carries the host it is activating FOR, so the row key is resolved from
+      // that rather than the (still stale) stamped one — a contested id lives at `host|id`.
+      // It must be the same key for the reconciliation and the surface read below, or the
+      // reconciliation rebuilds groups the surface then cannot see.
+      const rowKey = worktreeId
+        ? resolveWorkspaceSessionKey(transitioned, worktreeId, effectiveHostId)
+        : ''
       const reconciliation = worktreeId
-        ? projectWorktreeTabModelReconciliation(transitioned, worktreeId)
+        ? projectWorktreeTabModelReconciliation(transitioned, worktreeId, undefined, rowKey)
         : null
       const reconciliationChanged = Boolean(
         reconciliation && Object.keys(reconciliation.patch).length > 0
@@ -82,7 +95,7 @@ export function createSetActiveWorktree(
       const nextActiveWorkspaceKey = isWorkspaceKey(worktreeId)
         ? worktreeId
         : worktreeWorkspaceKey(worktreeId)
-      const worktree = findKnownWorktreeById(s, worktreeId, executionHostId)
+      const worktree = findKnownWorktreeById(s, worktreeId, effectiveHostId ?? undefined)
       const {
         restoredRightSidebarExplorerView,
         activeFileId,
@@ -93,11 +106,12 @@ export function createSetActiveWorktree(
         s,
         worktreeId,
         stateTransition?.preferredActiveUnifiedTabId,
-        reconciledActiveTabId
+        reconciledActiveTabId,
+        rowKey
       )
 
       // Defer prep until input quiet. First activation tags even rehydrated PTYs to suppress click activity; bump generation only for dead tabs or remount kills live shells.
-      const tabs = s.tabsByWorktree[worktreeId ?? ''] ?? []
+      const tabs = s.tabsByWorktree[rowKey] ?? []
       const wakeable = tabs.filter(isWakeable)
       const allDead =
         worktreeId != null &&
@@ -121,17 +135,17 @@ export function createSetActiveWorktree(
             : s.activeRepoId
       const tabsByWorktreeUpdate =
         allDead && worktreeId != null
-          ? markWorktreeTabsForActivationSpawn(s, worktreeId, { isWakeable, bumpGeneration: true })
+          ? markWorktreeTabsForActivationSpawn(s, rowKey, { isWakeable, bumpGeneration: true })
           : {}
 
       const nextActiveTabTypeByWorktree =
-        s.activeTabTypeByWorktree[worktreeId] === activeTabType
+        s.activeTabTypeByWorktree[rowKey] === activeTabType
           ? s.activeTabTypeByWorktree
-          : { ...s.activeTabTypeByWorktree, [worktreeId]: activeTabType }
+          : { ...s.activeTabTypeByWorktree, [rowKey]: activeTabType }
       const hasStateChange =
         s.activeWorktreeId !== worktreeId ||
         s.activeWorkspaceKey !== nextActiveWorkspaceKey ||
-        s.activeWorkspaceExecutionHostId !== (executionHostId ?? null) ||
+        s.activeWorkspaceExecutionHostId !== (effectiveHostId ?? null) ||
         // Why: a pending-creation panel can show over the prior worktree; a non-null activePendingCreationId counts as a change.
         s.activePendingCreationId !== null ||
         s.activeFileId !== activeFileId ||
@@ -156,7 +170,7 @@ export function createSetActiveWorktree(
         activeRepoId: nextActiveRepoId,
         activeWorktreeId: worktreeId,
         activeWorkspaceKey: nextActiveWorkspaceKey,
-        activeWorkspaceExecutionHostId: executionHostId ?? null,
+        activeWorkspaceExecutionHostId: effectiveHostId ?? null,
         activePendingCreationId: null,
         activeFileId,
         activeBrowserTabId,
@@ -179,7 +193,8 @@ export function createSetActiveWorktree(
           if (s.activeWorktreeId !== worktreeId) {
             return s
           }
-          const tabs = s.tabsByWorktree[worktreeId] ?? []
+          const rowKey = resolveWorkspaceSessionKey(s, worktreeId, s.activeWorkspaceExecutionHostId)
+          const tabs = s.tabsByWorktree[rowKey] ?? []
           const wakeable = tabs.filter(isWakeable)
           if (wakeable.length === 0) {
             return s
@@ -188,7 +203,7 @@ export function createSetActiveWorktree(
           if (!allDead && !shouldTagTerminalTabs) {
             return s
           }
-          return markWorktreeTabsForActivationSpawn(s, worktreeId, {
+          return markWorktreeTabsForActivationSpawn(s, rowKey, {
             isWakeable,
             bumpGeneration: allDead
           })

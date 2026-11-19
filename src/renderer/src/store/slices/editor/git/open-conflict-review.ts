@@ -9,6 +9,7 @@ import { toOpenConflictMetadata } from './git-status-reconciliation'
 import { openWorkspaceEditorItem } from '../tabs/workspace-editor-item'
 import { resolveEditorFileIdForOwner } from '../file-ids/editor-file-ids'
 import { editorOpenOwner, qualifyEditorContentId } from './editor-open-owner'
+import { resolveWorkspaceSessionRowKey } from '../../../workspace-session-key'
 
 export function createOpenConflictReview(
   set: EditorSet,
@@ -112,8 +113,17 @@ export function createOpenConflictReview(
           openFiles: nextOpenFiles,
           activeFileId: reviewFileId,
           activeTabType: 'editor',
-          activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [placementId]: reviewFileId },
-          activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [placementId]: 'editor' },
+          // The active slot lives under the placement's session row key (STA-4343); a contested
+          // id's rows live at `host|id`. `resolveWorkspaceSessionRowKey` is idempotent on a key
+          // that is already qualified.
+          activeFileIdByWorktree: {
+            ...s.activeFileIdByWorktree,
+            [resolveWorkspaceSessionRowKey(s, placementId)]: reviewFileId
+          },
+          activeTabTypeByWorktree: {
+            ...s.activeTabTypeByWorktree,
+            [resolveWorkspaceSessionRowKey(s, placementId)]: 'editor'
+          },
           trackedConflictPathsByWorktree:
             nextTracked === s.trackedConflictPathsByWorktree[worktreeId]
               ? s.trackedConflictPathsByWorktree

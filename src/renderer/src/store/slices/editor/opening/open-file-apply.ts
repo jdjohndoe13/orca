@@ -33,6 +33,7 @@ import { createNonSecureContextUuid as createBrowserUuid } from '../../../../../
 import { emptySplitGroup, insertSplitGroup } from '../../tabs/tabs-group-actions'
 import { translate } from '@/i18n/i18n'
 import { refreshExistingOpenFile } from './open-file-existing-tab-refresh'
+import { resolveWorkspaceSessionRowKey } from '../../../workspace-session-key'
 
 export type OpenFileApplyScratch = {
   editorItemFileId: string
@@ -52,6 +53,10 @@ export function applyOpenFileToState(
 ): Partial<AppState> | AppState {
   const worktreeId = file.worktreeId
   const placementId = options?.placementWorkspaceId ?? worktreeId
+  // The tab-bar order and the sibling records live under the session key, `host|id` for a
+  // contested workspace id (STA-4343); `openFiles[].worktreeId` stays bare. Qualifying an
+  // already-qualified placement id is a no-op, so a caller that arrived through a row stays on it.
+  const rowKey = resolveWorkspaceSessionRowKey(s, placementId)
   let operationProvenance = file.operationProvenance
   if (!operationProvenance && file.mode === 'edit' && file.readOnly !== true) {
     try {
@@ -175,12 +180,13 @@ export function applyOpenFileToState(
             }
           : f
       )
-      const prevOrder = s.tabBarOrderByWorktree?.[placementId]
+      // Swap the old preview ID for the new one in the stored tab bar order
+      const prevOrder = s.tabBarOrderByWorktree?.[rowKey]
       const previewTabBarUpdate = prevOrder
         ? {
             tabBarOrderByWorktree: {
               ...s.tabBarOrderByWorktree,
-              [placementId]: prevOrder.map((eid) => (eid === replacedPreview.id ? id : eid))
+              [rowKey]: prevOrder.map((eid) => (eid === replacedPreview.id ? id : eid))
             }
           }
         : {}
@@ -244,7 +250,8 @@ export function applyOpenFileToState(
         operationProvenance
       }
     ],
-    ...editorOpenTabBarOrder(s, placementId, id),
+    // The persisted tab bar order lives under the session row (STA-4343).
+    ...editorOpenTabBarOrder(s, rowKey, id),
     ...activeResult
   }
 }

@@ -3,6 +3,7 @@ import TerminalPane from '../../terminal-pane/TerminalPane'
 import { TerminalRestoringPlaceholder } from '../../terminal-pane/mounting/TerminalRestoringPlaceholder'
 import { findActivityTerminalPortal } from '../../activity/terminal-portal/activity-terminal-portal'
 import { shouldMountBackgroundWorktreeTab } from '../workspace-mounting/background-terminal-worktree-mount'
+import { resolveWorkspaceRowKeyFromStore } from '../../terminal-workspace-session-row'
 import type { TerminalController } from './use-terminal-controller'
 
 export function TerminalLegacyTerminalPanes({
@@ -48,6 +49,11 @@ export function TerminalLegacyTerminalPanes({
             !isVisible &&
             !shouldMeasureHiddenWorktree &&
             effectiveParkedTerminalWorktreeIds.has(workspace.id)
+          // Why the row key: the surface list is bare-id keyed (one surface per workspace), so a
+          // contested id's tab row — host-qualified — has to be asked for by name. The active
+          // surface's host is the user's own pick, which the shared resolver honors over the
+          // catalog's first-wins row.
+          const rowKey = resolveWorkspaceRowKeyFromStore(workspace.id)
           return (
             <div
               key={workspace.id}
@@ -60,7 +66,7 @@ export function TerminalLegacyTerminalPanes({
               }
               aria-hidden={!isVisible}
             >
-              {(tabsByWorktree[workspace.id] ?? []).map((tab) => {
+              {(tabsByWorktree[rowKey] ?? []).map((tab) => {
                 const isActiveTerminalTab =
                   isVisible && tab.id === activeTabId && activeTabType === 'terminal'
                 if (
@@ -86,7 +92,11 @@ export function TerminalLegacyTerminalPanes({
                 }
                 const terminalPane = (
                   <TerminalPane
-                    key={`${tab.id}-${tab.generation ?? 0}`}
+                    // Why the row key: the two rows of a contested id can hold the SAME tab id
+                    // (mirrored `web-terminal-<hostTabId>`), so switching hosts must change the
+                    // mount identity or the pane keeps its xterm on the other host's dead stream.
+                    // An uncontested id resolves to the bare row key, keeping the key byte-identical.
+                    key={`${rowKey === workspace.id ? '' : `${rowKey}|`}${tab.id}-${tab.generation ?? 0}`}
                     tabId={tab.id}
                     worktreeId={workspace.id}
                     cwd={tab.startupCwd ?? workspace.path}

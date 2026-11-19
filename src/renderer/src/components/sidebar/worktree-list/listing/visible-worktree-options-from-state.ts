@@ -2,6 +2,7 @@ import { selectSidebarLineageParentIdentities } from '@/store/slices/worktrees/m
 import type { Repo } from '../../../../../../shared/repository/repo-types'
 import { getSettingsFocusedExecutionHostId } from '../../../../../../shared/execution-host/execution-host'
 import { getWorktreeIdsWithLiveAgent } from '@/lib/workspace/activity/worktree-activity-state'
+import { getContestedWorktreeIds } from '@/store/slices/worktrees/listing/worktree-catalog-index'
 import type { useAppStore } from '@/store/index'
 import type { RuntimeStatuses } from '@/store/slices/runtime-status/views/runtime-status-owner'
 import { getWorktreeIdsWithStructuredChat } from './visible-worktree-activity-inputs'
@@ -28,8 +29,10 @@ export function buildVisibleWorktreeOptionsFromState(
     worktreeIdsWithLiveAgent: getWorktreeIdsWithLiveAgent(
       state.agentStatusByPaneKey,
       state.tabsByWorktree,
-      Date.now()
+      Date.now(),
+      getContestedWorktreeIds(state.worktreesByRepo)
     ),
+    contestedWorktreeIds: getContestedWorktreeIds(state.worktreesByRepo),
     worktreeIdsWithStructuredChat: getWorktreeIdsWithStructuredChat(
       state.unifiedTabsByWorktree,
       state.structuredChatSleptAtByPaneKey

@@ -5,6 +5,11 @@ import {
 } from '../../../../../shared/execution-host/execution-host'
 import { getRepoHostIdentityForParts } from '../../../../../shared/repository/repo-host-identity'
 import { composeWorktreeHostIdentity } from '../../../../../shared/worktree/host-qualified-identity'
+import { canonicalizeWorktreeId } from '../../../../../shared/worktree/id'
+import {
+  workspaceSessionKey,
+  type ContestedWorkspaceIds
+} from '../../../../../shared/workspace-session-worktree-key'
 import type { Worktree } from '../../../../../shared/worktree/types'
 import { isExecutionHostAliasForWorktree } from '../ownership/worktree-execution-host-alias'
 
@@ -95,6 +100,24 @@ export function resolvePaletteRepoForWorktree<T extends { displayName?: string |
       getRepoHostIdentityForParts(worktree.repoId, worktree.hostId ?? LOCAL_EXECUTION_HOST_ID)
     ) ?? repoMap.get(worktree.repoId)
   )
+}
+
+/**
+ * The key this worktree row's session records live under (STA-4343).
+ *
+ * Same resolver the sidebar cards use (`useWorktreeAgentRows`): a contested id's rows
+ * live at `host|id` with the ROW's own host, and an uncontested id keeps the bare key
+ * byte-identical. The palette and note-target readers must resolve the same spelling or
+ * both claimants' rows show no tabs.
+ */
+export function getPaletteWorktreeSessionRowKey(
+  worktree: Pick<Worktree, 'id' | 'hostId'>,
+  contested: ContestedWorkspaceIds | undefined
+): string {
+  if (!contested || !contested.has(canonicalizeWorktreeId(worktree.id))) {
+    return worktree.id
+  }
+  return workspaceSessionKey(worktree.id, worktree.hostId, contested)
 }
 
 export function isPaletteCurrentWorktree(

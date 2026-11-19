@@ -21,20 +21,27 @@ type LandingState = Pick<
 export function landsOnEmptiedWorktree(
   current: LandingState,
   worktreeId: string,
-  remainingTabs: number
+  remainingTabs: number,
+  // Where this workspace's rows live. It differs from `worktreeId` for a contested id — one repo
+  // on several execution hosts, STA-4343 — whose rows are `host|id` qualified. The `openFiles` rows
+  // and the split-landing marks keep the bare id, so those comparisons stay on `worktreeId`.
+  rowKey: string = worktreeId
 ): boolean {
   return (
     current.activeWorktreeId === worktreeId &&
     remainingTabs === 0 &&
-    (current.tabsByWorktree[worktreeId] ?? []).length === 0 &&
-    (current.browserTabsByWorktree[worktreeId] ?? []).length === 0 &&
-    workspaceEditorFiles(current.openFiles, current.unifiedTabsByWorktree[worktreeId]).length ===
-      0 &&
-    !hasSplitLandingGroup(current, worktreeId)
+    (current.tabsByWorktree[rowKey] ?? []).length === 0 &&
+    (current.browserTabsByWorktree[rowKey] ?? []).length === 0 &&
+    workspaceEditorFiles(current.openFiles, current.unifiedTabsByWorktree[rowKey]).length === 0 &&
+    !hasSplitLandingGroup(current, worktreeId, rowKey)
   )
 }
 
-export function emptiedWorktreeLandingPatch(current: LandingState, worktreeId: string) {
+export function emptiedWorktreeLandingPatch(
+  current: LandingState,
+  worktreeId: string,
+  rowKey: string = worktreeId
+) {
   return {
     activeWorktreeId: null,
     activeWorkspaceKey: null,
@@ -43,12 +50,12 @@ export function emptiedWorktreeLandingPatch(current: LandingState, worktreeId: s
     activeBrowserTabId: null,
     activeFileId: null,
     activeTabType: 'terminal' as const,
-    activeTabIdByWorktree: { ...current.activeTabIdByWorktree, [worktreeId]: null },
-    activeBrowserTabIdByWorktree: { ...current.activeBrowserTabIdByWorktree, [worktreeId]: null },
-    activeFileIdByWorktree: { ...current.activeFileIdByWorktree, [worktreeId]: null },
+    activeTabIdByWorktree: { ...current.activeTabIdByWorktree, [rowKey]: null },
+    activeBrowserTabIdByWorktree: { ...current.activeBrowserTabIdByWorktree, [rowKey]: null },
+    activeFileIdByWorktree: { ...current.activeFileIdByWorktree, [rowKey]: null },
     activeTabTypeByWorktree: {
       ...current.activeTabTypeByWorktree,
-      [worktreeId]: 'terminal' as const
+      [rowKey]: 'terminal' as const
     }
   }
 }
@@ -59,18 +66,20 @@ type LandingSet = (update: (state: AppState) => Partial<AppState>) => void
 export function landOnEmptiedWorktree(
   set: LandingSet,
   get: () => AppState,
-  worktreeId: string
+  worktreeId: string,
+  rowKey: string = worktreeId
 ): boolean {
   const state = get()
   if (
     !landsOnEmptiedWorktree(
       state,
       worktreeId,
-      (state.unifiedTabsByWorktree[worktreeId] ?? []).length
+      (state.unifiedTabsByWorktree[rowKey] ?? []).length,
+      rowKey
     )
   ) {
     return false
   }
-  set((current) => emptiedWorktreeLandingPatch(current, worktreeId))
+  set((current) => emptiedWorktreeLandingPatch(current, worktreeId, rowKey))
   return true
 }

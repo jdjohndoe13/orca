@@ -8,6 +8,7 @@ import {
   replaceRecordEntries,
   replaceTabBuckets
 } from '../../record-transitions/keyed-record-transitions'
+import { getWorkspaceIdFromSessionKey } from '../../../../../shared/workspace-session-worktree-key'
 
 export function createTabsMoveActions(
   set: TabsSliceSet,
@@ -22,11 +23,15 @@ export function createTabsMoveActions(
         if (!foundTab || !foundTarget || foundTab.worktreeId !== foundTarget.worktreeId) {
           return state
         }
-        const { tab, worktreeId } = foundTab
+        // Both lookups walked the records, so the id they hand back is the row key — `host|id` for
+        // a contested workspace id (STA-4343). Comparing the two is still the right ownership test.
+        const { tab } = foundTab
+        const rowKey = foundTab.worktreeId
+        const worktreeId = getWorkspaceIdFromSessionKey(rowKey)
         if (tab.groupId === targetGroupId) {
           return state
         }
-        const sourceGroup = findGroupForTab(state.groupsByWorktree, worktreeId, tab.groupId)
+        const sourceGroup = findGroupForTab(state.groupsByWorktree, rowKey, tab.groupId)
         const targetGroup = foundTarget.group
         if (!sourceGroup) {
           return state
@@ -44,12 +49,12 @@ export function createTabsMoveActions(
         targetOrder.splice(targetIndex, 0, tabId)
         let nextActiveGroupId = opts?.activate
           ? targetGroupId
-          : state.activeGroupIdByWorktree[worktreeId]
+          : state.activeGroupIdByWorktree[rowKey]
         const sourceRecentTabIds = sanitizeRecentTabIds(
           (sourceGroup.recentTabIds ?? []).filter((id) => id !== tabId),
           sourceOrder
         )
-        const nextGroups = (state.groupsByWorktree[worktreeId] ?? []).map((group) => {
+        const nextGroups = (state.groupsByWorktree[rowKey] ?? []).map((group) => {
           if (group.id === sourceGroup.id) {
             return {
               ...group,
@@ -60,7 +65,7 @@ export function createTabsMoveActions(
                       dedupedSourceGroupOrder,
                       sourceGroup.recentTabIds,
                       tabId,
-                      state.unifiedTabsByWorktree[worktreeId]
+                      state.unifiedTabsByWorktree[rowKey]
                     )
                   : group.activeTabId,
               tabOrder: sourceOrder,
@@ -82,7 +87,7 @@ export function createTabsMoveActions(
         })
         let nextLayoutByWorktree = state.layoutByWorktree
         let filteredGroups = nextGroups
-        const currentLayout = state.layoutByWorktree[worktreeId]
+        const currentLayout = state.layoutByWorktree[rowKey]
         if (sourceOrder.length === 0) {
           filteredGroups = nextGroups.filter((group) => group.id !== sourceGroup.id)
           if (currentLayout) {
@@ -93,22 +98,22 @@ export function createTabsMoveActions(
               targetGroupId
             )
             nextLayoutByWorktree = replaceRecordEntries(state.layoutByWorktree, [
-              [worktreeId, collapsed.layout]
+              [rowKey, collapsed.layout]
             ])
             nextActiveGroupId = collapsed.activeGroupId
           }
         }
         const nextActiveGroupIdByWorktreeResolved = replaceRecordEntries(
           state.activeGroupIdByWorktree,
-          [[worktreeId, nextActiveGroupId]]
+          [[rowKey, nextActiveGroupId]]
         )
         const nextGroupsByWorktree = replaceRecordEntries(state.groupsByWorktree, [
-          [worktreeId, filteredGroups]
+          [rowKey, filteredGroups]
         ])
         const nextUnifiedTabsByWorktree = replaceTabBuckets(state.unifiedTabsByWorktree, [
           [
-            worktreeId,
-            (state.unifiedTabsByWorktree[worktreeId] ?? []).map((candidate) =>
+            rowKey,
+            (state.unifiedTabsByWorktree[rowKey] ?? []).map((candidate) =>
               candidate.id === tabId ? { ...candidate, groupId: targetGroupId } : candidate
             )
           ]
@@ -118,6 +123,7 @@ export function createTabsMoveActions(
           groupsByWorktree: nextGroupsByWorktree,
           layoutByWorktree: nextLayoutByWorktree,
           activeGroupIdByWorktree: nextActiveGroupIdByWorktreeResolved,
+          // The global selection holds the bare id; the row key is the record's spelling.
           ...(state.activeWorktreeId === worktreeId
             ? buildActiveSurfacePatch(
                 {
@@ -128,7 +134,8 @@ export function createTabsMoveActions(
                   activeGroupIdByWorktree: nextActiveGroupIdByWorktreeResolved
                 },
                 worktreeId,
-                nextActiveGroupIdByWorktreeResolved[worktreeId] ?? null
+                nextActiveGroupIdByWorktreeResolved[rowKey] ?? null,
+                rowKey
               )
             : {})
         }

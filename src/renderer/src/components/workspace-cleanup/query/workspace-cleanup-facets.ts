@@ -6,6 +6,10 @@ import {
   getWorkspaceCleanupCandidateHostId,
   getWorkspaceCleanupHostIdentity
 } from '../../../../../shared/workspace-cleanup/workspace-cleanup-host-identity'
+import {
+  workspaceSessionKey,
+  type ContestedWorkspaceIds
+} from '../../../../../shared/workspace-session-worktree-key'
 import { getWorkspaceStatus } from '../../../../../shared/workspace/status/workspace-statuses'
 import {
   canQueueWorkspaceCleanupCandidate,
@@ -33,7 +37,10 @@ export type WorkspaceCleanupFacetSources = {
   /** Absent entry = the space scan never ran for that worktree. */
   sizeBytesByWorktreeId?: ReadonlyMap<string, number>
   lastVisitedAtByWorktreeId?: Readonly<Record<string, number>>
+  /** Keyed by the SESSION ROW KEY (STA-4343); read with `contestedWorktreeIds`. */
   liveAgentStatusByWorktreeId?: ReadonlyMap<string, LiveAgentWorktreeStatus>
+  /** The contested-id set (STA-4343); folds each row's id to its row key. */
+  contestedWorktreeIds?: ContestedWorkspaceIds
   reviewInfoByWorktreeId?: ReadonlyMap<string, WorkspaceCleanupReviewInfo>
   /** Host-qualified identities, matching how dismissals are stored (STA-4343). */
   dismissedIdentities?: ReadonlySet<string>
@@ -149,7 +156,15 @@ export function buildWorkspaceCleanupFacets(
     isUnread: worktree?.isUnread ?? false,
     hasComment,
     agentState: toWorkspaceCleanupAgentState(
-      sources.liveAgentStatusByWorktreeId?.get(candidate.worktreeId)
+      // Why the row key (STA-4343): a contested id's live-agent rows live under
+      // `host|id`, so the bare read would show the co-claimant's agent state.
+      sources.liveAgentStatusByWorktreeId?.get(
+        workspaceSessionKey(
+          candidate.worktreeId,
+          getWorkspaceCleanupCandidateHostId(candidate),
+          sources.contestedWorktreeIds
+        )
+      )
     ),
     finishedAgentCount: candidate.localContext.finishedAgentCount ?? null,
     gitState: getWorkspaceCleanupGitState(candidate),

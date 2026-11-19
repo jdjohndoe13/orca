@@ -3,7 +3,7 @@ import type { ProjectHostSetup } from '../../../../../../shared/project/project-
 import type { DetectedWorktreeListResult, Worktree } from '../../../../../../shared/worktree/types'
 import { findRepoForHost } from '../../../repos/repo-host-identity'
 import { reuseEqualCatalogRows } from '../../../../lib/catalog-reconciliation/catalog-row-reconciliation'
-import { getRepoIdFromWorktreeId } from '../../../../../../shared/worktree/id'
+import { canonicalizeWorktreeId, getRepoIdFromWorktreeId } from '../../../../../../shared/worktree/id'
 import {
   getRepoExecutionHostId,
   LOCAL_EXECUTION_HOST_ID,
@@ -28,6 +28,11 @@ export function withRepoHostOwnership<
     projectHostSetupId?: string
   }
 >(worktree: T, hostId: ExecutionHostId, setup?: ProjectHostSetup): T {
+  // Why the id is NOT canonicalized here: the host compares worktree ids byte-exactly (the
+  // folder-locator's OMP meta is looked up under the raw id, and `resolveScopedWorktreeIdRow`
+  // exact-matches it), so the store's rows stay byte-faithful. Only the session-key layer
+  // (`workspaceSessionKey`) folds the separator spelling, so the two spellings share one bucket
+  // while the ids the host compares are unchanged.
   const parsedOwner = parseExecutionHostId(hostId)
   const runtimeOwnerEnvironmentId =
     parsedOwner?.kind === 'runtime' ? parsedOwner.environmentId : undefined
@@ -297,11 +302,15 @@ export function getRemovedWorktreeIdsAfterAuthoritativeScan(
   if (!detected.authoritative) {
     return []
   }
-  const detectedIds = new Set<string>()
-  for (const worktree of detected.worktrees) {
-    detectedIds.add(worktree.id)
-  }
-  return getKnownWorktreeIdsForPurge(state, repoId, hostId).filter((id) => !detectedIds.has(id))
+  // Why canonicalize: the known ids mix the store's rows with the hydrated session keys, and a
+  // persisted row that never reconciled (or a store that never restarted) can hold the other
+  // separator spelling — a byte-miss would purge a live workspace's session.
+  const detectedIds = new Set(
+    detected.worktrees.map((worktree) => canonicalizeWorktreeId(worktree.id))
+  )
+  return getKnownWorktreeIdsForPurge(state, repoId, hostId).filter(
+    (id) => !detectedIds.has(canonicalizeWorktreeId(id))
+  )
 }
 
 export function toLegacyDetectedWorktreeResult(

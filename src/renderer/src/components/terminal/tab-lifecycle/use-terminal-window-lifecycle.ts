@@ -4,6 +4,7 @@ import { isIntentionalAppRestartInProgress } from '@/app-shell/updates/updater-b
 import { preventUnloadAndScheduleShutdownCheckpointReset } from '@/app-shell/shutdown/shutdown-checkpoint-guard'
 import { setWindowCloseRequestHandler } from '../../../app-shell/shutdown/window-close-request-coordinator'
 import { runAfterEditorFramesFlush } from '../../editor/save/flush/editor-pending-flush'
+import { resolveWorktreeSessionRowKeyFromStore } from '../../terminal-workspace-session-row'
 import {
   collectBrowserWebviewIds,
   destroyWebviewsRemovedFromStore
@@ -114,7 +115,9 @@ export function useTerminalWindowLifecycle(
 
   useEffect(() => {
     const activeWorktreeBrowserTabs = renderedActiveWorktreeId
-      ? (useAppStore.getState().browserTabsByWorktree[renderedActiveWorktreeId] ?? [])
+      ? (useAppStore.getState().browserTabsByWorktree[
+          resolveWorktreeSessionRowKeyFromStore(renderedActiveWorktreeId)
+        ] ?? [])
       : []
     if (
       activeTabType === 'browser' &&

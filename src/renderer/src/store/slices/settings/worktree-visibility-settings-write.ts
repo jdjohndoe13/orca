@@ -5,6 +5,7 @@ import {
   toRuntimeExecutionHostId
 } from '../../../../../shared/execution-host/execution-host'
 import type { GlobalSettings } from '../../../../../shared/settings/global-settings-types'
+import { isRelayDownstreamEnvironmentId } from '../../../../../shared/runtime-environment-relay-row-ids'
 import type { AppState } from '../../types'
 
 export async function persistVisibilityAwareSettings(args: {
@@ -28,6 +29,26 @@ export async function persistVisibilityAwareSettings(args: {
   // Why: the write lands on the default scope host whose defaults the store mirrors.
   const target = defaultScopeHost(currentSettings)
   if ('worktreeVisibilityDefaults' in normalizedUpdates && target.kind === 'environment') {
+    // Why: a relay row is a mirror — its gateway owns `settings.update` (the
+    // relay fence refuses it), so relay targets fall back to local-only
+    // visibility defaults on the row's own host key instead of dialing a
+    // refusal.
+    if (isRelayDownstreamEnvironmentId(target.environmentId)) {
+      const localSettings = await window.api.settings.set(normalizedUpdates)
+      if (!shouldPublish()) {
+        return
+      }
+      set((state) => ({
+        settings: localSettings,
+        worktreeVisibilityDefaultsByHost: {
+          ...state.worktreeVisibilityDefaultsByHost,
+          [toRuntimeExecutionHostId(target.environmentId)]:
+            localSettings.worktreeVisibilityDefaults ??
+              normalizedUpdates.worktreeVisibilityDefaults ?? { external: 'hide' }
+        }
+      }))
+      return
+    }
     const { worktreeVisibilityDefaults, ...localUpdates } = normalizedUpdates
     if (target.environmentId !== supportedRuntimeEnvironmentId) {
       throw new Error('Update this server to configure visibility defaults.')

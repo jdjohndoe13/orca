@@ -73,4 +73,6 @@ export type BuildSearchableWorkspaceTabsOptions = WorkspaceTabAgentMetadataState
   chatNames: StructuredChatTabNames
   terminalLayoutsByTabId?: Record<string, TerminalLayoutSnapshot | undefined>
   paneForegroundAgentByPaneKey?: Record<string, PaneForegroundAgentEntry>
+  /** The contested ids (STA-4343): the row keys of these ids carry the host prefix. */
+  contestedWorktreeIds?: ReadonlySet<string>
 }

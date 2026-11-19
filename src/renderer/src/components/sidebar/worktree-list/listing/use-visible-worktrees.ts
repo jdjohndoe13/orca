@@ -8,6 +8,7 @@ import { useAppStoreWithHostStatuses } from '@/store/slices/runtime-status/views
 import { useAppStore } from '@/store/index'
 import { getAgentStatusEpochNow } from '@/lib/agent-status/evidence/agent-status-epoch-clock'
 import { createLiveAgentWorktreeIdsSelector } from '@/lib/workspace/activity/worktree-activity-state'
+import { getContestedWorktreeIds } from '@/store/slices/worktrees/listing/worktree-catalog-index'
 import type { Repo } from '../../../../../../shared/repository/repo-types'
 import type { WorktreeLineage } from '../../../../../../shared/worktree/lineage-types'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host/execution-host'
@@ -111,10 +112,11 @@ export function useVisibleSidebarWorktrees(args: {
 
   // Recompute on epoch, not every hook ping; key on the epoch too since ticks can share a millisecond sample.
   const [selectLiveAgentWorktreeIds] = useState(createLiveAgentWorktreeIdsSelector)
+  const contestedWorktreeIds = getContestedWorktreeIds(worktreesByRepo)
   const worktreeIdsWithLiveAgent = useAppStore((s) =>
     showSleepingWorkspaces
       ? EMPTY_WORKTREE_ID_SET
-      : selectLiveAgentWorktreeIds(s, tabsByWorktree, agentStatusNow)
+      : selectLiveAgentWorktreeIds(s, tabsByWorktree, agentStatusNow, contestedWorktreeIds)
   )
   const sleepingSweepExemptWorktreeIds = useSleepingSweepRetention({
     enabled: !showSleepingWorkspaces,
@@ -136,6 +138,7 @@ export function useVisibleSidebarWorktrees(args: {
       browserTabsByWorktree,
       worktreeIdsWithStructuredChat,
       worktreeIdsWithLiveAgent,
+      contestedWorktreeIds,
       sleepingSweepExemptWorktreeIds,
       botListedWorktreeIdentities,
       hideDefaultBranchWorkspace,
@@ -164,6 +167,7 @@ export function useVisibleSidebarWorktrees(args: {
     hiddenVmCheckouts,
     args.agentSendTargetWorktreeId,
     worktreeIdsWithLiveAgent,
+    contestedWorktreeIds,
     sleepingSweepExemptWorktreeIds,
     botListedWorktreeIdentities,
     filterRepoIds,

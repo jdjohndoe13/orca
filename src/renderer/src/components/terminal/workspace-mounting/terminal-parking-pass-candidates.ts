@@ -14,6 +14,7 @@ import {
 import { getTerminalParkingPolicyOverrides } from '../../terminal-pane/parking/instrumentation/terminal-parking-e2e-overrides'
 import '../../terminal-pane/parking/output-watchers/terminal-parked-tab-watchers'
 import { canWatcherCoverParkedTerminalTab } from '../../terminal-pane/parking/output-watchers/parked-terminal-tab-coverage'
+import { resolveWorkspaceRowKeyFromStore } from '../../terminal-workspace-session-row'
 import { getHeldTerminalPrewarmWorktrees } from '../worktree-prewarm/terminal-worktree-prewarm'
 import { isTerminalActivationSpawnSettled } from '../../terminal-pane/parking/retention/settled-activation-spawn'
 import { useAppStore } from '../../../store/index'
@@ -122,7 +123,10 @@ export function collectTerminalParkingPassCandidates(
     ) {
       terminalWorktreeHiddenSinceRef.current.set(worktreeId, nowMs)
     }
-    const terminalTabs = tabsByWorktree[worktreeId] ?? []
+    // Why the row key: the pass reads every surface's tab row, and a contested id's row lives
+    // under `host|id` — a bare-id read would park (or keep mounted) one host's worktree based
+    // on another host's tabs.
+    const terminalTabs = tabsByWorktree[resolveWorkspaceRowKeyFromStore(worktreeId)] ?? []
     const candidate = {
       worktreeId,
       terminalTabs,

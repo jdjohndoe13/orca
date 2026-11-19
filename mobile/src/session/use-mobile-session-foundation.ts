@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams } from 'expo-router'
 import { useRouteHandoff } from '../navigation/route-handoff'
@@ -19,6 +19,7 @@ import { useMobileSessionProjectName } from './use-mobile-session-project-name'
 import { useMissingWorktreeBounce } from './use-missing-worktree-bounce'
 import { hostRouteWithNotice } from '../host-route-notice'
 import { useHostProtocolGates } from '../components/host-connection/host-protocol-gates-context'
+import { resolveRelayTabsSource } from './mobile-remote-runtime-session-tabs'
 
 export function useMobileSessionFoundation() {
   const {
@@ -57,7 +58,8 @@ export function useMobileSessionFoundation() {
     path: worktreePath,
     hostId: worktreeHostId,
     branch: worktreeBranch,
-    resolution: worktreeResolution
+    resolution: worktreeResolution,
+    stampKnown: worktreeStampKnown
   } = useLiveWorktreeName({
     client,
     connState,
@@ -104,9 +106,22 @@ export function useMobileSessionFoundation() {
     setActivePanel(null)
   }
   const initialCreateWarning = typeof createdWarning === 'string' ? createdWarning.trim() : ''
+  // Mirrored (runtime-backed) rows read every one-shot method and open their
+  // terminal stream through the gateway relay; the stamp rides the same
+  // `worktree.show` read the live title uses. Computing it here — the root of the
+  // controller's Object.assign chain — puts one source in front of the terminal
+  // list, the subscription, and the input surface, not just the tab list.
+  // Memoized so the derived object is identity-stable across renders: it is a
+  // dependency of the subscribe/send/activate callbacks, none of which should
+  // re-identity on every render.
+  const sessionRelay = useMemo(
+    () => resolveRelayTabsSource(worktreeHostId, worktreeStampKnown),
+    [worktreeHostId, worktreeStampKnown]
+  )
   return {
     hostId,
     worktreeId,
+    sessionRelay,
     routeWorktreeName,
     created,
     createdWarning,
@@ -131,6 +146,7 @@ export function useMobileSessionFoundation() {
     worktreeBranch,
     worktreeRepo,
     worktreeResolution,
+    worktreeStampKnown,
     isWideLayout,
     activePanel,
     setActivePanel,

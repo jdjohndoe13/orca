@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import { translate } from '../../../i18n/mobile-i18n'
 import { terminalBufferClear } from '../../host-operations/mobile-terminal-operations'
 import { sendMobileTerminalQueryReply } from '../../host-operations/mobile-terminal-query-reply'
+import { forwardOrLocal } from '../../../session/mobile-remote-runtime-forwarded-call'
 import {
   buildTerminalSendParams,
   TERMINAL_INPUT_SEND_OPTIONS
@@ -24,6 +25,7 @@ export function useMobileSessionTerminalInput(scope: MobileSessionFileActionsMod
     client,
     sendTerminalOrderedInput,
     connState,
+    sessionRelay,
     ptyModesRef,
     terminalGestureInputBucketsRef,
     terminalGestureInputQueuesRef,
@@ -106,23 +108,28 @@ export function useMobileSessionTerminalInput(scope: MobileSessionFileActionsMod
       }
       try {
         // Drop queued gesture arrows on disconnect so reconnect cannot move the TUI long after the swipe.
-        await sendTerminalOrderedInput(
-          rpc,
-          buildTerminalSendParams({
-            terminal: handle,
-            text: queued.bytes,
-            enter: false,
-            deviceToken: deviceTokenRef.current
-          }),
-          TERMINAL_INPUT_SEND_OPTIONS,
-          {
-            onAdmission: advance,
-            gestureDeadline: queued.lastUpdatedMs + TERMINAL_GESTURE_INPUT_MAX_QUEUE_AGE_MS,
-            isCurrent: () =>
-              clientRef.current === rpc &&
-              handle === activeHandleRef.current &&
-              activeSessionTabTypeRef.current === 'terminal'
-          }
+        const sendParams = buildTerminalSendParams({
+          terminal: handle,
+          text: queued.bytes,
+          enter: false,
+          deviceToken: deviceTokenRef.current
+        })
+        // Why: a mirrored row's gesture flush rides the gateway relay; the local
+        // path keeps the ordered-input seam so reconnect cannot replay stale bytes.
+        await forwardOrLocal(rpc, sessionRelay, 'terminal.send', sendParams, () =>
+          sendTerminalOrderedInput(
+            rpc,
+            sendParams,
+            TERMINAL_INPUT_SEND_OPTIONS,
+            {
+              onAdmission: advance,
+              gestureDeadline: queued.lastUpdatedMs + TERMINAL_GESTURE_INPUT_MAX_QUEUE_AGE_MS,
+              isCurrent: () =>
+                clientRef.current === rpc &&
+                handle === activeHandleRef.current &&
+                activeSessionTabTypeRef.current === 'terminal'
+            }
+          )
         )
       } catch {
         // Transient failure
@@ -143,7 +150,7 @@ export function useMobileSessionTerminalInput(scope: MobileSessionFileActionsMod
         }
       }
     },
-    [sendTerminalOrderedInput]
+    [sendTerminalOrderedInput, sessionRelay]
   )
 
   const enqueueTerminalGestureInput = useCallback(
@@ -222,18 +229,22 @@ export function useMobileSessionTerminalInput(scope: MobileSessionFileActionsMod
     [allowTerminalGestureInput, client, connState, enqueueTerminalGestureInput, sendLiveInputClick]
   )
 
-  const handleTerminalQueryReply = useCallback((handle: string, bytes: string) => {
-    void sendMobileTerminalQueryReply({
-      bytes,
-      client: clientRef.current,
-      clientId: deviceTokenRef.current,
-      connected: connStateRef.current === 'connected',
-      handle,
-      hostSupportsQueryReplyInput: hostQueryReplyInputSupportedRef.current,
-      hostSupportsProgramStatus: hostProgramStatusSupportedRef.current,
-      subscribedTerminals: terminalUnsubsRef.current
-    })
-  }, [])
+  const handleTerminalQueryReply = useCallback(
+    (handle: string, bytes: string) => {
+      void sendMobileTerminalQueryReply({
+        bytes,
+        client: clientRef.current,
+        clientId: deviceTokenRef.current,
+        connected: connStateRef.current === 'connected',
+        handle,
+        hostSupportsQueryReplyInput: hostQueryReplyInputSupportedRef.current,
+        hostSupportsProgramStatus: hostProgramStatusSupportedRef.current,
+        subscribedTerminals: terminalUnsubsRef.current,
+        sessionRelay
+      })
+    },
+    [sessionRelay]
+  )
 
   async function handleClearTerminal(target: Terminal) {
     if (!client) {
@@ -242,10 +253,16 @@ export function useMobileSessionTerminalInput(scope: MobileSessionFileActionsMod
     // Why: only a different client is stale; the WebView handle is rebuilt on re-render and a path cutover keeps the same host.
     const isCurrent = () => clientRef.current === client
     try {
-      const response = await terminalBufferClear.request(
+      const clearParams = { terminal: target.handle }
+      // Why: a mirrored row's clear rides the gateway relay; the local path keeps
+      // the disconnect-failure option so a stale client cannot toast success.
+      const response = await forwardOrLocal(
         client,
-        { terminal: target.handle },
-        { failWhenDisconnected: true }
+        sessionRelay,
+        'terminal.clearBuffer',
+        clearParams,
+        () =>
+          terminalBufferClear.request(client, clearParams, { failWhenDisconnected: true })
       )
       if (!isCurrent()) {
         return

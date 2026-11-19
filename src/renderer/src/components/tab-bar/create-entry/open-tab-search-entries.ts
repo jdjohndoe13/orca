@@ -18,6 +18,7 @@ import {
   type ExecutionHostId
 } from '../../../../../shared/execution-host/execution-host'
 import { getPaletteOwnershipWorktreeIds } from '@/lib/workspace/ownership/unified-tab-host-ownership'
+import { getContestedWorktreeIds } from '@/store/slices/worktrees/listing/worktree-catalog-index'
 import type { StructuredChatTabNames } from '@/runtime/native-chat/naming/structured-chat-tab-name'
 import type { Translate } from '@/i18n/use-translate'
 
@@ -180,7 +181,10 @@ function openTabSearchScope(state: OpenTabSearchBrowserPageState) {
     worktrees: [scopedWorktree],
     ownershipWorktrees: getPaletteOwnershipWorktreeIds(state),
     repoMap: new Map(repo ? [[repo.id, repo]] : []),
-    worktreeOrder: new Map([[worktree.id, 0]])
+    worktreeOrder: new Map([[worktree.id, 0]]),
+    // The palette reads session records by the row key (STA-4343); the gate is the
+    // catalog's contested set, which `worktreesByRepo` already carries.
+    contestedWorktreeIds: getContestedWorktreeIds(state.worktreesByRepo)
   }
 }
 

@@ -17,6 +17,7 @@ import { warnTerminalLifecycleAnomaly } from '../../terminal-pane/layout/reconci
 import { recordTerminalWorktreeParkingDebugVerdicts } from '../../terminal-pane/parking/instrumentation/terminal-parking-e2e-overrides'
 import { getTerminalWorktreeColdParkRecheckDelayMs } from '../../terminal-pane/parking/retention/terminal-cold-park-recheck-deadlines'
 import { haveSameIdSet } from '../workbench/terminal-workspace-model'
+import { resolveWorkspaceRowKeyFromStore } from '../../terminal-workspace-session-row'
 import { collectTerminalParkingPassCandidates } from './terminal-parking-pass-candidates'
 import type { TerminalParkingFoundation } from './use-terminal-parking-foundation'
 
@@ -161,7 +162,9 @@ export function useTerminalParkingPass(controller: TerminalParkingFoundation): v
       if (
         captureParkedTerminalBuffers({
           worktreeId,
-          tabIds: (tabsByWorktree[worktreeId] ?? []).map((tab) => tab.id),
+          tabIds: (tabsByWorktree[resolveWorkspaceRowKeyFromStore(worktreeId)] ?? []).map(
+            (tab) => tab.id
+          ),
           repos,
           localOnly: true
         })
@@ -176,7 +179,8 @@ export function useTerminalParkingPass(controller: TerminalParkingFoundation): v
     }
     const nextEvictionExemptTabIds = new Set<string>()
     for (const worktreeId of forceParkedWorktreeIds) {
-      const forceParkedTabs = tabsByWorktree[worktreeId] ?? []
+      const forceParkedTabs =
+        tabsByWorktree[resolveWorkspaceRowKeyFromStore(worktreeId)] ?? []
       let exemptTabIds = exemptionByWorktree.current.get(worktreeId)
       if (!exemptTabIds || dirty.has(worktreeId)) {
         exemptTabIds = selectEvictionExemptTerminalTabIds(worktreeId, forceParkedTabs)

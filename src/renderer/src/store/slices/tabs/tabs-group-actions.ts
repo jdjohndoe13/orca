@@ -15,6 +15,7 @@ import { insertTabIdIntoOrder } from '../../../../../shared/workspace-layout/tab
 import { resolveUnifiedTabCreatePlacement } from './tabs-create-placement'
 import { ownsGlobalSelection } from '../../workspaces/selection/global-selection-owner'
 import { replaceRecordEntries } from '../../record-transitions/keyed-record-transitions'
+import { resolveWorkspaceSessionRowKey } from '../../workspace-session-key'
 
 type SplitGroupState = Pick<
   TabsSlice,
@@ -26,16 +27,18 @@ export function insertSplitGroup(
   state: SplitGroupState,
   worktreeId: string,
   target: TabSplitTarget,
-  newGroup: TabGroup
+  newGroup: TabGroup,
+  // Where this workspace's rows live: `host|id` for a contested id (STA-4343).
+  rowKey: string = worktreeId
 ): SplitGroupState {
-  const split = splitGroupEntries(state, worktreeId, target, newGroup)
+  const split = splitGroupEntries(state, worktreeId, target, newGroup, rowKey)
   return {
-    groupsByWorktree: replaceRecordEntries(state.groupsByWorktree, [[worktreeId, split.groups]]),
-    layoutByWorktree: replaceRecordEntries(state.layoutByWorktree, [[worktreeId, split.layout]]),
+    groupsByWorktree: replaceRecordEntries(state.groupsByWorktree, [[rowKey, split.groups]]),
+    layoutByWorktree: replaceRecordEntries(state.layoutByWorktree, [[rowKey, split.layout]]),
     activeGroupIdByWorktree:
       split.activeGroupId === null
         ? state.activeGroupIdByWorktree
-        : replaceRecordEntries(state.activeGroupIdByWorktree, [[worktreeId, split.activeGroupId]])
+        : replaceRecordEntries(state.activeGroupIdByWorktree, [[rowKey, split.activeGroupId]])
   }
 }
 
@@ -44,11 +47,12 @@ export function splitGroupEntries(
   state: SplitGroupState,
   worktreeId: string,
   target: TabSplitTarget,
-  newGroup: TabGroup
+  newGroup: TabGroup,
+  rowKey: string = worktreeId
 ): { groups: TabGroup[]; layout: TabGroupLayoutNode; activeGroupId: string | null } {
   const { sourceGroupId, splitDirection } = target
   const currentLayout =
-    state.layoutByWorktree[worktreeId] ?? ({ type: 'leaf', groupId: sourceGroupId } as const)
+    state.layoutByWorktree[rowKey] ?? ({ type: 'leaf', groupId: sourceGroupId } as const)
   const replacement = buildSplitNode(
     sourceGroupId,
     newGroup.id,
@@ -56,7 +60,7 @@ export function splitGroupEntries(
     splitDirection === 'left' || splitDirection === 'up' ? 'first' : 'second'
   )
   return {
-    groups: [...(state.groupsByWorktree[worktreeId] ?? []), newGroup],
+    groups: [...(state.groupsByWorktree[rowKey] ?? []), newGroup],
     layout: replaceLeaf(currentLayout, sourceGroupId, replacement),
     activeGroupId: target.activate === false ? null : newGroup.id
   }
@@ -75,25 +79,30 @@ export function createTabsGroupActions(
 > {
   return {
     ensureWorktreeRootGroup: (worktreeId, orderSlot) => {
-      const existingGroups = get().groupsByWorktree[worktreeId] ?? []
+      // Why the row key: a contested workspace id keys its session rows `host|id` (STA-4343), and
+      // the read path asks for that key — the group has to live where the layout is read from.
+      // The group's own `worktreeId` field stays the bare id: it is an entity reference that
+      // survives into the per-host partition, where only the bare spelling exists.
+      const rowKey = resolveWorkspaceSessionRowKey(get(), worktreeId)
+      const existingGroups = get().groupsByWorktree[rowKey] ?? []
       if (!orderSlot && existingGroups.length > 0) {
-        return get().activeGroupIdByWorktree[worktreeId] ?? existingGroups[0].id
+        return get().activeGroupIdByWorktree[rowKey] ?? existingGroups[0].id
       }
 
       let groupId = workspaceRootGroupId(worktreeId)
       set((state) => {
-        const groups = state.groupsByWorktree[worktreeId] ?? []
+        const groups = state.groupsByWorktree[rowKey] ?? []
         const reserved =
           orderSlot && groups.find((group) => group.tabOrder.includes(orderSlot.tabId))
         if (reserved) {
           groupId = reserved.id
           return state
         }
-        const tabs = state.unifiedTabsByWorktree[worktreeId] ?? []
+        const tabs = state.unifiedTabsByWorktree[rowKey] ?? []
         const placement = resolveUnifiedTabCreatePlacement({
           groups,
           tabs,
-          activeGroupId: state.activeGroupIdByWorktree[worktreeId],
+          activeGroupId: state.activeGroupIdByWorktree[rowKey],
           targetGroupId: orderSlot?.targetGroupId,
           lookupWorktrees: () => []
         })
@@ -121,7 +130,7 @@ export function createTabsGroupActions(
         return {
           groupsByWorktree: replaceRecordEntries(state.groupsByWorktree, [
             [
-              worktreeId,
+              rowKey,
               groups.length
                 ? groups.map((entry) => (entry.id === groupId ? nextGroup : entry))
                 : [nextGroup]
@@ -129,8 +138,8 @@ export function createTabsGroupActions(
           ]),
           layoutByWorktree: replaceRecordEntries(state.layoutByWorktree, [
             [
-              worktreeId,
-              (orderSlot && state.layoutByWorktree[worktreeId]) || {
+              rowKey,
+              (orderSlot && state.layoutByWorktree[rowKey]) || {
                 type: 'leaf',
                 groupId
               }
@@ -138,7 +147,7 @@ export function createTabsGroupActions(
           ]),
           activeGroupIdByWorktree: groups.length
             ? state.activeGroupIdByWorktree
-            : replaceRecordEntries(state.activeGroupIdByWorktree, [[worktreeId, groupId]])
+            : replaceRecordEntries(state.activeGroupIdByWorktree, [[rowKey, groupId]])
         }
       })
       return groupId
@@ -146,10 +155,11 @@ export function createTabsGroupActions(
 
     focusGroup: (worktreeId, groupId) =>
       set((state) => {
-        const groupAlreadyFocused = state.activeGroupIdByWorktree[worktreeId] === groupId
+        const rowKey = resolveWorkspaceSessionRowKey(state, worktreeId)
+        const groupAlreadyFocused = state.activeGroupIdByWorktree[rowKey] === groupId
         const nextActiveGroupIdByWorktree = groupAlreadyFocused
           ? state.activeGroupIdByWorktree
-          : replaceRecordEntries(state.activeGroupIdByWorktree, [[worktreeId, groupId]])
+          : replaceRecordEntries(state.activeGroupIdByWorktree, [[rowKey, groupId]])
         // Only surface tabs of the active workspace; focusing an unseen group must not consume its bell.
         if (state.activeWorktreeId !== worktreeId) {
           if (groupAlreadyFocused) {
@@ -165,11 +175,12 @@ export function createTabsGroupActions(
             activeGroupIdByWorktree: nextActiveGroupIdByWorktree
           },
           worktreeId,
-          groupId
+          groupId,
+          rowKey
         )
         if (
           groupAlreadyFocused &&
-          activeSurfacePatchMatchesState(state, worktreeId, activeSurfacePatch)
+          activeSurfacePatchMatchesState(state, worktreeId, activeSurfacePatch, rowKey)
         ) {
           return state
         }
@@ -180,31 +191,32 @@ export function createTabsGroupActions(
       }),
 
     closeEmptyGroup: (worktreeId, groupId) => {
+      const rowKey = resolveWorkspaceSessionRowKey(get(), worktreeId)
       const state = get()
-      const group = (state.groupsByWorktree[worktreeId] ?? []).find(
+      const group = (state.groupsByWorktree[rowKey] ?? []).find(
         (candidate) => candidate.id === groupId
       )
       // Why: ownership is tab.groupId (what the strip draws); tabOrder can hold ghost, sibling-owned or missing ids.
-      const ownsTab = (state.unifiedTabsByWorktree[worktreeId] ?? []).some(
+      const ownsTab = (state.unifiedTabsByWorktree[rowKey] ?? []).some(
         (tab) => tab.groupId === groupId
       )
       if (!group || ownsTab) {
         return false
       }
       set((current) => {
-        const remainingGroups = (current.groupsByWorktree[worktreeId] ?? []).filter(
+        const remainingGroups = (current.groupsByWorktree[rowKey] ?? []).filter(
           (candidate) => candidate.id !== groupId
         )
         const collapsedState = collapseGroupLayout(
           current.layoutByWorktree,
           current.activeGroupIdByWorktree,
-          worktreeId,
+          rowKey,
           groupId,
           remainingGroups[0]?.id ?? null,
           replaceRecordEntries
         )
         const nextGroupsByWorktree = replaceRecordEntries(current.groupsByWorktree, [
-          [worktreeId, remainingGroups]
+          [rowKey, remainingGroups]
         ])
         // Why: drop the dead group's recent-quick-command entry so the map can't grow unbounded as groups open/close.
         const { [groupId]: _droppedRecent, ...remainingRecent } =
@@ -223,7 +235,8 @@ export function createTabsGroupActions(
                   activeGroupIdByWorktree: collapsedState.activeGroupIdByWorktree
                 },
                 worktreeId,
-                collapsedState.activeGroupIdByWorktree[worktreeId] ?? null
+                collapsedState.activeGroupIdByWorktree[rowKey] ?? null,
+                rowKey
               )
             : {})
         }
@@ -233,17 +246,22 @@ export function createTabsGroupActions(
 
     createEmptySplitGroup: (worktreeId, sourceGroupId, direction, opts) => {
       const newGroupId = createBrowserUuid()
-      set((state) => ({
-        ...insertSplitGroup(
-          state,
-          worktreeId,
-          { sourceGroupId, splitDirection: direction, activate: opts?.activate },
-          emptySplitGroup(worktreeId, newGroupId)
-        ),
-        ...(opts?.landing
-          ? { splitLandingGroupIds: { ...state.splitLandingGroupIds, [newGroupId]: worktreeId } }
-          : {})
-      }))
+      set((state) => {
+        const rowKey = resolveWorkspaceSessionRowKey(state, worktreeId)
+        return {
+          ...insertSplitGroup(
+            state,
+            worktreeId,
+            { sourceGroupId, splitDirection: direction, activate: opts?.activate },
+            emptySplitGroup(worktreeId, newGroupId),
+            rowKey
+          ),
+          // The landing mark stores the bare id: the split-landing comparison reads that spelling.
+          ...(opts?.landing
+            ? { splitLandingGroupIds: { ...state.splitLandingGroupIds, [newGroupId]: worktreeId } }
+            : {})
+        }
+      })
       get().recordFeatureInteraction?.('terminal-panes')
       return newGroupId
     }

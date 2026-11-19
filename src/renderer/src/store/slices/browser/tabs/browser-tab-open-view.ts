@@ -16,17 +16,20 @@ export function browserTabOpenView(
   worktreeId: string,
   browserTab: BrowserWorkspace,
   page: BrowserPage,
-  options: CreateBrowserTabOptions | undefined
+  options: CreateBrowserTabOptions | undefined,
+  // Where this workspace's rows live: `host|id` for a contested id (STA-4343). The record reads
+  // and writes below use it; `ownsGlobalSelection` and the floating check keep the bare id.
+  rowKey: string = worktreeId
 ): Partial<AppState> {
   const workspaceId = browserTab.id
   // Without this tab: a frame may already have drawn its record.
-  const existingTabs = (s.browserTabsByWorktree[worktreeId] ?? []).filter(
+  const existingTabs = (s.browserTabsByWorktree[rowKey] ?? []).filter(
     (tab) => tab.id !== workspaceId
   )
   const nextTabBarOrder = (() => {
-    const currentOrder = s.tabBarOrderByWorktree[worktreeId] ?? []
-    const terminalIds = (s.tabsByWorktree[worktreeId] ?? []).map((tab) => tab.id)
-    const editorIds = workspaceEditorFiles(s.openFiles, s.unifiedTabsByWorktree[worktreeId]).map(
+    const currentOrder = s.tabBarOrderByWorktree[rowKey] ?? []
+    const terminalIds = (s.tabsByWorktree[rowKey] ?? []).map((tab) => tab.id)
+    const editorIds = workspaceEditorFiles(s.openFiles, s.unifiedTabsByWorktree[rowKey]).map(
       (file) => file.id
     )
     const ids = [...terminalIds, ...editorIds, ...existingTabs.map((tab) => tab.id)]
@@ -50,18 +53,18 @@ export function browserTabOpenView(
   return {
     tabBarOrderByWorktree: {
       ...s.tabBarOrderByWorktree,
-      [worktreeId]: nextTabBarOrder
+      [rowKey]: nextTabBarOrder
     },
     activeBrowserTabId: shouldUpdateGlobalActiveSurface ? workspaceId : s.activeBrowserTabId,
     activeBrowserTabIdByWorktree: {
       ...s.activeBrowserTabIdByWorktree,
-      [worktreeId]: shouldActivate
+      [rowKey]: shouldActivate
         ? workspaceId
-        : (s.activeBrowserTabIdByWorktree[worktreeId] ?? null)
+        : (s.activeBrowserTabIdByWorktree[rowKey] ?? null)
     },
     activeTabType: shouldUpdateGlobalActiveSurface ? 'browser' : s.activeTabType,
     activeTabTypeByWorktree: shouldActivate
-      ? { ...s.activeTabTypeByWorktree, [worktreeId]: 'browser' }
+      ? { ...s.activeTabTypeByWorktree, [rowKey]: 'browser' }
       : s.activeTabTypeByWorktree,
     pendingAddressBarFocusByPageId: shouldFocusAddressBar
       ? {

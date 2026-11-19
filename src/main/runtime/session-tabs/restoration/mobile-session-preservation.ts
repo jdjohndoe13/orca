@@ -148,6 +148,80 @@ export abstract class OrcaRuntimeWithMergePreservedHeadlessMobileSessionTabs ext
     return retired
   }
 
+  // Why vacuous-without-groups: pre-group sessions and single-host installs have
+  // no group authority; the guard only fires on the record-vs-group divergence
+  // that is the ghost's definition.
+  protected persistedGroupMembershipAllowsPreservedTab(
+    worktreeId: string,
+    parentTabId: string
+  ): boolean {
+    const groups = this.getWorkspaceSessionForWorktree(worktreeId)?.tabGroups?.[worktreeId]
+    if (!groups || groups.length === 0) {
+      return true
+    }
+    if (groups.some((group) => group.tabOrder.includes(parentTabId))) {
+      return true
+    }
+    // Belt-and-braces: a relabeled leaf the host's own graph still lists is live.
+    return this.tabs.has(parentTabId)
+  }
+
+  // Why: the host's own group retired the tab, so the surviving layout
+  // binding no longer proves the tab lives; the ghost's pty must not be
+  // re-rescued by the paired-ownership restore on every inventory call.
+  private releaseRuntimeSessionOwnershipForGroupRetiredTabs(
+    incoming: RuntimeMobileSessionTabsSnapshot,
+    existing: RuntimeMobileSessionTabsSnapshot
+  ): void {
+    // The fork's guard only speaks for renderer-based snapshots; headless-built
+    // bases are runtime-owned and pruned through the retired-tab path.
+    if (this.isHeadlessBuiltMobileSessionPublicationBase(existing.publicationEpoch)) {
+      return
+    }
+    const persistedTabs = this.getWorkspaceSessionForWorktree(existing.worktree)?.tabsByWorktree?.[
+      existing.worktree
+    ]
+    if (!persistedTabs) {
+      return
+    }
+    const persistedTabsById = new Map(persistedTabs.map((tab) => [tab.id, tab]))
+    const incomingIds = new Set(
+      incoming.tabs.flatMap((tab) => getMobileSessionSnapshotTabIdentityKeys(tab))
+    )
+    for (const tab of existing.tabs) {
+      if (
+        tab.type !== 'terminal' ||
+        this.pendingMobileTerminalCreatesByKey.has(`${existing.worktree}::${tab.parentTabId}`) ||
+        getMobileSessionSnapshotTabIdentityKeys(tab).some((id) => incomingIds.has(id))
+      ) {
+        continue
+      }
+      if (!this.hasLiveRuntimeSessionOwnedPtyBinding(existing.worktree, tab)) {
+        continue
+      }
+      // The no-record case is the tab-scope prune above; this pass only fires on the ghost shape.
+      if (!persistedTabsById.has(tab.parentTabId)) {
+        continue
+      }
+      if (this.persistedGroupMembershipAllowsPreservedTab(existing.worktree, tab.parentTabId)) {
+        continue
+      }
+      for (const ptyId of [
+        tab.ptyId,
+        ...Object.values(tab.parentLayout?.ptyIdsByLeafId ?? {})
+      ].filter((id): id is string => typeof id === 'string')) {
+        const pty = this.ptysById.get(ptyId)
+        if (
+          pty?.worktreeId === existing.worktree &&
+          terminalIsOfTab(this.paneOfPty(pty).tabId, tab.parentTabId)
+        ) {
+          pty.runtimeSessionOwned = false
+          this.setPairedRendererSessionOwnership(ptyId, false)
+        }
+      }
+    }
+  }
+
   protected releaseRuntimeSessionOwnershipForRendererRetiredTabs(
     incoming: RuntimeMobileSessionTabsSnapshot,
     existing: RuntimeMobileSessionTabsSnapshot | undefined
@@ -156,6 +230,7 @@ export abstract class OrcaRuntimeWithMergePreservedHeadlessMobileSessionTabs ext
     if (!existing) {
       return
     }
+    this.releaseRuntimeSessionOwnershipForGroupRetiredTabs(incoming, existing)
     for (const { tab, scope } of this.listRendererRetiredTerminalTabs(incoming, existing)) {
       if (
         !this.hasLiveRuntimeSessionOwnedPtyBinding(existing.worktree, tab) &&

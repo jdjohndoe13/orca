@@ -14,6 +14,7 @@ import { loadGitLabJobLogDetails } from '@/runtime/repository-gitlab/gitlab-job-
 import { forgeOwnerHostIdForWorkspace } from '@/runtime/source-control/forge/forge-credential-target'
 import type { OpenFile } from '../types/open-file'
 import { openWorkspaceEditorItem } from '../tabs/workspace-editor-item'
+import { resolveWorkspaceSessionRowKey } from '../../../workspace-session-key'
 import { reconcileCheckDetailsReadingCache } from '@/components/editor/check-details/reading/check-details-reading-cache'
 import {
   findCheckRequestTabId,
@@ -124,6 +125,9 @@ export function createCheckRunDetailsActions(
           }
         | undefined
       set((s) => {
+        // The per-worktree slot lives under the session key, `host|id` for a contested workspace
+        // id (STA-4343); the open-file entity keeps the bare id in its own `worktreeId` field.
+        const rowKey = resolveWorkspaceSessionRowKey(s, worktreeId)
         const existing = s.openFiles.find((f) => f.id === id)
         // Why: an open whose owner cannot be resolved must not leave the tab reloading through its old owner.
         const ownership =
@@ -163,11 +167,11 @@ export function createCheckRunDetailsActions(
             activeTabType: 'editor',
             activeFileIdByWorktree: {
               ...s.activeFileIdByWorktree,
-              [worktreeId]: id
+              [rowKey]: id
             },
             activeTabTypeByWorktree: {
               ...s.activeTabTypeByWorktree,
-              [worktreeId]: 'editor'
+              [rowKey]: 'editor'
             }
           }
         }
@@ -191,11 +195,11 @@ export function createCheckRunDetailsActions(
           activeTabType: 'editor',
           activeFileIdByWorktree: {
             ...s.activeFileIdByWorktree,
-            [worktreeId]: id
+            [rowKey]: id
           },
           activeTabTypeByWorktree: {
             ...s.activeTabTypeByWorktree,
-            [worktreeId]: 'editor'
+            [rowKey]: 'editor'
           }
         }
       })

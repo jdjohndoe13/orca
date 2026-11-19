@@ -6,6 +6,7 @@ import {
 } from '@/constants/terminal'
 import { useActiveTerminalRepair } from './use-active-terminal-repair'
 import { scheduleBackgroundTerminalWorktreeMeasure } from './background-terminal-worktree-visibility'
+import { resolveWorkspaceRowKeyFromStore } from '../../terminal-workspace-session-row'
 import {
   applyBackgroundMountTabRestriction,
   revealActivationDeferredTabs,
@@ -26,6 +27,7 @@ export function useTerminalParkingFoundation(controller: TerminalEditorCloseCont
     activeTabIdByWorktree,
     activeTabType,
     activeView,
+    activeWorktreeSessionRowKey,
     closeDialogDebounceTimersRef,
     measurableBackgroundWorktreeIdsRef,
     mountedWorktreeIdsRef,
@@ -41,7 +43,7 @@ export function useTerminalParkingFoundation(controller: TerminalEditorCloseCont
     setActiveTab,
     tabs,
     activeTabIdByWorktree,
-    renderedActiveWorktreeId
+    activeWorktreeSessionRowKey
   })
 
   const measurableBackgroundWorktreeTimersRef = useRef(new Map<string, number>())
@@ -84,9 +86,9 @@ export function useTerminalParkingFoundation(controller: TerminalEditorCloseCont
         worktreeId,
         detail.tabIds
       )
-      const worktreeTabIds = (useAppStore.getState().tabsByWorktree[worktreeId] ?? []).map(
-        (tab) => tab.id
-      )
+      const worktreeTabIds = (
+        useAppStore.getState().tabsByWorktree[resolveWorkspaceRowKeyFromStore(worktreeId)] ?? []
+      ).map((tab) => tab.id)
       revealActivationDeferredTabs({
         restrictions: backgroundMountTabIdsByWorktreeRef.current,
         deferredMountTabIdsByWorktree: activationDeferredMountTabIdsByWorktreeRef.current,

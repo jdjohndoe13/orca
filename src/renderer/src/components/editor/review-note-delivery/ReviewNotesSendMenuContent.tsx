@@ -48,7 +48,10 @@ import { track } from '@/diagnostics/telemetry/telemetry'
 import { useNow } from '@/lib/window-activity/use-now'
 import type { DashboardAgentRow as DashboardAgentRowData } from '@/components/dashboard/rows/dashboard-agent-row'
 import { lastEnteredDoneAt } from '@/components/dashboard/rows/agent-finished-timestamp'
-import { useWorktreeAgentRows } from '@/components/sidebar/workspace-card/activity/useWorktreeAgentRows'
+import {
+  useWorktreeAgentRowKey,
+  useWorktreeAgentRows
+} from '@/components/sidebar/workspace-card/activity/useWorktreeAgentRows'
 import { useAgentRowConversationName } from '@/components/dashboard/rows/use-agent-row-conversation-name'
 import { getAgentRowPrimaryText } from '../../../../../shared/agent-status/presentation/agent-row-primary-text'
 import type { LaunchSource } from '../../../../../shared/telemetry/schemas/telemetry-property-schemas'
@@ -102,19 +105,23 @@ export function ReviewNotesSendMenuContent({
         : null
     })
   )
-  const tabsKey = useAppStateValue((state) => state.unifiedTabsByWorktree[worktreeId])
+  // The tab and status buckets are keyed by the session row key (STA-4343), so a
+  // contested id's guard must watch the qualified bucket or it would never see
+  // this row's tabs change. An uncontested id keeps the bare key byte-identically.
+  const rowKey = useWorktreeAgentRowKey(worktreeId)
+  const tabsKey = useAppStateValue((state) => state.unifiedTabsByWorktree[rowKey])
   const chatNames = useWorktreeStructuredChatTabNames(worktree, tabsKey, true)
   const selectTargets = useMemo(() => {
     let inputs: unknown[] = []
     let previous: NotesSendAgentTarget[] = []
     return (state: ReturnType<typeof store.getState>, statuses: RuntimeStatuses) => {
       const nextInputs = [
-        state.tabsByWorktree[worktreeId],
-        state.unifiedTabsByWorktree[worktreeId],
-        selectLiveAgentStatusEntriesForWorktree(state, worktreeId),
-        selectTerminalLayoutsForWorktree(state, worktreeId),
-        selectLivePtyIdsForWorktree(state, worktreeId),
-        selectRuntimePaneTitlesForWorktree(state, worktreeId),
+        state.tabsByWorktree[rowKey],
+        state.unifiedTabsByWorktree[rowKey],
+        selectLiveAgentStatusEntriesForWorktree(state, rowKey),
+        selectTerminalLayoutsForWorktree(state, rowKey),
+        selectLivePtyIdsForWorktree(state, rowKey),
+        selectRuntimePaneTitlesForWorktree(state, rowKey),
         selectSendApprovalGuardEnvironmentIds(statuses),
         state.agentStatusEpoch
       ]
@@ -122,15 +129,11 @@ export function ReviewNotesSendMenuContent({
         return previous
       }
       inputs = nextInputs
-      // A narrow projection: only the fields target derivation reads, with the view's guard set.
+      // Only the guard set is overridden; the derivation reads its catalog fields (STA-4343)
+      // from the live state so it resolves the contested row key itself.
       const next = deriveNotesSendAgentTargets(
         {
-          agentStatusByPaneKey: state.agentStatusByPaneKey,
-          tabsByWorktree: state.tabsByWorktree,
-          unifiedTabsByWorktree: state.unifiedTabsByWorktree,
-          terminalLayoutsByTabId: state.terminalLayoutsByTabId,
-          ptyIdsByTabId: state.ptyIdsByTabId,
-          runtimePaneTitlesByTabId: state.runtimePaneTitlesByTabId,
+          ...state,
           sendApprovalGuardEnvironmentIds: selectSendApprovalGuardEnvironmentIds(statuses)
         },
         worktreeId,
@@ -144,7 +147,7 @@ export function ReviewNotesSendMenuContent({
       }
       return previous
     }
-  }, [worktreeId, chatNames])
+  }, [worktreeId, rowKey, chatNames])
   const sendTargets = useAppStateValueWithHostStatuses(selectTargets)
   const orderedSendTargets = useMemo(
     () => orderSendTargetsByWorktreeAgentRows(sendTargets, agentRows),

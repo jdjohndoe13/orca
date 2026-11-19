@@ -43,6 +43,7 @@ export function useWorktreeJumpPaletteOpenTabs({
   paletteStatusInputsActive,
   browserSortedWorktrees,
   workspaces,
+  contestedWorktreeIds,
   repoMap,
   repoByHostIdentity,
   worktreeOrder,
@@ -93,7 +94,8 @@ export function useWorktreeJumpPaletteOpenTabs({
       activeWorktreeId,
       activeWorkspaceExecutionHostId,
       activeTabType,
-      unifiedTabsByWorktree
+      unifiedTabsByWorktree,
+      contestedWorktreeIds
     })
   }, [
     paletteStatusInputsActive,
@@ -105,6 +107,7 @@ export function useWorktreeJumpPaletteOpenTabs({
     browserPagesByWorkspace,
     browserTabsByWorktree,
     browserSortedWorktrees,
+    contestedWorktreeIds,
     repoByHostIdentity,
     repoMap,
     unifiedTabsByWorktree,
@@ -132,7 +135,8 @@ export function useWorktreeJumpPaletteOpenTabs({
       groupsByWorktree,
       activeWorktreeId,
       activeWorkspaceExecutionHostId,
-      activeTabType
+      activeTabType,
+      contestedWorktreeIds
     })
   }, [
     paletteStatusInputsActive,
@@ -142,6 +146,7 @@ export function useWorktreeJumpPaletteOpenTabs({
     activeWorkspaceExecutionHostId,
     workspaces,
     browserSortedWorktrees,
+    contestedWorktreeIds,
     groupsByWorktree,
     repoByHostIdentity,
     repoMap,
@@ -193,7 +198,8 @@ export function useWorktreeJumpPaletteOpenTabs({
       generatedTitlesEnabled: settings?.tabAutoGenerateTitle === true,
       chatNames,
       terminalLayoutsByTabId,
-      paneForegroundAgentByPaneKey
+      paneForegroundAgentByPaneKey,
+      contestedWorktreeIds
     })
   }, [
     buildWorkspaceTabEntries,
@@ -210,6 +216,7 @@ export function useWorktreeJumpPaletteOpenTabs({
     agentStatusByPaneKey,
     browserSortedWorktrees,
     chatNames,
+    contestedWorktreeIds,
     groupsByWorktree,
     openFiles,
     repoMap,

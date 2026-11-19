@@ -203,6 +203,53 @@ export function getMixedWorktreeHostContextLabels(
   })
 }
 
+/**
+ * Host context for folder-workspace rows, keyed by workspace id.
+ *
+ * Same single gate the worktree badges use: the badge appears only when the
+ * visible universe spans more than one host — worktrees and folder workspaces
+ * taken together — so a single-host install keeps clean rows. Host ids decide
+ * mixedness (two hosts can share a label), exactly like the shared helper.
+ */
+export function getMixedFolderWorkspaceHostContextLabels(
+  folderWorkspaces: readonly RenderableFolderWorkspace[],
+  worktrees: readonly Worktree[],
+  repoMap: Map<string, Repo>,
+  hostLabelById: ReadonlyMap<string, string> | undefined,
+  defaultHostId: ExecutionHostId
+): Map<string, NoticeHostContext> | undefined {
+  const resolveFolderHost = ({ folderWorkspace, projectGroup }: RenderableFolderWorkspace) =>
+    getFolderWorkspaceHostId(folderWorkspace, projectGroup, defaultHostId)
+  const uniqueHostIds = new Set<ExecutionHostId>()
+  for (const worktree of worktrees) {
+    uniqueHostIds.add(
+      getWorktreeExecutionHostId(worktree, repoMap.get(worktree.repoId), defaultHostId)
+    )
+    if (uniqueHostIds.size > 1) {
+      break
+    }
+  }
+  for (const pair of folderWorkspaces) {
+    if (uniqueHostIds.size > 1) {
+      break
+    }
+    uniqueHostIds.add(resolveFolderHost(pair))
+  }
+  if (uniqueHostIds.size <= 1 || folderWorkspaces.length === 0) {
+    return undefined
+  }
+  const contextByWorkspaceId = new Map<string, NoticeHostContext>()
+  for (const pair of folderWorkspaces) {
+    const { folderWorkspace } = pair
+    const hostId = resolveFolderHost(pair)
+    contextByWorkspaceId.set(folderWorkspace.id, {
+      label: getHostContextLabel(hostId, { hostLabelById }),
+      hostId
+    })
+  }
+  return contextByWorkspaceId
+}
+
 export function getHostWorktreeCounts(
   worktrees: readonly Worktree[],
   repoOf: RepoOfWorktree,

@@ -73,6 +73,7 @@ import { registerAppHttpLinkStateAccessor } from '@/lib/browser/navigation/app-h
 import { registerServerPortForwardStateAccessor } from '@/lib/workspace-ports/server-port-forward-support'
 import { installStoreListenerCensus } from './diagnostics/store-listener-census'
 import { installSettledSortEpoch } from './slices/ui/settled-sort-epoch'
+import { installContestRekey } from './workspace-session-contest-rekey'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-list/feed/sidebar-inputs-switch'
 import { withReactCommitCascadeWriteProbe } from './diagnostics/react-commit-cascade-write-probe'
 import { withStoreIdentityChurnProbe } from './diagnostics/store-identity-churn-probe'
@@ -111,6 +112,9 @@ export const useAppStore = create<AppState>()(
             }
             // Why: the inner api is only reachable here, before create() copies subscribe onto the hook.
             installStoreListenerCensus(a[2])
+            // Why: the contested-id gate follows the catalog, and the session rows have to follow the
+            // gate — both directions, before any reader runs (STA-4343).
+            installContestRekey(a[2])
             return {
               ...createRepoSlice(...a),
               ...createSparsePresetsSlice(...a),

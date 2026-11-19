@@ -14,6 +14,10 @@ import {
 } from '../../../../../../shared/worktree/visibility/workspace-kinds'
 import { isWorkspaceOwnedBySomeoneElse } from '../../../../../../shared/workspace-view/workspace-creator-visibility'
 import { parseWorkspaceKey } from '../../../../../../shared/workspace/identity/workspace-scope'
+import {
+  workspaceSessionKey,
+  type ContestedWorkspaceIds
+} from '../../../../../../shared/workspace-session-worktree-key'
 import type { Worktree } from '../../../../../../shared/worktree/types'
 import {
   hiddenProjectRowFacts,
@@ -34,6 +38,8 @@ export type DesktopWorkspaceRowFactInputs = {
   worktreeIdsWithStructuredChat?: ReadonlySet<string>
   /** Rows in a PTY-rebind grace window; read as unverifiable, never as asleep (#15996). */
   sleepingSweepExemptWorktreeIds?: ReadonlySet<string>
+  /** The contested-id set (STA-4343); the sleep sweep folds each row's id to its row key. */
+  contestedWorktreeIds?: ContestedWorkspaceIds
 }
 
 export function buildDesktopWorkspaceRowFactReader(
@@ -60,7 +66,9 @@ export function buildDesktopWorkspaceRowFactReader(
     isSleeping: (worktree) =>
       inputs.sleepingSweepExemptWorktreeIds?.has(worktree.id) !== true &&
       isInactiveWorkspace(
-        worktree.id,
+        // Why the row key (STA-4343): a contested id's tabs and agent rows live
+        // under `host|id`, so the bare read would sweep a card that has a live console.
+        workspaceSessionKey(worktree.id, hostId(worktree), inputs.contestedWorktreeIds),
         inputs.tabsByWorktree,
         inputs.ptyIdsByTabId,
         inputs.browserTabsByWorktree,

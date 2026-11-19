@@ -9,11 +9,19 @@ import type { RuntimeTerminalSummary } from '../../../../shared/terminal/runtime
 import type { ResolvedWorktree } from '../../workspaces/catalog/runtime-worktree-path-identity'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/workspace/identity/floating-workspace-id'
 import { RuntimeFederationOperations } from '../../orchestration/federation/runtime-federation-operations'
+import type { OrchestrationEnvironmentTransport } from '../../orchestration/federation/environment-transport'
 
 export abstract class TerminalListHostScope extends RuntimeFederationOperations {
   protected abstract tryGetWorkspaceSessionHostIdForWorktree(
     worktreeId: string
   ): ExecutionHostId | null
+
+  /** Raw environment transport for the relay gateway methods: they must forward the
+   *  upstream envelope verbatim, which the federation wrapper (that throws on upstream
+   *  failures) cannot do. Null when the entrypoint wired no transport. */
+  getOrchestrationEnvironmentTransport(): OrchestrationEnvironmentTransport | null {
+    return this.orchestrationEnvironmentTransport
+  }
 
   protected listKnownExecutionHostIds(
     additionalHostIds: Iterable<ExecutionHostId> = [],

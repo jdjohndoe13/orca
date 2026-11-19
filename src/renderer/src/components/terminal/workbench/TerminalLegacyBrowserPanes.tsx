@@ -1,4 +1,5 @@
 import BrowserPane from '../../browser-pane/assemble-chrome/browser-workspace-pane'
+import { resolveWorkspaceRowKeyFromStore } from '../../terminal-workspace-session-row'
 import type { TerminalController } from './use-terminal-controller'
 
 export function TerminalLegacyBrowserPanes({
@@ -21,7 +22,11 @@ export function TerminalLegacyBrowserPanes({
       }`}
     >
       {workspaceSurfaces.map((workspace) => {
-        const browserTabs = browserTabsByWorktree[workspace.id] ?? []
+        // Why the row key: the surface list is bare-id keyed, so a contested id's browser row —
+        // host-qualified — has to be asked for by name. The active surface's host is the user's
+        // own pick, which the shared resolver honors over the catalog's first-wins row.
+        const browserTabs =
+          browserTabsByWorktree[resolveWorkspaceRowKeyFromStore(workspace.id)] ?? []
         const isVisibleWorktree =
           activeView === 'terminal' && workspace.id === renderedActiveWorktreeId
         if (browserTabs.length === 0) {

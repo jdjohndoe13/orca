@@ -20,6 +20,7 @@ import {
   selectIsSleepingWorktree,
   selectWorktreeIdsWithLiveAgent
 } from '../../workspace-actions/sleep/use-worktree-sleep-state'
+import { resolveWorkspaceSessionKey } from '@/store/workspace-session-key'
 
 function workspaceReferenceWorkspaces(state: AppState, options?: { selectedOnly?: boolean }) {
   return [...getVisibleHostedReviewWorkspaces(state, options)].filter(({ worktree }) =>
@@ -61,24 +62,27 @@ export function createWorkspaceReferenceRefreshTargetsSelector(options?: {
     if (topologyChanged) {
       const nextSleeping = new Map<string, boolean>()
       for (const { worktree } of workspaces) {
-        if (nextSleeping.has(worktree.id)) {
+        // Why the row key (STA-4343): two claimants of one contested id share `worktree.id`,
+        // so the bare key would collapse both onto one sleep verdict and read the wrong one.
+        const rowKey = resolveWorkspaceSessionKey(state, worktree.id, worktree.hostId)
+        if (nextSleeping.has(rowKey)) {
           continue
         }
-        const value = selectIsSleepingWorktree(state, worktree.id)
-        changed ||= value !== sleeping.get(worktree.id)
-        nextSleeping.set(worktree.id, value)
+        const value = selectIsSleepingWorktree(state, worktree.id, worktree.hostId)
+        changed ||= value !== sleeping.get(rowKey)
+        nextSleeping.set(rowKey, value)
       }
       sleeping = nextSleeping
     } else if (nextLiveWorktreeIds !== liveWorktreeIds) {
       // Why: only tracked workspaces can change the result, and status updates replace the live
       // set without changing membership, so diff just those instead of walking both sets.
-      for (const [id, previous] of sleeping) {
-        if (liveWorktreeIds.has(id) === nextLiveWorktreeIds.has(id)) {
+      for (const [rowKey, previous] of sleeping) {
+        if (liveWorktreeIds.has(rowKey) === nextLiveWorktreeIds.has(rowKey)) {
           continue
         }
-        const value = selectIsSleepingWorktree(state, id)
+        const value = selectIsSleepingWorktree(state, rowKey)
         changed ||= value !== previous
-        sleeping.set(id, value)
+        sleeping.set(rowKey, value)
       }
     }
     liveWorktreeIds = nextLiveWorktreeIds
@@ -96,7 +100,7 @@ function referenceRefreshTargets(
 ): VisibleHostedReviewRefreshTarget[] {
   const targets = new Map<string, VisibleHostedReviewRefreshTarget>()
   for (const { worktree, repo, candidate, selected } of workspaces) {
-    if (sleeping.get(worktree.id)) {
+    if (sleeping.get(resolveWorkspaceSessionKey(state, worktree.id, worktree.hostId))) {
       continue
     }
     const branchKey = getHostedReviewCacheKey(

@@ -33,6 +33,7 @@ describe('host-qualified worktree metadata', () => {
   })
 
   afterEach(async () => {
+    // Why: the SQLite authority keeps the profile file open on Windows; rmSync there EPERMs unless the handles close first.
     await closeTestStores()
     rmSync(testState.dir, { recursive: true, force: true })
   })
@@ -52,6 +53,32 @@ describe('host-qualified worktree metadata', () => {
       'Remote feature'
     )
   })
+  it('gives each of two colliding hosts its own displayName from its own store', () => {
+    // The live collision shape: the bare locator keeps the first claimant's host, and the
+    // second host's row lives only in its per-host entry.
+    const store = createStoreWithRepo()
+    store.setWorktreeMeta(hostWorktreeTarget({ id: worktreeId, hostId: 'runtime:win-a' }), {
+      displayName: 'issue-3.5-wip'
+    })
+    store.setWorktreeMeta(hostWorktreeTarget({ id: worktreeId, hostId: 'runtime:win-b' }), {
+      displayName: 'win-b name'
+    })
+    store.flush()
+
+    const reloaded = createStore()
+    expect(reloaded.getWorktreeMetaForHost(worktreeId, 'runtime:win-a')?.displayName).toBe(
+      'issue-3.5-wip'
+    )
+    expect(reloaded.getWorktreeMetaForHost(worktreeId, 'runtime:win-b')?.displayName).toBe(
+      'win-b name'
+    )
+    // The bare locator belongs to the first claimant only; win-b's reads never see it.
+    expect(reloaded.getWorktreeMeta(worktreeId)?.hostId).toBe('runtime:win-a')
+    expect(reloaded.getAllWorktreeMetaForHost('runtime:win-b')[worktreeId]?.displayName).toBe(
+      'win-b name'
+    )
+  })
+
   it('backfills one stable instance for legacy metadata that omitted it', () => {
     const seed = createStoreWithRepo()
     seed.setWorktreeMeta(hostWorktreeTarget({ id: worktreeId, hostId: 'local' }), {

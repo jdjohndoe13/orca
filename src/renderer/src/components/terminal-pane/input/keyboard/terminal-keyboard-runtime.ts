@@ -288,6 +288,7 @@ export function createTerminalKeyboardRuntime(options: RuntimeOptions) {
     getModifiedEnterChord,
     onModifierDown,
     resolveShortcutEvent,
-    createCapturedInputSender
+    createCapturedInputSender,
+    getKittyKeyboardFlagsActivePane
   }
 }

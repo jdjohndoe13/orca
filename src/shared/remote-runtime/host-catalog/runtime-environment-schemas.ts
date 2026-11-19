@@ -6,6 +6,7 @@ import {
   type OrcadWslDeploymentLink
 } from './wsl-host-deployment-link'
 import { lazyZodSchema } from '../../schema/lazy-zod-schema'
+import { openEnum } from '../../validation/zod-salvage'
 
 export const RuntimeAccessEndpointSchema = lazyZodSchema(() =>
   z.object({
@@ -28,9 +29,9 @@ export const PublicRuntimeAccessEndpointSchema = lazyZodSchema(() =>
 export type PublicRuntimeAccessEndpoint = z.infer<typeof PublicRuntimeAccessEndpointSchema>
 
 export const RuntimeEnvironmentSourceSchema = lazyZodSchema(() =>
-  z.enum(['manual', 'ephemeral-vm'])
+  openEnum(['manual', 'ephemeral-vm'] as const, 'manual')
 )
-export type RuntimeEnvironmentSource = z.infer<typeof RuntimeEnvironmentSourceSchema>
+export type RuntimeEnvironmentSource = 'manual' | 'ephemeral-vm'
 
 export const RuntimeSshTunnelLinkSchema = lazyZodSchema(() =>
   z.object({
@@ -93,6 +94,8 @@ export const PersistedRuntimeEnvironmentSchema = lazyZodSchema(() =>
     lastUsedAt: z.number().finite().nullable(),
     runtimeId: z.string().min(1).nullable(),
     source: RuntimeEnvironmentSourceSchema.optional(),
+    /** Marker only: an id in the gateway host's store; this row is a view of that host. */
+    gatewayEnvironmentId: z.string().min(1).optional(),
     connectionDependency: z.literal('ssh-tunnel').optional(),
     endpoints: z.array(RuntimeAccessEndpointSchema).min(1),
     preferredEndpointId: z.string().min(1)

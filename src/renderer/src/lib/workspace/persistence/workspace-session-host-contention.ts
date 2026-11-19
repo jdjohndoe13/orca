@@ -7,17 +7,38 @@ import {
 import { normalizeWorkspaceSessionKeyToWorkspaceId as normalizeWorkspaceSessionKeyToWorktreeId } from '../../../../../shared/workspace/identity/workspace-scope'
 import { WORKSPACE_SESSION_FIELD_OWNERSHIP } from '../../../../../shared/workspace-session/workspace-session-host-field-ownership'
 import { pickPrimaryHostForClaims } from '../../../../../shared/workspace-session/workspace-session-contested-primary-host'
+import { getExecutionHostIdFromSessionKey } from '../../../../../shared/workspace-session-worktree-key'
 import {
   isWorkspaceSessionRecord,
   type WorkspaceSessionRecord
 } from '../../../../../shared/workspace-session/workspace-session-host-records'
+import { qualifyHostWorkspaceSessionSlices } from '../../../../../shared/workspace-session-key-qualification'
 import type { WorkspaceRuntimeOwnerProjection } from '../ownership/workspace-runtime-host-ownership'
 import {
   mergeWorkspaceSessionsFromHosts,
   type HostSessionSlices
 } from './workspace-session-host-split'
 
-/** Bare workspace IDs collide across hosts (STA-4343). Choose one primary from actual read partitions; park other claimants outside renderer state and write them back unchanged. Preserve that read decision on writes rather than rederive from catalog-only SSH claims. Known gap: unified bare-key renderer state shows primary tabs for both; full repair needs host-qualified tab keys. */
+/**
+ * Which execution hosts publish each workspace id, and what persistence does when two of them
+ * publish the same one.
+ *
+ * A worktree id is `repoId::path` with no host component, so one repo registered on two hosts
+ * publishes the SAME id for two different workspaces (STA-4343). Session state is keyed by that
+ * bare id, so without this the two workspaces share one `tabsByWorktree` bucket and whichever host
+ * writes last erases the other's tabs for good.
+ *
+ * A contested id therefore gets one row PER CLAIMANT in the unified renderer session, keyed
+ * `host|id` — which is what lets four host-colliding cards show four different agent lines instead
+ * of all painting the primary's tabs. The key rule lives in
+ * `src/shared/workspace-session-worktree-key.ts`; this module decides which ids are contested and
+ * carries the read's verdict back to the write path.
+ *
+ * The primary is decided ONCE, at read time, from the partition each row actually came from, and
+ * that decision is carried back to the write path. Re-deriving it from the catalog at write time
+ * would let the two disagree — the catalog names `ssh:*` hosts that own no partition — and the
+ * write would then copy one host's workspace into another host's partition.
+ */
 
 export type WorktreeHostClaims = ReadonlyMap<string, ReadonlySet<ExecutionHostId>>
 
@@ -93,7 +114,12 @@ function indexHostIdsBySessionKey(
   return hostIdsByKey
 }
 
-function shadowHostEntries(
+/** Park the non-primary claimant's rows for one contested key that CANNOT be separated by host.
+ *  A `folder:<uuid>` key is minted per workspace, so two partitions holding it are one workspace
+ *  written twice (#12723) — reuniting it is the stranded-partition repair's job, and qualifying it
+ *  would split that one workspace into two rival buckets. Parking is what keeps the co-claimant's
+ *  rows from being erased by the primary's write there. */
+function parkHostEntries(
   slice: WorkspaceSessionState,
   hostId: ExecutionHostId,
   primaryByKey: ReadonlyMap<string, ExecutionHostId>
@@ -126,7 +152,22 @@ function shadowHostEntries(
   return { slice: nextSlice ?? slice, shadow }
 }
 
-/** Keep primary rows in merged slices and park other claimants. Record source partition for every live key, including uncontested ones, so write returns it there; contestedSessionKeys alone identifies collisions. */
+/** Split contested worktree-keyed entries out of the read partitions.
+ *
+ *  A contested id that can name two workspaces (a `repoId::path`) gets every claimant's row re-keyed
+ *  to `host|id` in the slices the renderer merges, so all claimants are present at once instead of
+ *  sharing one bucket and painting the primary's tabs — the "Known gap" this closes. Nothing is
+ *  parked for those: the qualified key names the partition its row came from, so the write path
+ *  returns each row to its own partition without a shadow carrying it there.
+ *
+ *  A contested id that cannot name two workspaces (a `folder:<uuid>` key) is one workspace written
+ *  twice and stays on the parking path, which is what keeps the co-claimant's rows from being
+ *  erased by the primary's write.
+ *
+ *  `primaryHostBySessionKey` records where each key's live row came from — including the
+ *  uncontested single-partition case, so the write path can put every row back in its own
+ *  partition instead of re-deriving an owner that may not match. It is therefore NOT the contested
+ *  set; `contestedSessionKeys` is, and only it says a bare id names more than one workspace. */
 export function extractContestedHostSessionEntries(slices: HostSessionSlices): {
   slices: HostSessionSlices
   shadow: HostSessionSlices
@@ -138,31 +179,36 @@ export function extractContestedHostSessionEntries(slices: HostSessionSlices): {
   const hostIdsByKey = indexHostIdsBySessionKey(slices, hostIds)
   const primaryHostBySessionKey: Record<string, ExecutionHostId> = {}
   const contestedSessionKeys = new Set<string>()
+  const primaryByKey = new Map<string, ExecutionHostId>()
   for (const [key, owners] of hostIdsByKey) {
     primaryHostBySessionKey[key] = pickPrimaryHostForClaims(owners)
     if (owners.length > 1) {
       contestedSessionKeys.add(key)
+      primaryByKey.set(key, primaryHostBySessionKey[key])
     }
   }
-  if (hostIds.length < 2) {
-    return { slices, shadow, primaryHostBySessionKey, contestedSessionKeys }
+  const qualified = qualifyHostWorkspaceSessionSlices(slices, contestedSessionKeys)
+  if (hostIds.length < 2 || primaryByKey.size === 0) {
+    return { slices: qualified, shadow, primaryHostBySessionKey, contestedSessionKeys }
   }
-  const primaryByKey = new Map<string, ExecutionHostId>()
-  for (const [key, owners] of hostIdsByKey) {
-    if (owners.length > 1) {
-      primaryByKey.set(key, pickPrimaryHostForClaims(owners))
+  // Only the contested keys that are still bare after qualifying need parking; the rest now
+  // carry their host in the key itself.
+  const parkable = new Map<string, ExecutionHostId>()
+  for (const [key, primary] of primaryByKey) {
+    if (getExecutionHostIdFromSessionKey(key) === null) {
+      parkable.set(key, primary)
     }
   }
-  if (primaryByKey.size === 0) {
-    return { slices, shadow, primaryHostBySessionKey, contestedSessionKeys }
+  if (parkable.size === 0) {
+    return { slices: qualified, shadow, primaryHostBySessionKey, contestedSessionKeys }
   }
-  const next: HostSessionSlices = { ...slices }
+  const next: HostSessionSlices = { ...qualified }
   for (const hostId of hostIds) {
-    const slice = slices[hostId]
+    const slice = qualified[hostId]
     if (!slice) {
       continue
     }
-    const result = shadowHostEntries(slice, hostId, primaryByKey)
+    const result = parkHostEntries(slice, hostId, parkable)
     next[hostId] = result.slice
     if (result.shadow) {
       shadow[hostId] = result.shadow
@@ -180,7 +226,7 @@ export function mergeWorkspaceSessionsWithHostShadow(slices: HostSessionSlices):
 } {
   const extracted = extractContestedHostSessionEntries(slices)
   return {
-    session: mergeWorkspaceSessionsFromHosts(extracted.slices),
+    session: mergeWorkspaceSessionsFromHosts(extracted.slices, extracted.contestedSessionKeys),
     slices: extracted.slices,
     shadow: extracted.shadow,
     primaryHostBySessionKey: extracted.primaryHostBySessionKey,

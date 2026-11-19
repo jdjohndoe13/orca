@@ -11,6 +11,7 @@ import {
 } from '../../live-input/terminal-live-input'
 import { dismissTerminalKeyboard } from '../../keyboard/terminal-keyboard-dismiss'
 import { terminalInputSend } from '../../host-operations/mobile-terminal-operations'
+import { forwardOrLocal } from '../../../session/mobile-remote-runtime-forwarded-call'
 import {
   buildTerminalSendParams,
   TERMINAL_INPUT_SEND_OPTIONS
@@ -32,6 +33,7 @@ export function useMobileSessionTerminalSendActions(scope: MobileSessionTerminal
     sendTerminalOrderedInput,
     terminalRefs,
     activeHandle,
+    sessionRelay,
     activeSessionTab,
     setActionTarget,
     setMarkdownActionTarget,
@@ -138,7 +140,8 @@ export function useMobileSessionTerminalSendActions(scope: MobileSessionTerminal
       activeSessionTabType: activeSessionTabTypeRef.current,
       connState: connStateRef.current,
       bytes: encoded.bytes,
-      deviceToken: deviceTokenRef.current
+      deviceToken: deviceTokenRef.current,
+      sessionRelay
     })
   }
 
@@ -177,16 +180,16 @@ export function useMobileSessionTerminalSendActions(scope: MobileSessionTerminal
       if (origin !== 'pointer') {
         terminalRefs.current.get(handle)?.scrollToBottom()
       }
-      return sendTerminalOrderedInput(
-        rpc,
-        buildTerminalSendParams({
-          terminal: handle,
-          text,
-          enter: false,
-          deviceToken: deviceTokenRef.current
-        }),
-        TERMINAL_INPUT_SEND_OPTIONS,
-        enqueue
+      const liveParams = buildTerminalSendParams({
+        terminal: handle,
+        text,
+        enter: false,
+        deviceToken: deviceTokenRef.current
+      })
+      // Why: a mirrored row's live send rides the gateway relay; the local path
+      // keeps the ordered-input seam so reconnect cannot replay stale bytes.
+      return forwardOrLocal(rpc, sessionRelay, 'terminal.send', liveParams, () =>
+        sendTerminalOrderedInput(rpc, liveParams, TERMINAL_INPUT_SEND_OPTIONS, enqueue)
       ).then(
         (response) => {
           return terminalInputSend.interpret(response) === true
@@ -194,7 +197,7 @@ export function useMobileSessionTerminalSendActions(scope: MobileSessionTerminal
         () => false
       )
     },
-    [hostPlatform, sendTerminalOrderedInput, showToast, terminalRefs]
+    [hostPlatform, sendTerminalOrderedInput, sessionRelay, showToast, terminalRefs]
   )
   sendLiveTerminalInputRef.current = sendLiveTerminalInput
 

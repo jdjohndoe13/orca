@@ -7,7 +7,6 @@ import type {
 } from '../../../../../../shared/worktree/types'
 import '../../workspace-status/presentation/workspace-status'
 import { getWorkspaceStatus } from '../../../../../../shared/workspace/status/workspace-statuses'
-import { isActiveSidebarWorkspace } from '../../../../../../shared/sidebar-list/selection/active-workspace'
 import type { WorktreeGroupBy } from '../../../../../../shared/sidebar-list/row-types'
 import { getWorktreeHostIdentity } from '../../../../../../shared/worktree/host-qualified-identity'
 import {
@@ -29,6 +28,7 @@ import {
   renderPendingCreationVirtualRow
 } from './notice-rows'
 import { renderWorktreeItemRow, type WorktreeItemRowContext } from './item-row'
+import { isWorkspaceRowActive } from './workspace-row-activation'
 import { LineageGuides } from './lineage-guides'
 import { renderWorktreeSectionHeaderRow } from './SectionHeader'
 import type { SectionHeaderRowContext } from './section-header-row-context'
@@ -204,10 +204,12 @@ export function renderWorktreeVirtualRow(
   )
   const familyVariant =
     rootRow.type === 'item' &&
-    isActiveSidebarWorkspace(rootRow.worktree, {
-      worktreeId: ctx.item.activeWorktreeId,
-      hostId: ctx.item.activeWorkspaceExecutionHostId
-    })
+    isWorkspaceRowActive(
+      ctx.item.activeWorktreeId,
+      ctx.item.activeWorkspaceExecutionHostId,
+      rootRow.worktree,
+      ctx.item.contestedWorktreeIds
+    )
       ? ctx.item.getActiveSurfaceVariant(rootRow)
       : 'primary'
 

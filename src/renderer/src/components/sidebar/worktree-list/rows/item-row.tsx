@@ -4,8 +4,9 @@ import { cn } from '@/lib/class-names'
 import type { AppState } from '@/store/types'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host/execution-host'
 import type { Worktree } from '../../../../../../shared/worktree/types'
+import type { ContestedWorkspaceIds } from '../../../../../../shared/workspace-session-worktree-key'
 import { getWorktreeHostIdentity } from '../../../../../../shared/worktree/host-qualified-identity'
-import { isActiveSidebarWorkspace } from '../../../../../../shared/sidebar-list/selection/active-workspace'
+import { isWorkspaceRowActive } from './workspace-row-activation'
 import WorktreeCard from '../../workspace-card/surface/WorktreeCard'
 import type { ActiveSurfaceVariant } from '../../workspace-card/controller/worktree-card-model'
 import { PINNED_GROUP_KEY } from '../../../../../../shared/sidebar-list/sections/group-keys'
@@ -26,6 +27,8 @@ export type WorktreeItemRowContext = {
   nativeLineageDropTargetIdentity: string | null
   activeWorktreeId: string | null
   activeWorkspaceExecutionHostId: ExecutionHostId | null
+  // Gate for the contested-id guard in `isWorkspaceRowActive`; the store selector is identity-stable.
+  contestedWorktreeIds: ContestedWorkspaceIds
   currentWorktreeId: string | null
   highlightedRevealRowKey: string | null
   selectedWorktreeIds: ReadonlySet<string>
@@ -67,10 +70,18 @@ export function renderWorktreeItemRow(
     ctx.worktreeDragState.draggingWorktreeId &&
     (ctx.worktreeDragState.lineageDropTargetIdentity === worktreeIdentity ||
       ctx.nativeLineageDropTargetIdentity === worktreeIdentity)
-  const isActiveWorktree = isActiveSidebarWorkspace(itemRow.worktree, {
-    worktreeId: ctx.activeWorktreeId,
-    hostId: ctx.activeWorkspaceExecutionHostId ?? null
-  })
+  const isActiveWorktree = isWorkspaceRowActive(
+    ctx.activeWorktreeId,
+    ctx.activeWorkspaceExecutionHostId,
+    itemRow.worktree,
+    ctx.contestedWorktreeIds
+  )
+  const isCurrentWorktree = isWorkspaceRowActive(
+    ctx.currentWorktreeId,
+    ctx.activeWorkspaceExecutionHostId,
+    itemRow.worktree,
+    ctx.contestedWorktreeIds
+  )
   return (
     <div
       key={itemRow.rowKey}
@@ -109,7 +120,7 @@ export function renderWorktreeItemRow(
         worktree={itemRow.worktree}
         repo={itemRow.repo}
         isActive={isActiveWorktree}
-        isCurrentWorktree={ctx.currentWorktreeId === itemRow.worktree.id}
+        isCurrentWorktree={isCurrentWorktree}
         // Why: a child-active parent should look active without the active-card side effects (e.g. SSH reconnect UI).
         isActiveSurface={forceActiveSurface || isActiveWorktree}
         activeSurfaceVariant={isActiveWorktree ? ctx.getActiveSurfaceVariant(itemRow) : 'primary'}

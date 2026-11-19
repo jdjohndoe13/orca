@@ -78,6 +78,7 @@ export function createEnvironmentFromPairingOffer(args: {
   offer: PairingOffer
   runtimeId?: string | null
   source?: RuntimeEnvironmentSource
+  gatewayEnvironmentId?: string
   connectionDependency?: 'ssh-tunnel'
 }): KnownRuntimeEnvironment {
   const endpointId = `ws-${args.id}`
@@ -91,6 +92,7 @@ export function createEnvironmentFromPairingOffer(args: {
     lastUsedAt: null,
     runtimeId: args.runtimeId ?? null,
     ...(args.source ? { source: args.source } : {}),
+    ...(args.gatewayEnvironmentId ? { gatewayEnvironmentId: args.gatewayEnvironmentId } : {}),
     ...(args.connectionDependency ? { connectionDependency: args.connectionDependency } : {}),
     endpoints: [
       {

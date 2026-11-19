@@ -9,6 +9,7 @@ import { recordPtyConnectDiagnostic } from '../instrumentation/pty-connect-diagn
 import { canRestorePairedParkedTerminal } from './paired-parked-terminal-restore'
 import { isPtySessionIdOwnedByWorktree as isSessionOwnedByWorktree } from '../../../../../../shared/terminal/pty/lifecycle/pty-session-id-format'
 import { startDeferredSessionReattachUnlessHiddenAgentResume } from '../spawn/hidden-agent-resume-deferral'
+import { findPaneWorktreeRowForState, reconcilePaneRestoredPtyId } from '../pane-worktree-row-lookup'
 
 import type { ConnectPanePtySession } from '../connect-pane-pty-session'
 
@@ -19,14 +20,25 @@ export function runDeferredSessionReattachChoice(session: ConnectPanePtySession)
     return
   }
   // Why: re-read session IDs here rather than at connect scheduling — cleanup during the caller's one-frame gap could otherwise reattach a dead session.
-  const restoredPtyId =
+  const storeSnapshot = useAppStore.getState()
+  // The row the pane's overlay mounted it from — the ACTIVE host's row for a contested id. A bare
+  // read misses (buckets are `host|id`) or hits the other host's row, and the attach would paint
+  // the wrong host's console.
+  const paneRow = findPaneWorktreeRowForState(
+    storeSnapshot,
+    storeSnapshot.tabsByWorktree,
+    session.deps.worktreeId
+  )
+  const existingPtyId = paneRow?.find((t) => t.id === session.deps.tabId)?.ptyId
+  // The layout's leaf binding is keyed by tab id alone, which the two rows of a contested id share
+  // — so it can still name the previous host's leaf. The row's own host-scoped ptyId vouches for
+  // the right one; the row wins when the two name different environments.
+  const restoredPtyId = reconcilePaneRestoredPtyId(
     session.deps.restoredLeafId && session.deps.restoredPtyIdByLeafId
       ? (session.deps.restoredPtyIdByLeafId[session.deps.restoredLeafId] ?? null)
-      : null
-  const storeSnapshot = useAppStore.getState()
-  const existingPtyId = storeSnapshot.tabsByWorktree[session.deps.worktreeId]?.find(
-    (t) => t.id === session.deps.tabId
-  )?.ptyId
+      : null,
+    existingPtyId
+  )
   // Why: the host owns a mirrored tab's agent liveness and answers it at connect; a client note must not divert its start.
   const resumesFromSleepingNote =
     !isWebTerminalSurfaceTabId(session.deps.tabId) &&

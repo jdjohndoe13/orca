@@ -19,6 +19,7 @@ import {
   type ReconciliationDraftField,
   type WorktreeTabModelReconciliationBatch
 } from './tabs-reconciliation-batch'
+import { resolveWorkspaceSessionRowKey } from '../../workspace-session-key'
 
 export type WorktreeTabModelReconciliation = {
   patch: Partial<AppState>
@@ -39,16 +40,26 @@ export function hasRecordIndependentRenderableTab(
 export function projectWorktreeTabModelReconciliation(
   state: AppState,
   worktreeId: string,
-  batch?: WorktreeTabModelReconciliationBatch
+  batch?: WorktreeTabModelReconciliationBatch,
+  /**
+   * Overrides the row the rows live under. Activation carries the host it is activating FOR
+   * before the stamp lands in the store, so it resolves the key from that argument; the
+   * in-store fallback would name the wrong host for a contested id.
+   */
+  rowKeyOverride?: string
 ): WorktreeTabModelReconciliation {
+  // The rows live under the session key, `host|id` for a contested workspace id (STA-4343);
+  // the group/tab entities keep the bare `worktreeId` as their own field, and the batch's
+  // `liveEditorIdsByWorktree` index is built from `openFiles[].worktreeId`, so it stays bare.
+  const rowKey = rowKeyOverride ?? resolveWorkspaceSessionRowKey(state, worktreeId)
   // A batch's drafts hold earlier workspaces' writes; a single reconciliation drafts from `state`.
   const drafts = batch?.drafts ?? createReconciliationDrafts(state)
-  const unifiedTabs = drafts.unifiedTabs.get(worktreeId) ?? []
-  const storedGroups = drafts.groups.get(worktreeId)
+  const unifiedTabs = drafts.unifiedTabs.get(rowKey) ?? []
+  const storedGroups = drafts.groups.get(rowKey)
   const groups = storedGroups ?? []
-  const storedActiveGroupId = drafts.activeGroups.get(worktreeId)
-  const storedLayout = drafts.layout.get(worktreeId)
-  const runtimeTerminalTabs = state.tabsByWorktree[worktreeId] ?? []
+  const storedActiveGroupId = drafts.activeGroups.get(rowKey)
+  const storedLayout = drafts.layout.get(rowKey)
+  const runtimeTerminalTabs = state.tabsByWorktree[rowKey] ?? []
   const unifiedTerminalEntityIds = new Set(
     unifiedTabs.filter((tab) => tab.contentType === 'terminal').map((tab) => tab.entityId)
   )
@@ -65,14 +76,14 @@ export function projectWorktreeTabModelReconciliation(
   const orphanTerminalIds = getOrphanTerminalIds(
     {
       tabsByWorktree: state.tabsByWorktree,
-      unifiedTabsByWorktree: { [worktreeId]: unifiedTabs },
+      unifiedTabsByWorktree: { [rowKey]: unifiedTabs },
       ptyIdsByTabId: state.ptyIdsByTabId,
       lastKnownRelayPtyIdByTabId: state.lastKnownRelayPtyIdByTabId,
       deferredSshSessionIdsByTabId: state.deferredSshSessionIdsByTabId,
       pendingReconnectPtyIdByTabId: state.pendingReconnectPtyIdByTabId,
       unverifiedPtyLossTabIds: state.unverifiedPtyLossTabIds
     },
-    worktreeId
+    rowKey
   )
   const ensuredGroup =
     legacyRuntimeTerminalTabs.length > 0
@@ -103,7 +114,7 @@ export function projectWorktreeTabModelReconciliation(
           }))
   const reconciledUnifiedTabs =
     restoredLegacyTabs.length > 0 ? [...unifiedTabs, ...restoredLegacyTabs] : unifiedTabs
-  const rememberedLegacyActiveTabId = state.activeTabIdByWorktree[worktreeId]
+  const rememberedLegacyActiveTabId = state.activeTabIdByWorktree[rowKey]
   const restoredLegacyTabIds = new Set(restoredLegacyTabs.map((tab) => tab.id))
   const legacyFallbackActiveTabId =
     rememberedLegacyActiveTabId && restoredLegacyTabIds.has(rememberedLegacyActiveTabId)
@@ -126,7 +137,7 @@ export function projectWorktreeTabModelReconciliation(
   )
   let liveEditorIds = batch?.liveEditorIds
   const liveBrowserIds = new Set(
-    (state.browserTabsByWorktree[worktreeId] ?? []).map((browserTab) => browserTab.id)
+    (state.browserTabsByWorktree[rowKey] ?? []).map((browserTab) => browserTab.id)
   )
 
   const isRenderableTab = (tab: Tab): boolean => {
@@ -235,12 +246,12 @@ export function projectWorktreeTabModelReconciliation(
       }
     }
     const written = new Set<ReconciliationDraftField>(['unifiedTabs', 'groups', 'activeGroups'])
-    drafts.unifiedTabs.set(worktreeId, validTabs)
-    drafts.groups.set(worktreeId, nextGroups)
-    drafts.activeGroups.set(worktreeId, nextActiveGroupId)
+    drafts.unifiedTabs.set(rowKey, validTabs)
+    drafts.groups.set(rowKey, nextGroups)
+    drafts.activeGroups.set(rowKey, nextActiveGroupId)
     if (nextLayout && layoutChanged) {
       // Why: restored runtime terminals need a concrete leaf before activation.
-      drafts.layout.set(worktreeId, nextLayout)
+      drafts.layout.set(rowKey, nextLayout)
       written.add('layout')
     }
     if (batch) {
@@ -252,7 +263,7 @@ export function projectWorktreeTabModelReconciliation(
         ? { unreadTerminalTabs: nextUnreadTerminalTabs }
         : {}),
       ...(orphanTerminalIds.size > 0
-        ? buildOrphanTerminalCleanupPatch(state, worktreeId, orphanTerminalIds)
+        ? buildOrphanTerminalCleanupPatch(state, rowKey, orphanTerminalIds)
         : {})
     }
   }

@@ -46,7 +46,7 @@ export function WorktreeCardSurface({ card }: { card: WorktreeCardController }):
     handleContextMenuSelect,
     contentIndent
   } = card
-  const isSleeping = useIsSleepingWorktree(worktree.id)
+  const isSleeping = useIsSleepingWorktree(worktree.id, worktree.hostId)
   const geometryFor = (statusLane: boolean) =>
     getWorktreeCardFrameGeometry({ flushSurface, contentIndent, statusLane })
   const { content: templateContent, frame } = renderWorkspaceCardTemplate(

@@ -18,6 +18,7 @@ import {
   replaceRecordEntries,
   replaceTabBuckets
 } from '../../record-transitions/keyed-record-transitions'
+import { getWorkspaceIdFromSessionKey } from '../../../../../shared/workspace-session-worktree-key'
 
 export function createTabsDropActions(
   set: TabsSliceSet,
@@ -33,8 +34,12 @@ export function createTabsDropActions(
           return state
         }
 
-        const { tab, worktreeId } = foundTab
-        const sourceGroup = findGroupForTab(state.groupsByWorktree, worktreeId, tab.groupId)
+        // Both lookups walked the records, so the id they hand back is the row key — `host|id` for
+        // a contested workspace id (STA-4343).
+        const { tab } = foundTab
+        const rowKey = foundTab.worktreeId
+        const worktreeId = getWorkspaceIdFromSessionKey(rowKey)
+        const sourceGroup = findGroupForTab(state.groupsByWorktree, rowKey, tab.groupId)
         const targetGroup = foundTarget.group
         if (!sourceGroup) {
           return state
@@ -44,7 +49,7 @@ export function createTabsDropActions(
         if (!isSplitDrop && tab.groupId === target.groupId) {
           return state
         }
-        const layout = state.layoutByWorktree[worktreeId]
+        const layout = state.layoutByWorktree[rowKey]
         if (
           isSplitDrop &&
           isPaneColumnSplitDropNoOp({
@@ -61,7 +66,7 @@ export function createTabsDropActions(
 
         moved = true
 
-        let nextGroups = state.groupsByWorktree[worktreeId] ?? []
+        let nextGroups = state.groupsByWorktree[rowKey] ?? []
         // Pending writes to this worktree's layout and active-group entries; null deletes the layout.
         let nextLayout: TabGroupLayoutNode | null | undefined
         let nextActiveGroupId: string | undefined
@@ -76,7 +81,7 @@ export function createTabsDropActions(
             tabOrder: []
           }
           const currentLayout =
-            state.layoutByWorktree[worktreeId] ??
+            state.layoutByWorktree[rowKey] ??
             ({ type: 'leaf', groupId: target.groupId } as const)
           const replacement = buildSplitNode(
             target.groupId,
@@ -120,7 +125,7 @@ export function createTabsDropActions(
                       dedupedSourceGroupOrder,
                       sourceGroup.recentTabIds,
                       tabId,
-                      state.unifiedTabsByWorktree[worktreeId]
+                      state.unifiedTabsByWorktree[rowKey]
                     )
                   : group.activeTabId,
               tabOrder: sourceOrder,
@@ -144,11 +149,11 @@ export function createTabsDropActions(
         if (sourceOrder.length === 0) {
           nextGroups = nextGroups.filter((group) => group.id !== sourceGroup.id)
           const currentLayout =
-            nextLayout === undefined ? state.layoutByWorktree[worktreeId] : nextLayout
+            nextLayout === undefined ? state.layoutByWorktree[rowKey] : nextLayout
           if (currentLayout) {
             const collapsed = collapseWorktreeGroupLayout(
               currentLayout,
-              nextActiveGroupId ?? state.activeGroupIdByWorktree[worktreeId],
+              nextActiveGroupId ?? state.activeGroupIdByWorktree[rowKey],
               sourceGroup.id,
               resolvedTargetGroupId
             )
@@ -162,21 +167,21 @@ export function createTabsDropActions(
         const nextLayoutByWorktree =
           nextLayout === undefined
             ? state.layoutByWorktree
-            : replaceRecordEntries(state.layoutByWorktree, [[worktreeId, nextLayout]])
+            : replaceRecordEntries(state.layoutByWorktree, [[rowKey, nextLayout]])
         const nextActiveGroupIdByWorktree =
           nextActiveGroupId === undefined
             ? state.activeGroupIdByWorktree
-            : replaceRecordEntries(state.activeGroupIdByWorktree, [[worktreeId, nextActiveGroupId]])
+            : replaceRecordEntries(state.activeGroupIdByWorktree, [[rowKey, nextActiveGroupId]])
         const nextUnifiedTabsByWorktree = replaceTabBuckets(state.unifiedTabsByWorktree, [
           [
-            worktreeId,
-            (state.unifiedTabsByWorktree[worktreeId] ?? []).map((candidate) =>
+            rowKey,
+            (state.unifiedTabsByWorktree[rowKey] ?? []).map((candidate) =>
               candidate.id === tabId ? { ...candidate, groupId: resolvedTargetGroupId } : candidate
             )
           ]
         ])
         const nextGroupsByWorktree = replaceRecordEntries(state.groupsByWorktree, [
-          [worktreeId, nextGroups]
+          [rowKey, nextGroups]
         ])
 
         return {
@@ -194,7 +199,8 @@ export function createTabsDropActions(
                   activeGroupIdByWorktree: nextActiveGroupIdByWorktree
                 },
                 worktreeId,
-                resolvedTargetGroupId
+                resolvedTargetGroupId,
+                rowKey
               )
             : {})
         }

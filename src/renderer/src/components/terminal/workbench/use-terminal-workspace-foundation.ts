@@ -5,6 +5,7 @@ import type { TerminalTab } from '../../../../../shared/workspace-layout/termina
 import { useAppStore } from '../../../store/index'
 import { useWorktreeMap } from '../../../store/slices/worktrees/listing/use-worktree-catalog'
 import { getResolvedExecutionHostIdForWorktree } from '@/lib/workspace/ownership/resolved-worktree-execution-host'
+import { useActiveWorktreeSessionRowKey } from '../../terminal-workspace-session-row'
 import type { WorktreeTabBucketProjection } from '@/lib/workspace/tabs/worktree-tab-bucket-projection'
 import { projectWorkspaceSurfaces } from '../workspace-mounting/workspace-surface-projection'
 import {
@@ -54,6 +55,11 @@ export function useTerminalWorkspaceFoundation() {
   const folderWorkspaces = useAppStore((state) => selectFolderWorkspaces(state))
   const activeWorktreeId = useAppStore((state) => state.activeWorktreeId)
   const renderedActiveWorktreeId = activeWorktreeId
+  // Why a subscription and not a derivation of `renderedActiveWorktreeId`: clicking another
+  // host's card of a colliding id keeps the bare id and only swaps the active host's stamp, so
+  // every other dep holds and the surface would keep painting the host it had. This key is what
+  // re-points the workbench's row reads at the host the user just picked.
+  const activeWorktreeSessionRowKey = useActiveWorktreeSessionRowKey(renderedActiveWorktreeId)
   const activeWorktreeDeferralHostId = useAppStore((state) =>
     getResolvedExecutionHostIdForWorktree(state, renderedActiveWorktreeId)
   )
@@ -138,6 +144,7 @@ export function useTerminalWorkspaceFoundation() {
     workspaceSurfaceIdSet,
     activeWorktreeId,
     renderedActiveWorktreeId,
+    activeWorktreeSessionRowKey,
     activeWorktreeDeferralHostId,
     activeView,
     tabsByWorktree,

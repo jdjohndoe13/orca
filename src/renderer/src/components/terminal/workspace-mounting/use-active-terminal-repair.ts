@@ -7,7 +7,9 @@ type ActiveTerminalRepairInput = {
   activeTabType: WorkspaceVisibleTabType
   activeTabId: string | null
   activeTabIdByWorktree: Record<string, string | null>
-  renderedActiveWorktreeId: string | null
+  // The row key, not the bare id: the remembered active tab is a session row, and a contested
+  // id's row lives under `host|id` — reading the bare key would repair the other host's tab.
+  activeWorktreeSessionRowKey: string | null
   setActiveTab: (tabId: string) => void
   tabs: TerminalTab[]
 }
@@ -16,14 +18,14 @@ export function repairActiveTerminalTab({
   activeTabType,
   activeTabId,
   activeTabIdByWorktree,
-  renderedActiveWorktreeId,
+  activeWorktreeSessionRowKey,
   setActiveTab,
   tabs
 }: ActiveTerminalRepairInput): boolean {
   const rememberedTabId =
-    renderedActiveWorktreeId !== null &&
-    Object.hasOwn(activeTabIdByWorktree, renderedActiveWorktreeId)
-      ? (activeTabIdByWorktree[renderedActiveWorktreeId] ?? null)
+    activeWorktreeSessionRowKey !== null &&
+    Object.hasOwn(activeTabIdByWorktree, activeWorktreeSessionRowKey)
+      ? (activeTabIdByWorktree[activeWorktreeSessionRowKey] ?? null)
       : null
   const repairedTabId = resolveRepairedActiveTerminalTabId({
     activeTabType,
@@ -43,7 +45,7 @@ export function useActiveTerminalRepair(input: ActiveTerminalRepairInput): void 
     activeTabId,
     activeTabIdByWorktree,
     activeTabType,
-    renderedActiveWorktreeId,
+    activeWorktreeSessionRowKey,
     setActiveTab,
     tabs
   } = input
@@ -52,7 +54,7 @@ export function useActiveTerminalRepair(input: ActiveTerminalRepairInput): void 
       activeTabId,
       activeTabIdByWorktree,
       activeTabType,
-      renderedActiveWorktreeId,
+      activeWorktreeSessionRowKey,
       setActiveTab,
       tabs
     })
@@ -63,6 +65,6 @@ export function useActiveTerminalRepair(input: ActiveTerminalRepairInput): void 
     setActiveTab,
     tabs,
     activeTabIdByWorktree,
-    renderedActiveWorktreeId
+    activeWorktreeSessionRowKey
   ])
 }

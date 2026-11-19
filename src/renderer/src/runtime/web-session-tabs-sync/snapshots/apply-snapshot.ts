@@ -1,9 +1,19 @@
 import { agentSenderPublicationPatch } from '../../native-chat/agent-senders/agent-sender-publication-patch'
 import { isWebSessionTabsWorktreeRemovalFrame } from '../tracking/session-tabs-inventory-absence'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../../shared/workspace/identity/floating-workspace-id'
+import { isHostQualifiableWorkspaceId } from '../../../../../shared/workspace-session-key-qualification'
+import { hasContestedClaim } from '../../../../../shared/workspace-session-worktree-key'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/workspace-layout/layout-owner-switch'
 import type { RuntimeMobileSessionTabsResult } from '../../../../../shared/remote-runtime/session-graph/runtime-session-contracts'
-import { LOCAL_STRUCTURED_SESSION_OWNER } from '../../native-chat/local-sessions/local-structured-session-owner'
+import {
+  LOCAL_STRUCTURED_SESSION_OWNER,
+  executionHostIdForSessionTabsOwner
+} from '../../native-chat/local-sessions/local-structured-session-owner'
+import { getContestedWorktreeIds } from '../../../store/slices/worktrees/listing/worktree-catalog-index'
+import {
+  foldWebSessionTabsRowsToBareView,
+  rekeyWebSessionTabsPatchToHost
+} from '../mirror-host-row-rekey'
 import type {
   WebSessionTabsBatchContext,
   WebSessionTabsSnapshotApplyOptions,
@@ -51,6 +61,54 @@ export function applyWebSessionTabsSnapshotWithContext(
         true
       )
     : {}
+  const worktreeId = rawSnapshot.worktree
+  const contested = getContestedWorktreeIds(state.worktreesByRepo)
+  // Why the batchContext gate: a batch mutates its record copies in place on the state it
+  // owns, so `applyWebSessionTabsSnapshots` folds once and re-keys the merged patch itself;
+  // folding inside a batch frame would strand those mutations on the folded copy.
+  if (
+    !batchContext &&
+    hasContestedClaim(contested, worktreeId) &&
+    isHostQualifiableWorkspaceId(worktreeId)
+  ) {
+    // Why: a contested id (one repo on several hosts, STA-4343) must only ever hold the
+    // `host|id` spelling in the unified store — a bare row routes to the persistence split's
+    // pinned primary and collides last-wins into that partition's bucket (the identical
+    // child-tabs defect). The pipeline runs in the host's own bare spelling (the direct-SSH
+    // twin), then the patch's record keys are re-spelled to the host's key on the way out.
+    const hostId = executionHostIdForSessionTabsOwner(environmentId)
+    const folded = foldWebSessionTabsRowsToBareView(state, new Set([worktreeId]), hostId, contested)
+    const patch = runWebSessionTabsPipeline(
+      folded,
+      rawSnapshot,
+      environmentId,
+      now,
+      batchContext,
+      options,
+      identityPatch
+    )
+    // The no-op returns the folded view; the caller must see the real state (or the tombstone).
+    const effectivePatch = patch === folded ? state : patch
+    return rekeyWebSessionTabsPatchToHost(
+      state,
+      effectivePatch,
+      new Set([worktreeId]),
+      hostId,
+      contested
+    )
+  }
+  return runWebSessionTabsPipeline(state, rawSnapshot, environmentId, now, batchContext, options, identityPatch)
+}
+
+function runWebSessionTabsPipeline(
+  state: WebSessionTabsSyncState,
+  rawSnapshot: RuntimeMobileSessionTabsResult,
+  environmentId: string,
+  now: number,
+  batchContext: WebSessionTabsBatchContext | undefined,
+  options: WebSessionTabsSnapshotApplyOptions | undefined,
+  identityPatch: Partial<WebSessionTabsSyncState>
+): WebSessionTabsSyncState | Partial<WebSessionTabsSyncState> {
   const worktreeId = rawSnapshot.worktree
   // Switch point: ORCA_LAYOUT_OWNER_IS_MAIN && — every mirror write (single, batch, operations) passes here.
   const previousSnapshotTabIds =

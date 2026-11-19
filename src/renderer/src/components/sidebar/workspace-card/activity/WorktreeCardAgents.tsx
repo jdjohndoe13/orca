@@ -12,7 +12,11 @@ import {
   selectSendTargetControlInputs,
   selectSendTargetInputs
 } from './worktree-card-send-target-inputs'
-import { useAgentPresentation, useWorktreeAgentRow } from './useWorktreeAgentRows'
+import {
+  useAgentPresentation,
+  useWorktreeAgentRow,
+  useWorktreeAgentRowKey
+} from './useWorktreeAgentRows'
 import { useHostRootKeys } from './use-worktree-agent-host-roots'
 import { KeyedSummary } from './worktree-card-agent-keyed-summary'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host/execution-host'
@@ -46,14 +50,20 @@ export default React.memo(function WorktreeCardAgents({
   executionHostId,
   className
 }: Props) {
+  // The projection files this workspace's rows under the session row key (STA-4343):
+  // the record key of `tabsByWorktree` is the row key, so a contested id's roots are
+  // published at `host|id` and the bare key is every claimant's shared bucket — the
+  // bug. An uncontested id keeps the bare key byte-identically.
+  const rowKey = useWorktreeAgentRowKey(worktreeId, executionHostId)
   const allRoots = useAgentPresentation(
-    `roots\0${worktreeId}`,
-    useCallback((p) => p.display.roots(worktreeId), [worktreeId])
+    `roots\0${rowKey}`,
+    useCallback((p) => p.display.roots(rowKey), [rowKey])
   )
-  const roots = useHostRootKeys(worktreeId, executionHostId, allRoots)
+  const roots = useHostRootKeys(rowKey, executionHostId, allRoots)
   return roots.length ? (
     <WorktreeCardAgentsBody
       worktreeId={worktreeId}
+      rowKey={rowKey}
       executionHostId={executionHostId}
       roots={roots}
       hostFiltered={roots !== allRoots}
@@ -64,16 +74,17 @@ export default React.memo(function WorktreeCardAgents({
 
 function WorktreeCardAgentsBody({
   worktreeId,
+  rowKey,
   executionHostId,
   roots,
   hostFiltered,
   className
-}: Props & { roots: readonly string[]; hostFiltered: boolean }) {
+}: Props & { rowKey: string; roots: readonly string[]; hostFiltered: boolean }) {
   const t = useTranslate(),
     languageRevision = useUiLanguageRevision()
   const display = useWorktreeAgentDisplay()
   const expansion = useWorktreeAgentExpansionState(worktreeId, executionHostId)
-  const focusedPaneKey = useFocusedAgentPaneKey(worktreeId)
+  const focusedPaneKey = useFocusedAgentPaneKey(worktreeId, rowKey)
   const onActivate = useWorktreeAgentActivation(worktreeId, executionHostId)
   const onDismiss = useAppStore((s) => s.dropAgentStatus)
   const send = useAppStore((s) => s.sendPromptToSidebarAgentTarget)
@@ -88,8 +99,10 @@ function WorktreeCardAgentsBody({
         if (!control.targetMode) {
           return null
         }
+        // The picker mode is keyed by the bare id; the card's own tabs live at the
+        // session row key, so a contested card only lights rows on its host.
         return new Map(
-          deriveRunningAgentSendTargets(inputs, worktreeId).map((target) => [
+          deriveRunningAgentSendTargets(inputs, rowKey).map((target) => [
             target.paneKey,
             control.targetMode?.status === 'sending' &&
             control.targetMode.sendingPaneKey === target.paneKey
@@ -109,7 +122,7 @@ function WorktreeCardAgentsBody({
           ])
         )
       }),
-    [control, inputs, worktreeId, t, languageRevision]
+    [control, inputs, rowKey, t, languageRevision]
   )
   const onSend = useCallback(
     (key: string) => {
@@ -183,7 +196,7 @@ function WorktreeCardAgentsBody({
           )}
         >
           <KeyedSummary
-            worktreeId={worktreeId}
+            worktreeId={rowKey}
             roots={roots}
             hostFiltered={hostFiltered}
             expanded={expansion.compactRootListExpanded}

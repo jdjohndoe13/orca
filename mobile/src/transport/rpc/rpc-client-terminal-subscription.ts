@@ -33,6 +33,45 @@ export function updateTerminalSubscriptionViewport(
   }
 }
 
+/**
+ * The same viewport update for gateway-bridged terminal streams, whose subscribe
+ * params are wrapped in `{gatewayEnvironmentId, method, params}`. Without this,
+ * a post-reconnect resubscribe refits at the stale viewport.
+ */
+export function updateGatewayBridgeTerminalViewport(
+  streams: Iterable<MutableStreamRequest>,
+  terminal: string,
+  viewport: { cols: number; rows: number }
+): void {
+  for (const stream of streams) {
+    if (
+      stream.method !== 'runtimeEnvironment.downstream.subscribe' ||
+      !stream.params ||
+      typeof stream.params !== 'object'
+    ) {
+      continue
+    }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the object check above; the vehicle's own `{method, params}` shape is what the call handler forwards.
+    const bridge = stream.params as { method?: unknown; params?: unknown }
+    if (
+      bridge.method !== 'terminal.subscribe' ||
+      !bridge.params ||
+      typeof bridge.params !== 'object'
+    ) {
+      continue
+    }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the object check above; only the `terminal` member is read, and the object check already passed.
+    const inner = bridge.params as TerminalStreamParams
+    if (inner.terminal !== terminal) {
+      continue
+    }
+    stream.params = {
+      ...bridge,
+      params: { ...inner, viewport }
+    }
+  }
+}
+
 // Centralize method-specific unsubscribe echoes for explicit host teardown; return null when none is needed.
 export function buildStreamUnsubscribe(
   method: string | undefined,

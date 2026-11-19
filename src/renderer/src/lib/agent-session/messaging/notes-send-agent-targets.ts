@@ -14,7 +14,8 @@ import {
   deriveStatuslessStructuredAgentSendTargets,
   hookSilentAgentSendRefusal,
   launchAgentMayOwnPane,
-  runningAgentMessageTarget
+  runningAgentMessageTarget,
+  runningAgentRowKey
 } from './running-agent-targets'
 import type { RunningAgentSendTarget, RunningAgentTargetState } from './running-agent-targets'
 import type { AgentType } from '../../../../../shared/agent-status/contracts/agent-status-types'
@@ -74,7 +75,7 @@ export function deriveNotesSendAgentTargets(
     return toNotesSendAgentTarget(target, title)
   })
 
-  for (const tab of state.tabsByWorktree[worktreeId] ?? []) {
+  for (const tab of state.tabsByWorktree[runningAgentRowKey(state, worktreeId)] ?? []) {
     const titleHintTarget = deriveTitleHintAgentTarget(state, tab)
     if (!titleHintTarget) {
       continue

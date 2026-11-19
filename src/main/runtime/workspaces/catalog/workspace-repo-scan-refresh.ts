@@ -13,7 +13,11 @@ import { scanLocalRepoWorktreesForResolution } from './repo-worktree-resolution-
 import type { GitWorktreeInfo } from '../../../../shared/worktree/types'
 import { listStoredWorktreeRowsForRepo } from './repo-worktree-row-resolution'
 import type { ResolvedWorktree } from './runtime-worktree-path-identity'
-import { getRepoSshConnectionId } from '../../../../shared/execution-host/execution-host'
+import {
+  getRepoExecutionHostId,
+  getRepoSshConnectionId,
+  parseExecutionHostId
+} from '../../../../shared/execution-host/execution-host'
 import {
   blockedWslDistroForPath,
   wslDistroForPath
@@ -105,6 +109,18 @@ export abstract class RuntimeWorkspaceRepoScanRefresh extends RuntimeWorkspaceCa
       return { ok: false, worktrees: this.listStoredWorktreesForResolution(repo) }
     }
     const result = runtimeResultForObservation(observation)
+    // Why: a `runtime:<env>` row named a paired host, and a local `git worktree list` cannot
+    // describe worktrees that live over there. Publishing the empty scan instead of the stored
+    // host-qualified rows starves worktree.ps and every listing that resolves through the fleet
+    // scan of rows this host already certified (the recovery the SSH branches above get). A
+    // confirmed-empty listing (true-empty) stays authoritative, as a healthy scan's answer does.
+    if (
+      !result.ok &&
+      observation.outcome.kind === 'failed' &&
+      parseExecutionHostId(getRepoExecutionHostId(repo))?.kind === 'runtime'
+    ) {
+      return { ok: false, worktrees: this.listStoredWorktreesForResolution(repo) }
+    }
     // Mutations kept overtaking scans: publish the rows as non-authoritative, never as current truth.
     return superseded && result.ok ? { ok: false, worktrees: result.worktrees } : result
   }

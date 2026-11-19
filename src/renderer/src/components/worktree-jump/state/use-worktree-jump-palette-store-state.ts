@@ -8,6 +8,7 @@ import { usePluginCommands } from '@/store/plugins/catalog/plugin-contribution-c
 import { usePluginNewFiles } from '@/store/plugins/file-creation/plugin-new-files'
 import { useSettingsNavigationMetadata } from '@/components/settings/navigation/useSettingsNavigationMetadata'
 import { dedupePaletteWorktrees } from '@/lib/workspace/search/palette-repo-resolution'
+import { getContestedWorktreeIds } from '@/store/slices/worktrees/listing/worktree-catalog-index'
 import {
   readHiddenVmCheckouts,
   subscribeHiddenVmCheckouts,
@@ -64,6 +65,12 @@ export function useWorktreeJumpPaletteStoreState({
     [storedWorktreesByRepo, hiddenVmCheckouts, resultsReady]
   )
   const folderWorkspaces = useAppStore((state) => selectFolderWorkspaces(state))
+  // The palette reads worktree-keyed session records by the ROW KEY (STA-4343);
+  // this is the gate that decides which ids are qualified.
+  const contestedWorktreeIds = useMemo(
+    () => getContestedWorktreeIds(worktreesByRepo),
+    [worktreesByRepo]
+  )
   const repos = useAppStore((state) => state.repos)
   const projectGroups = useAppStore((state) => state.projectGroups)
   const workspaces = useMemo(
@@ -188,6 +195,7 @@ export function useWorktreeJumpPaletteStoreState({
     worktreesByRepo,
     pendingVmRepoIds: hiddenVmCheckouts.repoIds,
     workspaces,
+    contestedWorktreeIds,
     repos,
     projectGroups,
     projects,

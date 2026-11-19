@@ -5,6 +5,7 @@ import { buildDesktopWorkspaceRowFactReader } from '@/components/sidebar/worktre
 import { sortWorktreesSmart } from '../../../../../shared/sidebar-list/sorting/smart-sort'
 import { buildWorktreeChecksReviewIndex } from '@/components/cmd-j/worktree-checks-review-index'
 import { getLiveAgentStatusByWorktreeId } from '@/lib/workspace/activity/worktree-activity-state'
+import { getContestedWorktreeIds } from '@/store/slices/worktrees/listing/worktree-catalog-index'
 import { orderEmptyQueryWorktrees } from '@/lib/workspace/search/palette/order-empty-query-worktrees'
 import {
   getWorktreePaletteSearchScope,
@@ -71,15 +72,23 @@ export function useWorktreeJumpPaletteWorktrees({
 }: WorktreeJumpPaletteWorktreesInput) {
   const hasQuery = paletteSearchQuery.length > 0
   const isLoading = repos.length > 0 && Object.keys(worktreesByRepo).length === 0
+  // The palette recomputes this snapshot when status inputs change; the
+  // contested set re-keys it per host (STA-4343), so the filter below reads
+  // each row's own bucket.
+  const contestedWorktreeIds = getContestedWorktreeIds(worktreesByRepo)
   const worktreeIdsWithLiveAgent = useMemo(
     () =>
       new Set(
-        // The palette recomputes this snapshot when status inputs change; the
-        // clock intentionally reflects the render that performs that snapshot.
-        // oxlint-disable-next-line react/purity
-        getLiveAgentStatusByWorktreeId(agentStatusByPaneKey, tabsByWorktree, Date.now()).keys()
+        // The clock intentionally reflects the render that performs that snapshot.
+        getLiveAgentStatusByWorktreeId(
+          agentStatusByPaneKey,
+          tabsByWorktree,
+          // oxlint-disable-next-line react/purity
+          Date.now(),
+          contestedWorktreeIds
+        ).keys()
       ),
-    [agentStatusByPaneKey, tabsByWorktree]
+    [agentStatusByPaneKey, tabsByWorktree, contestedWorktreeIds]
   )
   const pairedDeviceIdsByEnvironment = useMemo(
     () =>
@@ -121,7 +130,8 @@ export function useWorktreeJumpPaletteWorktrees({
         ptyIdsByTabId,
         browserTabsByWorktree,
         worktreeIdsWithLiveAgent,
-        worktreeIdsWithStructuredChat
+        worktreeIdsWithStructuredChat,
+        contestedWorktreeIds
       })
     )
     return filterPredicate ? visible.filter(filterPredicate.matchesWorktree) : visible
@@ -129,6 +139,7 @@ export function useWorktreeJumpPaletteWorktrees({
     workspaces,
     alwaysShowDefaultBranchWorkspace,
     browserTabsByWorktree,
+    contestedWorktreeIds,
     filterPredicate,
     hideAutomationGeneratedWorkspaces,
     hideCliCreatedWorkspaces,

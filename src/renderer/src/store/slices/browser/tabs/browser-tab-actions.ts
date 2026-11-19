@@ -20,6 +20,8 @@ import {
   loadPairedBrowserTabCreator
 } from './paired-browser-tab-creator'
 import { findGroupAndWorktree } from '../../tabs/tab-group-state'
+import { getWorkspaceIdFromSessionKey } from '../../../../../../shared/workspace-session-worktree-key'
+import { resolveWorkspaceSessionRowKey } from '../../../workspace-session-key'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../../shared/workspace-layout/layout-owner-switch'
 import { openBrowserTabThroughLayoutOwner } from './browser-tab-open-through-layout-owner'
 import { browserTabOpenView } from './browser-tab-open-view'
@@ -102,23 +104,25 @@ export function createBrowserTabActions(
       const drawHere = (): void => {
         set((s) => {
           options?.validateLinkPlacement?.(s)
+          // The rows live under the session key, `host|id` for a contested workspace id (STA-4343).
+          const rowKey = resolveWorkspaceSessionRowKey(s, worktreeId)
           return {
             browserTabsByWorktree: {
               ...s.browserTabsByWorktree,
-              [worktreeId]: [...(s.browserTabsByWorktree[worktreeId] ?? []), browserTab]
+              [rowKey]: [...(s.browserTabsByWorktree[rowKey] ?? []), browserTab]
             },
             browserPagesByWorkspace: {
               ...s.browserPagesByWorkspace,
               [workspaceId]: [page]
             },
-            ...browserTabOpenView(s, worktreeId, browserTab, page, options)
+            ...browserTabOpenView(s, worktreeId, browserTab, page, options, rowKey)
           }
         })
 
         const state = get()
-        const alreadyHasUnifiedTab = (state.unifiedTabsByWorktree[worktreeId] ?? []).some(
-          (t) => t.contentType === 'browser' && t.entityId === workspaceId
-        )
+        const alreadyHasUnifiedTab = (
+          state.unifiedTabsByWorktree[resolveWorkspaceSessionRowKey(state, worktreeId)] ?? []
+        ).some((t) => t.contentType === 'browser' && t.entityId === workspaceId)
         if (!alreadyHasUnifiedTab) {
           const shouldActivate = options?.activate ?? true
           let created
@@ -159,7 +163,16 @@ export function createBrowserTabActions(
           page,
           options,
           showView: () => {
-            set((s) => browserTabOpenView(s, worktreeId, browserTab, page, options))
+            set((s) =>
+              browserTabOpenView(
+                s,
+                worktreeId,
+                browserTab,
+                page,
+                options,
+                resolveWorkspaceSessionRowKey(s, worktreeId)
+              )
+            )
             admitLinkPageMount()
           },
           drawHere
@@ -184,8 +197,12 @@ export function createBrowserTabActions(
     openNewBrowserTabInActiveWorkspace: async (groupId, splitDirection) => {
       const state = get()
       // Why: the invoking group owns its workspace; global selection may already point elsewhere.
-      const worktreeId =
-        findGroupAndWorktree(state.groupsByWorktree, groupId)?.worktreeId ?? state.activeWorktreeId
+      // The group lookup walks the record, so it hands back the row key — `host|id` for a
+      // contested workspace id (STA-4343) — while every consumer below resolves a bare id.
+      const foundGroup = findGroupAndWorktree(state.groupsByWorktree, groupId)
+      const worktreeId = foundGroup
+        ? getWorkspaceIdFromSessionKey(foundGroup.worktreeId)
+        : state.activeWorktreeId
       if (!worktreeId) {
         return
       }

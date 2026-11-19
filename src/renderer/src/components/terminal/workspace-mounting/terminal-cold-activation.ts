@@ -17,6 +17,7 @@ import '../../terminal-pane/parking/output-watchers/terminal-parked-tab-watchers
 import { canWatcherCoverParkedTerminalTab } from '../../terminal-pane/parking/output-watchers/parked-terminal-tab-coverage'
 import { isRemoteRuntimePtyId } from '../../../../../shared/remote-runtime/remote-runtime-pty-id'
 import { terminalProviderAllowsParking } from '../provider-snapshots/terminal-provider-snapshot-capability'
+import { resolveWorkspaceRowKeyFromStore } from '../../terminal-workspace-session-row'
 import type { TerminalParkingFoundation } from './use-terminal-parking-foundation'
 import { isUnboundRestoredTerminalTab } from './unbound-restored-terminal-tab'
 
@@ -28,6 +29,7 @@ export function applyTerminalColdActivation(controller: TerminalParkingFoundatio
     activeTabId,
     activeTabIdByWorktree,
     activeWorktreeDeferralHostId,
+    activeWorktreeSessionRowKey,
     activityTerminalPortals,
     backgroundMountTabIdsByWorktreeRef,
     groupsByWorktree,
@@ -64,23 +66,29 @@ export function applyTerminalColdActivation(controller: TerminalParkingFoundatio
     startupHeldWorktreeId
   )
   if (renderedActiveWorktreeId && !startupHeldWorktreeId) {
-    const worktreeTabs = tabsByWorktree[renderedActiveWorktreeId] ?? []
+    // Why the row key and not the bare id: the workbench mounts on the bare id, but a contested
+    // id's rows live under `host|id` and the bucket projection passes keys through — so every
+    // read below has to ask for the active host's row. `?? ''` only narrows: the key is derived
+    // from `renderedActiveWorktreeId` so it is never null here, and an empty key matches no row.
+    const rowKey = activeWorktreeSessionRowKey ?? ''
+    const worktreeTabs = tabsByWorktree[rowKey] ?? []
     const coldActivationDeferralEnabled =
       terminalParkingEnabled && terminalTitleSnapshotAuthorityEnabled
     const immediateTabIds = new Set<string>()
     if (activeTabId) {
       immediateTabIds.add(activeTabId)
     }
-    const rememberedActiveTabId = activeTabIdByWorktree[renderedActiveWorktreeId]
+    const rememberedActiveTabId = activeTabIdByWorktree[rowKey]
     if (rememberedActiveTabId) {
       immediateTabIds.add(rememberedActiveTabId)
     }
     const unifiedTabById = new Map(
-      (useAppStore.getState().unifiedTabsByWorktree[renderedActiveWorktreeId] ?? []).map(
-        (unifiedTab) => [unifiedTab.id, unifiedTab]
-      )
+      (useAppStore.getState().unifiedTabsByWorktree[rowKey] ?? []).map((unifiedTab) => [
+        unifiedTab.id,
+        unifiedTab
+      ])
     )
-    for (const group of groupsByWorktree[renderedActiveWorktreeId] ?? []) {
+    for (const group of groupsByWorktree[rowKey] ?? []) {
       if (!group.activeTabId) {
         continue
       }
@@ -119,8 +127,11 @@ export function applyTerminalColdActivation(controller: TerminalParkingFoundatio
             pairedRuntimeParkingEnvironmentIds
           })
         : terminalProviderAllowsParking(ptyId)
-    if (lastActivationWorktreeIdRef.current !== renderedActiveWorktreeId) {
-      lastActivationWorktreeIdRef.current = renderedActiveWorktreeId
+    // Why the row key here and not the bare id: clicking another host's card of a colliding id
+    // keeps `renderedActiveWorktreeId`, so a bare-id comparison would call the new host's tabs a
+    // repeat activation and skip the deferral plan those tabs need.
+    if (lastActivationWorktreeIdRef.current !== rowKey) {
+      lastActivationWorktreeIdRef.current = rowKey
       const tabById = new Map(worktreeTabs.map((tab) => [tab.id, tab]))
       const installedDeferralPlan = planColdActivationTabDeferral({
         restrictions: backgroundMountTabIdsByWorktreeRef.current,
@@ -190,7 +201,11 @@ export function applyTerminalColdActivation(controller: TerminalParkingFoundatio
     backgroundMountTabIdsByWorktreeRef.current,
     mountedWorktreeIdsRef.current,
     tabsByWorktree,
-    activationDeferredMountTabIdsByWorktreeRef.current
+    activationDeferredMountTabIdsByWorktreeRef.current,
+    // Why the mapper: the restriction maps are mount-keyed (bare id, like `mountedWorktreeIds`),
+    // so the prune has to translate each to the key its tab row lives under — otherwise a
+    // contested id finds no live tabs and prunes every deferred tab as closed.
+    resolveWorkspaceRowKeyFromStore
   )
   if (startupHeldWorktreeId) {
     holdTerminalTabsForStartup(
@@ -198,7 +213,7 @@ export function applyTerminalColdActivation(controller: TerminalParkingFoundatio
       backgroundMountTabIdsByWorktreeRef.current,
       mountedWorktreeIdsRef.current,
       startupHeldWorktreeId,
-      (tabsByWorktree[startupHeldWorktreeId] ?? []).map((tab) => tab.id)
+      (tabsByWorktree[activeWorktreeSessionRowKey ?? ''] ?? []).map((tab) => tab.id)
     )
   }
   for (const id of mountedWorktreeIdsRef.current) {
@@ -213,7 +228,8 @@ export function applyTerminalColdActivation(controller: TerminalParkingFoundatio
     mountedWorktreeIdsRef.current,
     layoutByWorktree,
     groupsByWorktree,
-    activeGroupIdByWorktree
+    activeGroupIdByWorktree,
+    resolveWorkspaceRowKeyFromStore
   )
   return {
     anyMountedWorktreeHasLayout,

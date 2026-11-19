@@ -317,8 +317,22 @@ export const EXECUTION_HOST_METHODS = [
   'worktree.sleep'
 ] as const
 
+// Why: the phone's mirrored (runtime-backed) rows attach the paired environment through the
+// relay gateway vehicles; the WS allowlist is the first fence, the gateway's forwardable
+// sets are the second. The relaying host answers these itself and forwards internally, so
+// they route like the other paired-desktop relay vehicles.
+const RUNTIME_ENVIRONMENT_GATEWAY_VEHICLE_METHODS = [
+  'runtimeEnvironment.downstream.list',
+  'runtimeEnvironment.call',
+  'runtimeEnvironment.downstream.subscribe',
+  'runtimeEnvironment.downstream.unsubscribe'
+] as const
+
 export const MOBILE_RPC_METHOD_ROUTES: ReadonlyMap<string, MobileRpcMethodRoute> = new Map([
   ...PAIRED_DESKTOP_METHODS.map((method) => [method, 'paired-desktop'] as const),
   ...DEFAULT_SCOPE_HOST_METHODS.map((method) => [method, 'default-scope-host'] as const),
+  ...RUNTIME_ENVIRONMENT_GATEWAY_VEHICLE_METHODS.map(
+    (method) => [method, 'paired-desktop'] as const
+  ),
   ...EXECUTION_HOST_METHODS.map((method) => [method, 'execution-host'] as const)
 ])

@@ -2,6 +2,7 @@ import { useAnyBrowserGuestNeedsPaint } from '../../browser-pane/host-guest/rete
 import { WorktreeSplitSurface } from './TerminalWorktreeSplitSurface'
 import { selectParkedEquivalentMountTabIds } from '../workspace-mounting/startup-terminal-tab-hold'
 import { hasPendingBackgroundMounts } from '../workspace-mounting/activation-deferred-tab-admission'
+import { resolveWorkspaceRowKeyFromStore } from '../../terminal-workspace-session-row'
 import type { TerminalController } from './use-terminal-controller'
 
 export function TerminalSplitWorkspaceSurfaces({
@@ -56,13 +57,17 @@ export function TerminalSplitWorkspaceSurfaces({
             !isVisible &&
             !shouldMeasureHiddenWorktree &&
             effectiveParkedTerminalWorktreeIds.has(workspace.id)
+          // Why the row key: the surface list is bare-id keyed, so a contested id's focused-group
+          // row — host-qualified — has to be asked for by name. The active surface's host is the
+          // user's own pick, which the shared resolver honors over the catalog's first-wins row.
+          const focusedRowKey = resolveWorkspaceRowKeyFromStore(workspace.id)
           return (
             <WorktreeSplitSurface
               key={`tab-groups-${workspace.id}`}
               worktreeId={workspace.id}
               worktreePath={workspace.path}
               layout={layout}
-              focusedGroupId={activeGroupIdByWorktree[workspace.id]}
+              focusedGroupId={activeGroupIdByWorktree[focusedRowKey]}
               isVisible={isVisible}
               shouldMeasureHiddenWorktree={shouldMeasureHiddenWorktree}
               prewarmStage={

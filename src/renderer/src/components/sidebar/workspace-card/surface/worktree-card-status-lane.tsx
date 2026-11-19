@@ -34,6 +34,7 @@ export function WorktreeCardStatusLane({
     >
       <WorktreeCardStatusSlot
         worktreeId={card.worktree.id}
+        hostId={card.worktree.hostId}
         showStatus={card.showStatus}
         showUnreadAction={showUnreadAction}
         isUnread={card.worktree.isUnread || rolledUpUnread || sleepingMail}

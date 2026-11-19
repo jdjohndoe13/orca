@@ -3,6 +3,7 @@ import type { AppState } from '@/store/types'
 import type { WorktreeRuntimeOwnerState } from '@/lib/workspace/ownership/worktree-runtime-owner-state'
 import { agentPaneConversationForEntry } from '@/store/slices/agent-status/conversation/agent-pane-conversation'
 import { resolveRuntimePaneTitleLeafId } from '../../../../../../shared/workspace-layout/terminal-topology/runtime-pane-title-leaf-id'
+import { getWorkspaceIdFromSessionKey } from '../../../../../../shared/workspace-session-worktree-key'
 import type { AgentDotState } from '@/components/agent/status/AgentStateDot'
 import type { AiVaultSession } from '../../../../../../shared/ai-vault/contracts/ai-vault-types'
 import {
@@ -137,9 +138,11 @@ function getTabOwnerWorktreeId(
   ) {
     return worktreeIdHint
   }
-  for (const [worktreeId, tabs] of Object.entries(state.tabsByWorktree)) {
+  for (const [worktreeKey, tabs] of Object.entries(state.tabsByWorktree)) {
     if (tabs.some((tab) => tab.id === tabId)) {
-      return worktreeId
+      // The record key is `host|id` for a contested workspace id (STA-4343); the target's
+      // consumers activate by the catalog's bare id, so decode before returning.
+      return getWorkspaceIdFromSessionKey(worktreeKey)
     }
   }
   return null

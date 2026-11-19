@@ -112,7 +112,9 @@ export function ConnectedNativeChatResumeToast({
     close()
     const session = {
       agent: row.candidate.agent,
-      structuredSession: { workspaceId: row.candidate.workspaceId, sessionId }
+      structuredSession: { workspaceId: row.candidate.workspaceId, sessionId },
+      // The offer row's own host rides along so a contested workspace resolves its own chat row.
+      executionHostId: row.candidate.executionHostId
     }
     void (remote
       ? activateAiVaultStructuredSession(session, undefined, store.target)

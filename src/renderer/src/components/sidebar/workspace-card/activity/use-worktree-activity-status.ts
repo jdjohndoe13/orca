@@ -11,6 +11,8 @@ import {
   selectRuntimePaneTitlesForWorktree
 } from './worktree-card-status-inputs'
 import { selectWorktreeAgentActivitySummary } from './worktree-agent-activity-summary'
+import { resolveWorkspaceSessionKey } from '@/store/workspace-session-key'
+import type { ExecutionHostId } from '../../../../../../shared/execution-host/execution-host'
 import { selectStoppedWslDistro } from '@/runtime/hosts/wsl/wsl-host-stopped-status'
 import { selectWorkspaceRuntimeEnvironmentId } from '../../../../lib/workspace/ownership/workspace-runtime-environment'
 import { parseRemoteRuntimePtyId } from '../../../../../../shared/remote-runtime/remote-runtime-pty-id'
@@ -69,7 +71,8 @@ let generation: {
 
 export function selectWorktreeActivityStatus(
   statusInputs: AppState,
-  worktreeId: string
+  worktreeId: string,
+  hostId?: ExecutionHostId | null
 ): WorktreeStatus {
   if (generation?.state !== statusInputs) {
     generation = {
@@ -78,11 +81,15 @@ export function selectWorktreeActivityStatus(
       carried: generation?.byWorktreeId
     }
   }
+  // Why the row key (STA-4343): a contested id's rows live under `host|id`, so
+  // reading by the bare id would show the co-claimant's tabs and agent rows.
+  // An uncontested id keeps the bare key byte-identically.
+  const rowKey = resolveWorkspaceSessionKey(statusInputs, worktreeId, hostId)
   const { byWorktreeId, carried } = generation
-  let memo = byWorktreeId.get(worktreeId)
+  let memo = byWorktreeId.get(rowKey)
   if (memo === undefined) {
-    memo = resolveMemoizedStatus(statusInputs, worktreeId, carried?.get(worktreeId))
-    byWorktreeId.set(worktreeId, memo)
+    memo = resolveMemoizedStatus(statusInputs, rowKey, carried?.get(rowKey))
+    byWorktreeId.set(rowKey, memo)
   }
   return memo.status
 }
@@ -153,6 +160,22 @@ function resolveMemoizedStatus(
   return { inputs, status, titleStatus: heuristic }
 }
 
-export function useWorktreeActivityStatus(worktreeId: string): WorktreeStatus {
-  return useAppStore((state) => selectWorktreeActivityStatus(state, worktreeId))
+/**
+ * The row key subscription (STA-4343): the contested set flips while the app
+ * runs (a second host registers the path, or one drops out), so every read
+ * below must move to the new key on the same publication — the same rule the
+ * sidebar's inline agent rows follow (`useWorktreeAgentRows`).
+ */
+export function useWorktreeSessionRowKey(
+  worktreeId: string,
+  executionHostId?: ExecutionHostId | null
+): string {
+  return useAppStore((s) => resolveWorkspaceSessionKey(s, worktreeId, executionHostId))
+}
+
+export function useWorktreeActivityStatus(
+  worktreeId: string,
+  executionHostId?: ExecutionHostId | null
+): WorktreeStatus {
+  return useAppStore((state) => selectWorktreeActivityStatus(state, worktreeId, executionHostId))
 }

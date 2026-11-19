@@ -7,6 +7,7 @@ import {
   scheduleActivationDeferredAdmission
 } from './activation-deferred-tab-admission'
 import { revealActivationDeferredTabs } from './background-terminal-worktree-mount'
+import { resolveWorktreeSessionRowKeyFromStore } from '../../terminal-workspace-session-row'
 import type { TerminalColdActivationController } from './terminal-cold-activation'
 import { isUnboundRestoredTerminalTab } from './unbound-restored-terminal-tab'
 
@@ -45,9 +46,13 @@ export function useActivationDeferredTabAdmission(
       return
     }
     return scheduleActivationDeferredAdmission(() => {
-      // Tabs can change between scheduling and admission; stale IDs would strand the restriction.
+      // Why re-read: tabs can be created or closed between the scheduling frame
+      // and this one, and admitting a stale id would strand the restriction.
+      // Why the row key: the restriction refs are mount-keyed (bare id) but the tab
+      // row is host-qualified for a contested id, so the two must not be confused.
       const state = useAppStore.getState()
-      const tabs = state.tabsByWorktree[worktreeId] ?? []
+      const tabs =
+        state.tabsByWorktree[resolveWorktreeSessionRowKeyFromStore(worktreeId)] ?? []
       const allTabIds = tabs.map((tab) => tab.id)
       // Unbound saved tabs spawn nothing while hidden, so warming them only leaves an empty xterm that can never park; they mount when shown.
       const warmableTabIds = tabs

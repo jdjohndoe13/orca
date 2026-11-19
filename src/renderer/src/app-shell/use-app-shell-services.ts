@@ -1,4 +1,7 @@
+import { useEffect } from 'react'
+
 import { useAppStore } from '../store'
+import { attachWorktreeHistoryMouseNavigation } from '../lib/worktree-history-mouse-navigation'
 import { useClosedEditorTabCleanup } from '../components/editor/model-lifetime/retention/useClosedEditorTabCleanup'
 import { useIpcEvents } from '../hooks/useIpcEvents'
 import { useReadOnScreenAttention } from '../attention/useReadOnScreenAttention'
@@ -61,4 +64,5 @@ export function useAppShellServices(): void {
   useCodexTerminalServerIsolationNotice()
   useClaudeThemeSyncOffer()
   usePerfNotices()
+  useEffect(() => attachWorktreeHistoryMouseNavigation(), [])
 }

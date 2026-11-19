@@ -24,6 +24,7 @@ export function useMobileSessionTerminalSubscription(
   const {
     client,
     clientId,
+    sessionRelay,
     setTerminalModes,
     terminalCwdRef,
     getTerminalPaneViewport,
@@ -287,7 +288,8 @@ export function useMobileSessionTerminalSubscription(
             lifetime.scheduleSettledFit(getTerminalRef(handle))
           }
         },
-        lifetime.end
+        lifetime.end,
+        sessionRelay
       )
 
       const unsub = lifetime.wrapUnsubscribe(() => {
@@ -308,6 +310,7 @@ export function useMobileSessionTerminalSubscription(
     [
       client,
       clientId,
+      sessionRelay,
       getTerminalRef,
       markNativeChatInputLeaseReady,
       scheduleDelayedAction,

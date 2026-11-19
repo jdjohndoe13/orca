@@ -5,6 +5,7 @@ import type { TerminalWebViewHandle } from '../webview/terminal-webview-contract
 import type { TerminalFrame } from '../webview/terminal-webview-messages'
 import type { TerminalViewportDims } from './terminal-viewport-refit'
 import type { TerminalPaneViewport } from '../session/pane-layout/mobile-terminal-pane-layout'
+import type { RelayTabsSource } from '../../session/mobile-remote-runtime-session-tabs'
 
 export type TerminalViewportRefitOptions = {
   activeHandleRef: RefObject<string | null>
@@ -25,4 +26,6 @@ export type TerminalViewportRefitOptions = {
   fontMetricsKey: string
   unsubscribeTerminal: (handle: string) => void
   subscribeToTerminal: (handle: string) => void
+  // Mirrored rows send the in-place viewport update through the gateway relay.
+  sessionRelay: RelayTabsSource | null | undefined
 }

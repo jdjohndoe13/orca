@@ -4,6 +4,7 @@ import type { TerminalTab } from '../../../../../../shared/workspace-layout/term
 import type { WorktreeLineage } from '../../../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../../../shared/worktree/types'
 import { getWorktreeHostIdentity } from '../../../../../../shared/worktree/host-qualified-identity'
+import type { ContestedWorkspaceIds } from '../../../../../../shared/workspace-session-worktree-key'
 import type {
   ExecutionHostId,
   ExecutionHostScope
@@ -50,6 +51,8 @@ export type VisibleWorktreeOptions = {
   sortedByHostIdentity?: boolean
   /** Exempt from the sleeping sweep only; unlike forcedVisibleWorktreeIds, every other filter still applies. */
   sleepingSweepExemptWorktreeIds?: ReadonlySet<string>
+  /** The contested-id set (STA-4343); the sleep sweep folds each row's id to its row key. */
+  contestedWorktreeIds?: ContestedWorkspaceIds
   /** Host identities listed under their bot instead of their project; not a filter, so muting and filter counts ignore it. */
   botListedWorktreeIdentities?: ReadonlySet<string>
 }

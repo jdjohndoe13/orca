@@ -12,6 +12,7 @@ import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../../shared/workspace-la
 
 import { selectFolderWorkspaces } from '../../../workspaces/catalog/workspace-record-fields'
 import { runtimeEnvironmentIdUnlessTwin } from '@/lib/workspace/ownership/resolve-owner'
+import { getWorkspaceIdFromSessionKey } from '../../../../../../shared/workspace-session-worktree-key'
 
 export function createBrowserHydrationActions(
   set: BrowserSliceSet,
@@ -64,13 +65,16 @@ export function createBrowserHydrationActions(
       const state = get()
       // Seeded handles alone prove prior desktop hosting; attach is required for runtime to hand those pages back.
       void ensureBrowserClientHostsForRestoredPages(state)
-      for (const [worktreeId, browserTabs] of Object.entries(state.browserTabsByWorktree)) {
+      for (const [rowKey, browserTabs] of Object.entries(state.browserTabsByWorktree)) {
+        // The record key is `host|id` for a contested workspace (STA-4343), but the action and
+        // the tab's own `worktreeId` field both speak the bare id.
+        const worktreeId = getWorkspaceIdFromSessionKey(rowKey)
         // Switch point: main's layout load gives a tabless record its tab; its frame draws it.
         if (ORCA_LAYOUT_OWNER_IS_MAIN && !runtimeEnvironmentIdUnlessTwin(state, worktreeId)) {
           continue
         }
         for (const bt of browserTabs) {
-          const exists = (state.unifiedTabsByWorktree[worktreeId] ?? []).some(
+          const exists = (state.unifiedTabsByWorktree[rowKey] ?? []).some(
             (t) => t.contentType === 'browser' && t.entityId === bt.id
           )
           if (!exists) {

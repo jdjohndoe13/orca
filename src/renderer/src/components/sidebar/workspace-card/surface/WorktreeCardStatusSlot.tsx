@@ -21,6 +21,7 @@ import {
   selectEphemeralVmWorkspaceWaking
 } from '@/store/slices/ephemeral-vm/ephemeral-vm-lifecycle'
 import { selectIsSleepingWorktree } from '../../workspace-actions/sleep/use-worktree-sleep-state'
+import type { ExecutionHostId } from '../../../../../../shared/execution-host/execution-host'
 import { getEphemeralVmHostState } from '../../../../../../shared/execution-host/execution-host-health'
 import { getVmStateLabel, VmStateIcon, WorktreeCardVmStateBadge } from './WorktreeCardVmStateBadge'
 import type { WorktreeCardPrDisplay } from '../review/worktree-card-pr-display'
@@ -38,6 +39,8 @@ import {
 
 type WorktreeCardStatusSlotProps = {
   worktreeId: string
+  /** The card's own row's host (STA-4343); the status and moon read the row key. */
+  hostId?: ExecutionHostId | null
   /** Replaces the live activity status, for rows that fold it (bots). */
   status?: WorktreeStatus
   showStatus: boolean
@@ -132,6 +135,7 @@ function getReviewStatusLabel(review: WorktreeCardPrDisplay, t: Translate = tran
 
 export function WorktreeCardStatusSlot({
   worktreeId,
+  hostId,
   status: statusOverride,
   showStatus,
   showUnreadAction,
@@ -151,12 +155,15 @@ export function WorktreeCardStatusSlot({
   const t = useTranslate()
   const collectionChecks = reviewChecks && reviewChecks.total > 1 ? reviewChecks : undefined
   const isReviewStale = reviewStale || Boolean(collectionChecks?.stale)
-  const liveStatus = laneStatusWithLineage(useWorktreeActivityStatus(worktreeId), lineageStatus)
+  const liveStatus = laneStatusWithLineage(
+    useWorktreeActivityStatus(worktreeId, hostId),
+    lineageStatus
+  )
   const status = statusOverride ?? liveStatus
   // One subscription per card: rows mount by the hundreds, and every listener runs on each store write.
   const { isSleeping, vmRuntime, vmWaking } = useAppStore(
     useShallow((state) => ({
-      isSleeping: selectIsSleepingWorktree(state, worktreeId),
+      isSleeping: selectIsSleepingWorktree(state, worktreeId, hostId),
       vmRuntime: selectEphemeralVmWorkspaceRuntime(state, worktreeId),
       vmWaking: selectEphemeralVmWorkspaceWaking(state, worktreeId)
     }))

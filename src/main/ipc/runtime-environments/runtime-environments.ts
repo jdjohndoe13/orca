@@ -44,6 +44,8 @@ import { watchRuntimeEnvironmentPreference } from './catalog/runtime-environment
 import { publishRuntimeEnvironmentCatalogChanged } from './catalog/runtime-environment-catalog-broadcast'
 import { isGatedOffWslHost } from '../../wsl/host-lifecycle/wsl-host-gate'
 import { resetDesktopBrowserBridgeEnvironment } from '../browser/desktop-browser-bridge-reconcile'
+import { configurePairedEnvironmentRepoCatalogMirror } from './runtime-environment-repo-catalog-mirror'
+import { engageAllPairedEnvironmentRepoCatalogMirrors } from './runtime-environment-repo-catalog-triggers'
 
 const remoteRuntimeSubscriptions = new Map<string, RetainedRemoteRuntimeSubscription>()
 const getUserDataPath = getRuntimeEnvironmentRegistryRoot
@@ -167,6 +169,14 @@ export async function registerRuntimeEnvironmentHandlers(
     ipcMain.removeHandler(channel)
   }
   ipcMain.removeAllListeners('runtimeEnvironments:subscriptionBinary')
+  // Why: pairing-time repo mirrors write through this store; the runtime cache
+  // hooks resolve lazily at mirror time (the runtime may not exist yet here).
+  configurePairedEnvironmentRepoCatalogMirror({
+    getStore: () => store
+  })
+  // Why: an already paired machine never re-runs the pairing sync, so handlers
+  // boot is the moment every stored pair's mirror gets re-ensured.
+  engageAllPairedEnvironmentRepoCatalogMirrors(getUserDataPath())
   registerRuntimeEnvironmentConnectivityHandlers({
     store,
     getUserDataPath,

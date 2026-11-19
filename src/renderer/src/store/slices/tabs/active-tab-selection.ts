@@ -7,18 +7,17 @@ export function selectActiveTabForWorktree(
     groupsByWorktree: Record<string, TabGroup[]>
     unifiedTabsByWorktree: Record<string, Tab[]>
   },
-  worktreeId: string
+  worktreeId: string,
+  // Where this workspace's rows live: `host|id` for a contested id (STA-4343).
+  rowKey: string = worktreeId
 ): Tab | null {
-  const groupId = state.activeGroupIdByWorktree[worktreeId]
-  const group = (state.groupsByWorktree[worktreeId] ?? []).find(
-    (candidate) => candidate.id === groupId
-  )
+  const groupId = state.activeGroupIdByWorktree[rowKey]
+  const group = (state.groupsByWorktree[rowKey] ?? []).find((candidate) => candidate.id === groupId)
   if (!group?.activeTabId) {
     return null
   }
   return (
-    (state.unifiedTabsByWorktree[worktreeId] ?? []).find((tab) => tab.id === group.activeTabId) ??
-    null
+    (state.unifiedTabsByWorktree[rowKey] ?? []).find((tab) => tab.id === group.activeTabId) ?? null
   )
 }
 

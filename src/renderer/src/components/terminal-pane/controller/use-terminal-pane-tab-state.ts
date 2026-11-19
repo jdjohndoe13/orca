@@ -8,6 +8,7 @@ import { collectLayoutLeafIdsInOrder } from '../../../../../shared/workspace-lay
 import { EMPTY_LAYOUT } from '../layout/empty-terminal-layout'
 import { sanitizeTerminalLayoutPaneTitles } from '../../../../../shared/workspace-layout/terminal-topology/terminal-pane-title-sanitization'
 import { selectUnifiedTerminalTabFields } from './tab-state/terminal-unified-tab-lookup'
+import { resolvePaneWorktreeRowKey } from '../pty-connection/pane-worktree-row-lookup'
 import type { TerminalPaneTitleController } from '../titles/use-terminal-pane-title-state'
 
 export function useTerminalPaneTabState({
@@ -15,9 +16,16 @@ export function useTerminalPaneTabState({
   worktreeId
 }: Pick<TerminalPaneTitleController, 'tabId' | 'worktreeId'>) {
   // Bundle unified-tab reads to reduce lookups and subscriptions per mounted tab.
+  // Why the row key: the pane gets the BARE worktreeId, and a contested id's rows live under
+  // `host|id` — the same accessor the overlay layer mounted the pane from, so the pane reads the
+  // row the user is looking at.
   const { unifiedTabId, isChatViewMode, unifiedTabLabel, isTabPinned } = useAppStore(
     useShallow((store) =>
-      selectUnifiedTerminalTabFields(store.unifiedTabsByWorktree, worktreeId, tabId)
+      selectUnifiedTerminalTabFields(
+        store.unifiedTabsByWorktree,
+        resolvePaneWorktreeRowKey(store, worktreeId),
+        tabId
+      )
     )
   )
   const effectiveChatViewMode = isChatViewMode
@@ -27,7 +35,11 @@ export function useTerminalPaneTabState({
   const tabAgentTypeByLeaf = useTerminalTabAgentTypes(tabId)
   const savedLayout = useAppStore((store) => store.terminalLayoutsByTabId[tabId] ?? EMPTY_LAYOUT)
   const terminalTab = useAppStore((store) =>
-    getCachedTerminalTabForWorktree(store.tabsByWorktree, worktreeId, tabId)
+    getCachedTerminalTabForWorktree(
+      store.tabsByWorktree,
+      resolvePaneWorktreeRowKey(store, worktreeId),
+      tabId
+    )
   )
   const restoredLayout = useMemo(
     () => (terminalTab ? sanitizeTerminalLayoutPaneTitles(savedLayout, terminalTab) : savedLayout),

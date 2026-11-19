@@ -39,6 +39,9 @@ export function createOpenConflictFile(
         conflictFileId = id
         intent.register(id)
         const conflict = toOpenConflictMetadata(entry)
+        // The per-worktree active-file slot lives under the session key, `host|id` for a contested
+        // workspace id (STA-4343) — `buildEditorActiveResult` resolves it; the git-status caches
+        // and the open-file entity keep the bare id.
         const targetGroupId =
           resolveEditorOpenTargetGroupId(s, placementId, options?.targetGroupId) ?? undefined
         editorItemTargetGroupId = targetGroupId

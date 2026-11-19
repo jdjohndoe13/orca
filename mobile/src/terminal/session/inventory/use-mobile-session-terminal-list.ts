@@ -1,5 +1,6 @@
 import { useRef, useCallback, useEffect, useMemo } from 'react'
 import { sessionTerminalListRead } from '../mobile-session-terminal-operations'
+import { forwardOrLocal } from '../../../session/mobile-remote-runtime-forwarded-call'
 import type { TerminalRecord as Terminal } from './mobile-terminal-records'
 import { mergeTerminalListWithKnownRecords, terminalRecordsEqual } from './mobile-terminal-records'
 import {
@@ -16,6 +17,7 @@ export function useMobileSessionTerminalList(scope: MobileSessionTerminalStreamD
     hostId,
     worktreeId,
     client,
+    sessionRelay,
     setTerminals,
     terminalsRef,
     sessionTabsRef,
@@ -56,12 +58,15 @@ export function useMobileSessionTerminalList(scope: MobileSessionTerminalStreamD
         allowEmptyLoaded,
         async (allowsEmpty, isCurrent) => {
           try {
+            const listParams = {
+              worktree: `id:${worktreeId}`,
+              includeVisualLayouts: false,
+              includePreview: false
+            }
             const response = sessionTerminalListRead.interpret(
-              await sessionTerminalListRead.request(client, {
-                worktree: `id:${worktreeId}`,
-                includeVisualLayouts: false,
-                includePreview: false
-              })
+              await forwardOrLocal(client, sessionRelay, 'terminal.list', listParams, () =>
+                sessionTerminalListRead.request(client, listParams)
+              )
             )
             if (!isCurrent() || !response.accepted) {
               return false
@@ -156,6 +161,7 @@ export function useMobileSessionTerminalList(scope: MobileSessionTerminalStreamD
     [
       client,
       worktreeId,
+      sessionRelay,
       nativeChatStream,
       terminalInventoryRequest,
       terminalResume,

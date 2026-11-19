@@ -12,6 +12,8 @@ import {
   buildExplicitEntriesByTabId,
   type TabPaneInputSources
 } from '../../../../shared/sidebar-list/sorting/smart-attention'
+import { getContestedWorktreeIds } from '@/store/slices/worktrees/listing/worktree-catalog-index'
+import { resolveWorkspaceSessionKey } from '@/store/workspace-session-key'
 import {
   isAgentStatusFresh,
   AGENT_STATUS_STALE_AFTER_MS
@@ -93,6 +95,7 @@ export function PaletteLiveStatusProvider({
     )
   )
   const statusEpoch = useAppStore((s) => (active ? s.agentStatusEpoch : 0))
+  const worktreesByRepo = useAppStore((s) => (active ? s.worktreesByRepo : undefined))
 
   const value = useMemo<PaletteLiveStatus>(() => {
     // Share one freshness tick so worktree state and its done dot cannot expire at different times.
@@ -105,7 +108,8 @@ export function PaletteLiveStatusProvider({
       liveAgentStatusByWorktreeId: getLiveAgentStatusByWorktreeId(
         agentStatusByPaneKey,
         tabsByWorktree,
-        now
+        now,
+        getContestedWorktreeIds(worktreesByRepo)
       ),
       agentStatusPaneIdsByTabId: livePaneIds.paneIdsByTabId,
       stalePaneIdsByTabId: livePaneIds.stalePaneIdsByTabId,
@@ -133,6 +137,7 @@ export function PaletteLiveStatusProvider({
     terminalLayoutsByTabId,
     unreadAgentCompletionPanes,
     unreadTerminalTabs,
+    worktreesByRepo,
     now
   ])
 
@@ -198,11 +203,14 @@ function useLiveStatus(): PaletteLiveStatus | null {
 export function PaletteWorktreeStatusDot({
   worktree
 }: {
-  worktree: Pick<Worktree, 'id'>
+  worktree: Pick<Worktree, 'id' | 'hostId'>
 }): React.JSX.Element | null {
   const live = useLiveStatus()
+  // The row key (STA-4343): a contested id's tabs and live-agent rows live
+  // under `host|id`, so the bare read shows the co-claimant's state.
+  const rowKey = useAppStore((s) => resolveWorkspaceSessionKey(s, worktree.id, worktree.hostId))
   const hasStructuredChat = useAppStore((s) =>
-    hasAwakeStructuredChat(s.unifiedTabsByWorktree[worktree.id], s.structuredChatSleptAtByPaneKey)
+    hasAwakeStructuredChat(s.unifiedTabsByWorktree[rowKey], s.structuredChatSleptAtByPaneKey)
   )
   const paneForegroundAgentByPaneKey = useAppStore((s) =>
     selectPaneForegroundAgentsForWorktree(s, worktree.id)
@@ -211,12 +219,12 @@ export function PaletteWorktreeStatusDot({
     return null
   }
   const status = getWorktreeStatus(
-    live.tabsByWorktree[worktree.id] ?? [],
-    live.browserTabsByWorktree[worktree.id] ?? [],
+    live.tabsByWorktree[rowKey] ?? [],
+    live.browserTabsByWorktree[rowKey] ?? [],
     live.paneSources.ptyIdsByTabId,
     live.paneSources.runtimePaneTitlesByTabId,
     {
-      liveAgentStatus: live.liveAgentStatusByWorktreeId.get(worktree.id),
+      liveAgentStatus: live.liveAgentStatusByWorktreeId.get(rowKey),
       hasStructuredChat,
       agentStatusPaneIdsByTabId: live.agentStatusPaneIdsByTabId,
       stalePaneIdsByTabId: live.stalePaneIdsByTabId,

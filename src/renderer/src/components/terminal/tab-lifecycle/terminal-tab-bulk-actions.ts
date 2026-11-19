@@ -5,6 +5,7 @@ import {
 import { closeWebRuntimeSessionTab } from '@/runtime/web-session-tabs-sync/actions/web-runtime-session-tab-lifecycle'
 import { isWebRuntimeSessionActive } from '@/runtime/web-session-tabs-sync/identity/web-runtime-session-environment'
 import { useAppStore } from '@/store'
+import { resolveWorktreeSessionRowKeyFromStore } from '../../terminal-workspace-session-row'
 import { closeLocalTerminalTabState } from './close-local-terminal-tab-state'
 
 type TerminalTabBulkActionState = ReturnType<typeof useAppStore.getState>
@@ -29,7 +30,10 @@ export function closeOtherTerminalTabs(tabId: string, activeWorktreeId: string |
   if (hasUnroutableTerminalWorktreeOwner(state, activeWorktreeId)) {
     return
   }
-  const currentTabs = state.tabsByWorktree[activeWorktreeId] ?? []
+  // Why the row key: these are the session rows the strip shows, and a contested id's rows live
+  // under `host|id` — a bare read would close the other host's tabs.
+  const rowKey = resolveWorktreeSessionRowKeyFromStore(activeWorktreeId)
+  const currentTabs = state.tabsByWorktree[rowKey] ?? []
   state.setActiveTab(tabId)
   const runtimeEnvironmentId = resolveTerminalWorktreeRoute(
     state,
@@ -37,7 +41,7 @@ export function closeOtherTerminalTabs(tabId: string, activeWorktreeId: string |
   )?.runtimeEnvironmentId
   const closeHostTerminalTabs = isWebRuntimeSessionActive(runtimeEnvironmentId)
   for (const tab of currentTabs) {
-    if (tab.id === tabId || isPinnedVisibleTab(state, activeWorktreeId, tab.id)) {
+    if (tab.id === tabId || isPinnedVisibleTab(state, rowKey, tab.id)) {
       continue
     }
     if (closeHostTerminalTabs) {

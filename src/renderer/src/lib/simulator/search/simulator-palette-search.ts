@@ -1,6 +1,7 @@
 import type { Tab } from '../../../../../shared/workspace-layout/tab-groups/tab-types'
 import {
   getPaletteWorktreeIdentity,
+  getPaletteWorktreeSessionRowKey,
   isPaletteCurrentWorktree,
   resolvePaletteRepoForWorktree
 } from '../../workspace/search/palette-repo-resolution'
@@ -149,7 +150,8 @@ export function buildSearchableSimulatorTabs(
     groupsByWorktree,
     activeWorktreeId,
     activeWorkspaceExecutionHostId,
-    activeTabType
+    activeTabType,
+    contestedWorktreeIds
   }: BuildSearchableSimulatorTabsOptions,
   t?: Translate
 ): SearchableSimulatorTab[] {
@@ -158,6 +160,9 @@ export function buildSearchableSimulatorTabs(
   for (const worktree of worktrees) {
     const repoName =
       resolvePaletteRepoForWorktree(worktree, repoMap, repoMapByHostIdentity)?.displayName ?? ''
+    // The row key of this worktree's session records (STA-4343) — a contested id's
+    // rows live under `host|id`, so a bare-id read shows both claimants nothing.
+    const rowKey = getPaletteWorktreeSessionRowKey(worktree, contestedWorktreeIds)
     const worktreeSortIndex =
       worktreeOrder.get(getPaletteWorktreeIdentity(worktree)) ??
       worktreeOrder.get(worktree.id) ??
@@ -169,10 +174,10 @@ export function buildSearchableSimulatorTabs(
       activeWorktreeId,
       activeWorkspaceExecutionHostId,
       activeTabType,
-      activeGroupId: activeGroupIdByWorktree[worktree.id],
-      groups: groupsByWorktree[worktree.id]
+      activeGroupId: activeGroupIdByWorktree[rowKey],
+      groups: groupsByWorktree[rowKey]
     })
-    const tabs = unifiedTabsByWorktree[worktree.id] ?? []
+    const tabs = unifiedTabsByWorktree[rowKey] ?? []
     const duplicateTabIds = findDuplicateIds(tabs)
     for (const tab of tabs) {
       if (

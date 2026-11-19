@@ -279,16 +279,24 @@ export function collectDeferredMountTabIds(
   return deferred
 }
 
-/** Prune closed tabs without dropping whole-worktree or unrestricted mounts. */
+/**
+ * Releases closed tabs from targeted and activation restrictions. Whole-worktree
+ * and fully user-visited mounts have no restriction entry and are retained.
+ *
+ * `rowKeyOf` maps a restriction's bare id to the key its tab row lives under. The restriction map
+ * is mount-keyed — the same bare id as `mountedWorktreeIds` — while the record is host-qualified
+ * for a contested id, so pruning without the mapping would prune every deferred tab as closed.
+ */
 export function pruneClosedBackgroundMountTabs(
   restrictions: Map<string, ReadonlySet<string>>,
   mountedWorktreeIds: Set<string>,
   tabsByWorktree: Record<string, readonly { id: string }[]>,
-  deferredMountTabIdsByWorktree?: Map<string, ReadonlySet<string>>
+  deferredMountTabIdsByWorktree?: Map<string, ReadonlySet<string>>,
+  rowKeyOf: (worktreeId: string) => string = (worktreeId) => worktreeId
 ): boolean {
   let changed = false
   for (const [worktreeId, tabIds] of restrictions) {
-    const liveTabIds = new Set((tabsByWorktree[worktreeId] ?? []).map((tab) => tab.id))
+    const liveTabIds = new Set((tabsByWorktree[rowKeyOf(worktreeId)] ?? []).map((tab) => tab.id))
     const retained = new Set([...tabIds].filter((tabId) => liveTabIds.has(tabId)))
     const deferred = deferredMountTabIdsByWorktree?.get(worktreeId)
     const retainedDeferred = deferred

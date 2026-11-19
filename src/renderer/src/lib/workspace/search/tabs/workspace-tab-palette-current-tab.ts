@@ -7,8 +7,12 @@ import type {
   WorkspaceTabContentType
 } from './workspace-tab-search-types'
 
+/**
+ * `rowKey` is the worktree's SESSION ROW KEY (STA-4343): a contested id's rows live under
+ * `host|id`, so a bare-id read shows both claimants nothing. An uncontested id keeps the bare key.
+ */
 export function getActiveUnifiedTabId({
-  worktreeId,
+  rowKey,
   isCurrentWorktree,
   activeTabType,
   activeGroupIdByWorktree,
@@ -16,13 +20,13 @@ export function getActiveUnifiedTabId({
 }: Pick<
   BuildSearchableWorkspaceTabsOptions,
   'activeGroupIdByWorktree' | 'activeTabType' | 'groupsByWorktree'
-> & { worktreeId: string; isCurrentWorktree: boolean }): string | null {
+> & { rowKey: string; isCurrentWorktree: boolean }): string | null {
   if (!isCurrentWorktree) {
     return null
   }
-  const activeGroupId = activeGroupIdByWorktree[worktreeId]
+  const activeGroupId = activeGroupIdByWorktree[rowKey]
   const activeGroup = activeGroupId
-    ? (groupsByWorktree[worktreeId] ?? []).find((group) => group.id === activeGroupId)
+    ? (groupsByWorktree[rowKey] ?? []).find((group) => group.id === activeGroupId)
     : undefined
   const activeUnifiedTabId = activeGroup?.activeTabId ?? null
   return activeTabType === 'terminal' ||
@@ -34,6 +38,7 @@ export function getActiveUnifiedTabId({
 
 export function isCurrentWorkspaceTab({
   tab,
+  rowKey,
   isCurrentWorktree,
   activeTabType,
   activeTabId,
@@ -52,6 +57,7 @@ export function isCurrentWorkspaceTab({
   | 'activeTabTypeByWorktree'
 > & {
   tab: Tab & { contentType: WorkspaceTabContentType }
+  rowKey: string
   isCurrentWorktree: boolean
   activeUnifiedTabId: string | null
 }): boolean {
@@ -62,12 +68,14 @@ export function isCurrentWorkspaceTab({
     return activeUnifiedTabId === tab.id
   }
   const visibleType = toVisibleTabType(tab.contentType)
-  const storedType = activeTabTypeByWorktree[tab.worktreeId] ?? activeTabType
+  // `rowKey` (not the bare `tab.worktreeId`) so the stored-type lookup reads the same host's
+  // row the palette is showing for a contested id (STA-4343).
+  const storedType = activeTabTypeByWorktree[rowKey] ?? activeTabType
   // A chat is only current through its group's active tab id, handled above.
   if (storedType !== visibleType || visibleType === 'agent-session') {
     return false
   }
   return visibleType === 'terminal'
-    ? (activeTabIdByWorktree[tab.worktreeId] ?? activeTabId) === tab.entityId
-    : (activeFileIdByWorktree[tab.worktreeId] ?? activeFileId) === tab.entityId
+    ? (activeTabIdByWorktree[rowKey] ?? activeTabId) === tab.entityId
+    : (activeFileIdByWorktree[rowKey] ?? activeFileId) === tab.entityId
 }

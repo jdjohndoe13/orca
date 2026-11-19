@@ -6,6 +6,7 @@ import { retireBrowserRoutePartitionStorageForEnvironment } from '../../../brows
 import { clearRuntimeEnvironmentCapabilityEvidence } from '../connections/runtime-environment-capability-evidence'
 import { clearRuntimeEnvironmentManualDisconnect } from '../connectivity/runtime-environment-manual-disconnect'
 import { forgetPairedPortForwards } from '../../../ports/paired-forwards/paired-port-forwards'
+import { retirePairedEnvironmentRepoCatalog } from '../runtime-environment-repo-catalog-retire'
 import {
   toRuntimeExecutionHostId,
   type ExecutionHostId
@@ -32,6 +33,9 @@ export function retireRemovedRuntimeEnvironment(
     void desktopChatCreationHistory(userDataPath).removeEnvironment(environmentId)
   }
   clearRuntimeEnvironmentCapabilityEvidence(environmentId)
+  // Why: removal retires every repo row this host mirrored from the removed
+  // environment; a store row for a gone machine would dead-end phone listings.
+  void retirePairedEnvironmentRepoCatalog(environmentId)
   revokeRemoteFilePreviewGrants(environmentId)
   // Its forwards stop listening here before its pairing credential goes away, and never come back.
   void forgetPairedPortForwards(environmentId)

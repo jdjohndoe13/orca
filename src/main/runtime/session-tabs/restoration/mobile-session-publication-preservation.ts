@@ -106,11 +106,19 @@ export abstract class OrcaRuntimeWithStoredMobileSnapshotHasStalePreservedTab ex
       return true
     }
     // Broad terminal preservation applies only to headless-built snapshots; renderer-based merges require live/durable serve/SSH evidence or closed renderer tabs resurrect.
-    return (
-      this.isHeadlessBuiltMobileSessionPublicationBase(snapshot.publicationEpoch) ||
-      this.hasLiveRuntimeSessionOwnedPtyBinding(snapshot.worktree, tab) ||
-      this.hasLiveOrPersistedServeOrSshOwnedPtyBinding(snapshot.worktree, tab)
-    )
+    if (this.isHeadlessBuiltMobileSessionPublicationBase(snapshot.publicationEpoch)) {
+      return true
+    }
+    if (this.hasLiveOrPersistedServeOrSshOwnedPtyBinding(snapshot.worktree, tab)) {
+      return true
+    }
+    if (this.hasLiveRuntimeSessionOwnedPtyBinding(snapshot.worktree, tab)) {
+      // Why: a live paired pty must not fossilize a ghost the host UI retired —
+      // the persisted group is the host's own membership authority, and the
+      // controller's attach keeps the ghost's pty connected through this loop.
+      return this.persistedGroupMembershipAllowsPreservedTab(snapshot.worktree, tab.parentTabId)
+    }
+    return false
   }
 
   protected isHeadlessMobileSessionPublication(publicationEpoch: string): boolean {

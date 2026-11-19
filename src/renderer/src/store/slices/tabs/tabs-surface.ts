@@ -23,30 +23,41 @@ export function deriveActiveSurfaceForWorktree(
   state: ActiveSurfaceSourceState,
   worktreeId: string,
   preferredGroupId?: string | null,
-  options?: { preferredTabId?: string; legacySelection?: 'remembered-type' }
+  options?: {
+    preferredTabId?: string
+    legacySelection?: 'remembered-type'
+    /**
+     * Where this workspace's rows live. It differs from `worktreeId` for a contested id — one repo
+     * registered on several execution hosts, STA-4343 — whose rows are `host|id` qualified. The
+     * `openFiles` rows keep the bare id as their own `worktreeId` field, so those comparisons stay
+     * on `worktreeId` and never on the row key.
+     */
+    rowKey?: string
+  }
 ): {
   activeBrowserTabId: string | null
   activeFileId: string | null
   activeTabId: string | null
   activeTabType: WorkspaceVisibleTabType
 } {
-  const groups = state.groupsByWorktree[worktreeId] ?? []
-  const activeGroupId = preferredGroupId ?? state.activeGroupIdByWorktree[worktreeId] ?? null
+  const rowKey = options?.rowKey ?? worktreeId
+  const groups = state.groupsByWorktree[rowKey] ?? []
+  const activeGroupId = preferredGroupId ?? state.activeGroupIdByWorktree[rowKey] ?? null
   const activeGroup =
     (activeGroupId ? groups.find((group) => group.id === activeGroupId) : null) ?? groups[0] ?? null
   const activeUnifiedTabId = options?.preferredTabId ?? activeGroup?.activeTabId
   const activeUnifiedTab =
     activeUnifiedTabId != null
-      ? ((state.unifiedTabsByWorktree[worktreeId] ?? []).find(
+      ? ((state.unifiedTabsByWorktree[rowKey] ?? []).find(
           (tab) =>
             tab.id === activeUnifiedTabId && activeGroup != null && tab.groupId === activeGroup.id
         ) ?? null)
       : null
-  const restoredFileId = state.activeFileIdByWorktree[worktreeId] ?? null
-  const restoredBrowserTabId = state.activeBrowserTabIdByWorktree[worktreeId] ?? null
-  const restoredTerminalTabId = state.activeTabIdByWorktree[worktreeId] ?? null
-  const browserTabs = state.browserTabsByWorktree[worktreeId] ?? []
-  const terminalTabs = state.tabsByWorktree[worktreeId] ?? []
+  const restoredFileId = state.activeFileIdByWorktree[rowKey] ?? null
+  const restoredBrowserTabId = state.activeBrowserTabIdByWorktree[rowKey] ?? null
+  const restoredTerminalTabId = state.activeTabIdByWorktree[rowKey] ?? null
+  const browserTabs = state.browserTabsByWorktree[rowKey] ?? []
+  const terminalTabs = state.tabsByWorktree[rowKey] ?? []
   const fileStillOpen = restoredFileId
     ? workspaceEditorFiles(state.openFiles, state.unifiedTabsByWorktree[worktreeId]).some(
         (file) => file.id === restoredFileId
@@ -58,11 +69,11 @@ export function deriveActiveSurfaceForWorktree(
   const terminalTabStillExists = restoredTerminalTabId
     ? terminalTabs.some((tab) => tab.id === restoredTerminalTabId)
     : false
-  const hasGroupOwnedSurface = groups.length > 0 || Boolean(state.layoutByWorktree[worktreeId])
+  const hasGroupOwnedSurface = groups.length > 0 || Boolean(state.layoutByWorktree[rowKey])
 
   const restoreLegacyType = options?.legacySelection === 'remembered-type'
   const restoredTabType = restoreLegacyType
-    ? (state.activeTabTypeByWorktree[worktreeId] ?? 'terminal')
+    ? (state.activeTabTypeByWorktree[rowKey] ?? 'terminal')
     : null
   // Browser/group focus may retain a remembered file; stale chat/simulator fallback must clear it.
   const keepRememberedFileUnderBrowser = restoredTabType === null || restoredTabType === 'browser'
@@ -130,7 +141,8 @@ export function deriveActiveSurfaceForWorktree(
 export function buildActiveSurfacePatch(
   state: ActiveSurfaceSourceState,
   worktreeId: string,
-  preferredGroupId?: string | null
+  preferredGroupId?: string | null,
+  rowKey: string = worktreeId
 ): Pick<
   AppState,
   | 'activeBrowserTabId'
@@ -142,27 +154,27 @@ export function buildActiveSurfacePatch(
   | 'activeTabType'
   | 'activeTabTypeByWorktree'
 > {
-  const derived = deriveActiveSurfaceForWorktree(state, worktreeId, preferredGroupId)
+  const derived = deriveActiveSurfaceForWorktree(state, worktreeId, preferredGroupId, { rowKey })
   return {
     activeBrowserTabId: derived.activeBrowserTabId,
     activeBrowserTabIdByWorktree: {
       ...state.activeBrowserTabIdByWorktree,
-      [worktreeId]: derived.activeBrowserTabId
+      [rowKey]: derived.activeBrowserTabId
     },
     activeFileId: derived.activeFileId,
     activeFileIdByWorktree: {
       ...state.activeFileIdByWorktree,
-      [worktreeId]: derived.activeFileId
+      [rowKey]: derived.activeFileId
     },
     activeTabId: derived.activeTabId,
     activeTabIdByWorktree: {
       ...state.activeTabIdByWorktree,
-      [worktreeId]: derived.activeTabId
+      [rowKey]: derived.activeTabId
     },
     activeTabType: derived.activeTabType,
     activeTabTypeByWorktree: {
       ...state.activeTabTypeByWorktree,
-      [worktreeId]: derived.activeTabType
+      [rowKey]: derived.activeTabType
     }
   }
 }
@@ -190,17 +202,17 @@ export function activeSurfacePatchMatchesState(
     | 'activeTabIdByWorktree'
     | 'activeTabType'
     | 'activeTabTypeByWorktree'
-  >
+  >,
+  rowKey: string = worktreeId
 ): boolean {
   return (
     state.activeBrowserTabId === patch.activeBrowserTabId &&
-    state.activeBrowserTabIdByWorktree[worktreeId] ===
-      patch.activeBrowserTabIdByWorktree[worktreeId] &&
+    state.activeBrowserTabIdByWorktree[rowKey] === patch.activeBrowserTabIdByWorktree[rowKey] &&
     state.activeFileId === patch.activeFileId &&
-    state.activeFileIdByWorktree[worktreeId] === patch.activeFileIdByWorktree[worktreeId] &&
+    state.activeFileIdByWorktree[rowKey] === patch.activeFileIdByWorktree[rowKey] &&
     state.activeTabId === patch.activeTabId &&
-    state.activeTabIdByWorktree[worktreeId] === patch.activeTabIdByWorktree[worktreeId] &&
+    state.activeTabIdByWorktree[rowKey] === patch.activeTabIdByWorktree[rowKey] &&
     state.activeTabType === patch.activeTabType &&
-    state.activeTabTypeByWorktree[worktreeId] === patch.activeTabTypeByWorktree[worktreeId]
+    state.activeTabTypeByWorktree[rowKey] === patch.activeTabTypeByWorktree[rowKey]
   )
 }

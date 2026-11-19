@@ -28,6 +28,7 @@ import {
   remoteServerPairingFailureText,
   type RemoteServerPairingFailureCode
 } from '../../../../shared/remote-runtime/pairing/remote-server-pairing-failure-copy'
+import { synchronizeDownstreamEnvironmentRows } from '../runtime-environment-pairing-downstream-sync'
 
 type VerifyAndAddRuntimeEnvironmentArgs = {
   name: string
@@ -119,6 +120,14 @@ export async function verifyAndAddRuntimeEnvironmentFromPairingCode(
   } catch (error) {
     return pairingSaveFailure(error, 'hostSaveFailed')
   }
+  // Fire-and-forget: the downstream view rows ride along after the pairing
+  // result, and a failed census must never gate the pairing itself (the sync
+  // resolves to a summary on every path).
+  void synchronizeDownstreamEnvironmentRows({
+    userDataPath,
+    gateway: outcome.environment,
+    capabilities: runtimeStatus.capabilities ?? []
+  })
   return {
     ok: true,
     environment: redactRuntimeEnvironment(outcome.environment),

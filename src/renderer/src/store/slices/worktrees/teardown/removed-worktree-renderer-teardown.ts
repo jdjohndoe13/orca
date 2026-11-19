@@ -9,7 +9,7 @@ import { forgetAgentStartupDeliveriesForTabs } from '@/lib/agent-session/launch/
 import { forgetForegroundTerminalTabs } from '@/components/terminal-pane/parking/retention/foreground-terminal-tabs'
 import { requestVirtualizedScrollAnchorRecord } from '@/lib/list-interaction/virtualized-scrolling/requestVirtualizedScrollAnchorRecord'
 import { disposeRemovedWorktreeParkedTerminalWatchers } from '../../../../components/terminal-pane/parking/output-watchers/terminal-parked-watcher-registry'
-import { detachedHeadAutoDerivedDisplayNames } from '../metadata/detached-head-display-name'
+import { forgetDetachedHeadAutoDerivedDisplayNamesForWorktree } from '../metadata/detached-head-display-name'
 import { applyRemoveWorktreeSuccessState } from './remove-worktree-store-cleanup'
 import { purgeOrphanedRuntimeSshProjects } from './orphaned-runtime-ssh-project-purge'
 import { deleteWorkspaceChatDrafts } from './removed-worktree-chat-drafts'
@@ -82,7 +82,7 @@ export async function tearDownRemovedWorktreeRendererState(args: {
   const tabIds = new Set(tabs.map((t) => t.id))
 
   // Why: this path deletes tabsByWorktree wholesale (not via closeTab), so purge the module-level tab maps here too.
-  detachedHeadAutoDerivedDisplayNames.delete(worktreeId)
+  forgetDetachedHeadAutoDerivedDisplayNamesForWorktree(worktreeId)
   forgetForegroundTerminalTabs(tabIds)
   forgetAgentStartupDeliveriesForTabs(tabIds)
 

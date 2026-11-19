@@ -23,6 +23,7 @@ import { useAppStore } from '@/store/index'
 import { resolveDropZone } from './tab-drop-zone'
 import { translate } from '@/i18n/i18n'
 import { activateAiVaultStructuredSession } from '@/lib/agent-session/open/activate-ai-vault-structured-session'
+import { ipcOrRuntimeTargetForHostId } from '@/runtime/rpc/targets/runtime-client-target'
 import type { TabDropZone } from './tab-drag-data'
 
 type PaneDropTarget = {
@@ -178,7 +179,13 @@ export default function AiVaultSessionDropLayer({
       }
       if (payload.structuredSession) {
         // Use Resume’s reveal path because activating a chat by ID alone cannot reopen its closed tab.
-        void activateAiVaultStructuredSession(payload)
+        // The session's own host rides along as the RPC transport: the drop must reach the host that
+        // published the chat, not whichever host the active stamp happens to name (STA-4343).
+        void activateAiVaultStructuredSession(
+          payload,
+          undefined,
+          ipcOrRuntimeTargetForHostId(payload.sessionExecutionHostId) ?? undefined
+        )
         return true
       }
 

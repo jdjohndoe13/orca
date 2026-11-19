@@ -1,9 +1,15 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
 
-import { getRepoExecutionHostId } from '../../../../../../shared/execution-host/execution-host'
+import {
+  getRepoExecutionHostId,
+  type ExecutionHostId
+} from '../../../../../../shared/execution-host/execution-host'
+import type { Repo } from '../../../../../../shared/repository/repo-types'
 import '@/diagnostics/crash-reporting/crash-diagnostics'
 import { recordRendererCrashBreadcrumb } from '../../../../diagnostics/crash-reporting/crash-breadcrumb-recorder'
 import { activateWorktreeFromSidebar } from '@/lib/workspace/activation/sidebar-worktree-activation'
+import { useAppStore } from '@/store/index'
+import { findRepoForHost } from '@/store/repos/repo-host-identity'
 import { isEventTargetInsideCurrentTarget } from './worktree-card-dom-events'
 import {
   noteWorktreeRowHoverEnd,
@@ -16,6 +22,30 @@ import type { useWorktreeCardLinkedDetails } from '../details/use-worktree-card-
 
 type Foundation = ReturnType<typeof useWorktreeCardFoundation>
 type LinkedDetails = ReturnType<typeof useWorktreeCardLinkedDetails>
+
+/**
+ * Which host a card click activates on.
+ *
+ * The row's `repo` prop comes from a first-wins `repoId` map, so when one repo id
+ * is registered on several hosts it can name a host the row is not on — and the
+ * card then activates the wrong workspace. Read the owner back out of the full
+ * catalog instead; an owner the catalog cannot resolve stays unnamed rather than
+ * guessing from the colliding prop.
+ */
+function resolveCardActivationHostId(
+  worktreeHostId: ExecutionHostId | undefined,
+  repoId: string,
+  repo: Repo | undefined
+): ExecutionHostId | undefined {
+  if (worktreeHostId) {
+    return worktreeHostId
+  }
+  const { repos, settings } = useAppStore.getState()
+  // Why: an unseeded catalog can't disprove the prop's host; the colliding-map
+  // bug only exists when the catalog holds the same repo id on several hosts.
+  const owner = repos?.length ? findRepoForHost(repos, repoId, { settings }) : repo
+  return owner ? getRepoExecutionHostId(owner) : undefined
+}
 
 export function useWorktreeCardActivationActions({
   worktree,
@@ -95,7 +125,7 @@ export function useWorktreeCardActivationActions({
       onImmediateActivate?.(worktree.id, activationRowKey)
       void activateWorktreeFromSidebar(
         worktree.id,
-        worktree.hostId ?? (repo ? getRepoExecutionHostId(repo) : undefined)
+        resolveCardActivationHostId(worktree.hostId, worktree.repoId, repo)
       )
       onActivate?.()
     },
