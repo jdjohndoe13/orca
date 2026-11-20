@@ -76,6 +76,8 @@ import { darkSwitchRuntimeCapabilities } from '../construction/dark-switch-runti
 import { supportsDurableTerminalPromptDelivery } from '../terminal/input/durable-terminal-prompt-delivery-support'
 import { RuntimeWorkspaceChangeEvents } from '../workspaces/catalog/runtime-workspace-change-events'
 import { BOTS_ITEM_SET_VERSION_RUNTIME_CAPABILITY } from '../../../shared/bots/bot-item-version-capability'
+import { OPEN_ACCESS_RUNTIME_CAPABILITY } from '../../../shared/remote-runtime/open-access/open-access'
+import { openAccessModeEnabledForHost } from '../rpc/server/pairing/open-access-mode'
 
 export abstract class OrcaRuntimeWithGetStatus extends RuntimeWorkspaceChangeEvents {
   /** Graph readiness alone, for the small liveness probe a restarting CLI polls. */
@@ -163,6 +165,11 @@ export abstract class OrcaRuntimeWithGetStatus extends RuntimeWorkspaceChangeEve
       capabilities.push(DESKTOP_BROWSER_BRIDGE_RUNTIME_CAPABILITY)
     }
     capabilities.push(...darkSwitchRuntimeCapabilities())
+    // Why: clients offer IP-only pairing without guessing only when the host actually accepts
+    // any access key right now; read per status.get so the toggle needs no restart.
+    if (openAccessModeEnabledForHost()) {
+      capabilities.push(OPEN_ACCESS_RUNTIME_CAPABILITY)
+    }
     // Dev/serve installs may lack out/mobile-web; advertise downloads only where the install ships it.
     if (getBundledMobileWebBundleRoot()) {
       capabilities.push(MOBILE_WEB_BUNDLE_CAPABILITY)

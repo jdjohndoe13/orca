@@ -1,6 +1,12 @@
 import { Loader2, Plus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { parseHostAccessLink } from '../../../../shared/remote-runtime/pairing/remote-pairing-address'
+import {
+  applyDeviceTokenOverride,
+  applyEndpointOverride,
+  normalizeOpenAccessEndpoint
+} from '../../../../shared/remote-runtime/open-access/open-access-link'
+import type { RemotePairingEndpointKind } from '../../../../shared/remote-runtime/pairing/remote-pairing-address'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
 import { Checkbox } from '../ui/checkbox'
@@ -11,7 +17,10 @@ import {
   translateHostAccessLinkError,
   translateRemotePairingEndpointKind
 } from '@/lib/remote-pairing/remote-pairing-copy'
-import { defaultServerNameForAccessLink } from '../../../../shared/remote-runtime/host-catalog/runtime-host-default-name'
+import {
+  defaultServerNameForAccessLink,
+  defaultServerNameForOpenAccessAddress
+} from '../../../../shared/remote-runtime/host-catalog/runtime-host-default-name'
 import {
   RuntimeHostAccessFailureAlert,
   type RuntimeHostAccessFailure
@@ -21,6 +30,13 @@ import {
 const HEADLESS_SERVE_COMMAND = 'orca serve --pairing-address <address>'
 
 const NO_TAKEN_NAMES: readonly { name: string }[] = []
+
+/** What the form submits: the link plus the two optional open-access overrides. */
+export type RuntimeHostAccessSubmission = {
+  allowLoopback: boolean
+  endpointOverride?: string
+  deviceTokenOverride?: string
+}
 
 type RuntimeHostAccessFormProps = {
   name: string
@@ -32,7 +48,13 @@ type RuntimeHostAccessFormProps = {
   onNameChange: (value: string) => void
   onAccessLinkChange: (value: string) => void
   onCancel: () => void
-  onSubmit: (allowLoopback: boolean) => void
+  onSubmit: (submission: RuntimeHostAccessSubmission) => void
+}
+
+/** The endpoint the form will actually dial, after the optional overrides win. */
+type EffectiveEndpoint = {
+  displayEndpoint: string
+  endpointKind: RemotePairingEndpointKind
 }
 
 export function RuntimeHostAccessForm({
@@ -48,12 +70,53 @@ export function RuntimeHostAccessForm({
 }: RuntimeHostAccessFormProps): React.JSX.Element {
   const t = useTranslate()
   const [allowLoopback, setAllowLoopback] = useState(false)
+  const [address, setAddress] = useState('')
+  const [accessKey, setAccessKey] = useState('')
+  const trimmedAddress = address.trim()
+  const trimmedAccessKey = accessKey.trim()
+  const hasLink = accessLink.trim() !== ''
   const parsed = useMemo(() => parseHostAccessLink(accessLink), [accessLink])
+  const openAccessMode = !hasLink && trimmedAddress !== ''
+  const openAccessEndpoint = useMemo(
+    () => (openAccessMode ? normalizeOpenAccessEndpoint(trimmedAddress) : null),
+    [openAccessMode, trimmedAddress]
+  )
+  const addressError =
+    trimmedAddress !== '' &&
+    (openAccessMode
+      ? !openAccessEndpoint?.ok
+      : parsed.ok && !applyEndpointOverride(parsed.value, trimmedAddress).ok)
+  // Why the same rule as main: the override wins over the link's endpoint, so the preview and the
+  // loopback warning must describe the endpoint Orca will actually connect to.
+  const effective = useMemo<EffectiveEndpoint | null>(() => {
+    if (openAccessMode) {
+      return openAccessEndpoint?.ok
+        ? {
+            displayEndpoint: openAccessEndpoint.value.displayEndpoint,
+            endpointKind: openAccessEndpoint.value.endpointKind
+          }
+        : null
+    }
+    if (!parsed.ok || addressError) {
+      return null
+    }
+    const overridden = applyEndpointOverride(
+      applyDeviceTokenOverride(parsed.value, trimmedAccessKey),
+      trimmedAddress
+    )
+    return overridden.ok
+      ? {
+          displayEndpoint: overridden.value.displayEndpoint,
+          endpointKind: overridden.value.endpointKind
+        }
+      : null
+  }, [addressError, openAccessEndpoint, openAccessMode, parsed, trimmedAccessKey, trimmedAddress])
+  // The tunnel override applies to a link only; the IP-only mode names the address directly.
   const tunnelOverrideEnabled =
-    allowLoopback && parsed.ok && parsed.value.endpointKind === 'loopback'
+    allowLoopback && effective?.endpointKind === 'loopback' && parsed.ok && !openAccessMode
   const loopbackBlocked =
-    parsed.ok && parsed.value.endpointKind === 'loopback' && !tunnelOverrideEnabled
-  const inputError = accessLink.trim() !== '' && !parsed.ok
+    effective?.endpointKind === 'loopback' && !tunnelOverrideEnabled && !openAccessMode
+  const inputError = hasLink && !parsed.ok
   const describedBy = failure
     ? 'runtime-server-verification-error'
     : inputError
@@ -61,8 +124,15 @@ export function RuntimeHostAccessForm({
       : loopbackBlocked
         ? 'runtime-server-loopback-error'
         : 'runtime-server-access-link-help'
-  const canSubmit = parsed.ok && !loopbackBlocked && !busy
-  const defaultName = defaultServerNameForAccessLink(accessLink, takenNames)
+  const canSubmit =
+    !busy &&
+    !addressError &&
+    (openAccessMode
+      ? openAccessEndpoint?.ok === true
+      : parsed.ok && !loopbackBlocked)
+  const defaultName = openAccessMode
+    ? defaultServerNameForOpenAccessAddress(trimmedAddress, takenNames)
+    : defaultServerNameForAccessLink(accessLink, takenNames)
 
   return (
     <form
@@ -70,7 +140,11 @@ export function RuntimeHostAccessForm({
       onSubmit={(event) => {
         event.preventDefault()
         if (canSubmit) {
-          onSubmit(tunnelOverrideEnabled)
+          onSubmit({
+            allowLoopback: tunnelOverrideEnabled,
+            ...(trimmedAddress !== '' ? { endpointOverride: trimmedAddress } : {}),
+            ...(trimmedAccessKey !== '' ? { deviceTokenOverride: trimmedAccessKey } : {})
+          })
         }
       }}
     >
@@ -108,23 +182,87 @@ export function RuntimeHostAccessForm({
         ) : null}
       </div>
 
-      {parsed.ok ? (
+      <div className="space-y-2">
+        <Label htmlFor="runtime-server-address">
+          {t('auto.components.settings.RuntimeHostAccessForm.addressLabel', 'Address')}{' '}
+          <span className="font-normal text-muted-foreground">
+            {t('auto.components.settings.RuntimeHostAccessForm.optional', '(optional)')}
+          </span>
+        </Label>
+        <Input
+          id="runtime-server-address"
+          aria-invalid={addressError}
+          value={address}
+          disabled={busy}
+          onChange={(event) => {
+            setAllowLoopback(false)
+            setAddress(event.target.value)
+          }}
+          placeholder={t(
+            'auto.components.settings.RuntimeHostAccessForm.addressPlaceholder',
+            'e.g. 192.168.250.29:6768'
+          )}
+          className="min-w-0 font-mono"
+        />
+        <p className="text-xs text-muted-foreground">
+          {t(
+            'auto.components.settings.RuntimeHostAccessForm.addressHelp',
+            'Overrides the link destination. With no link, connects to a host that accepts any access key.'
+          )}
+        </p>
+        {addressError ? (
+          <p className="text-xs text-destructive">
+            {t(
+              'auto.components.settings.RuntimeHostAccessForm.addressError',
+              'Enter an address like 192.168.250.29:6768 or ws://192.168.250.29:6768.'
+            )}
+          </p>
+        ) : null}
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="runtime-server-access-key">
+          {t('auto.components.settings.RuntimeHostAccessForm.accessKeyLabel', 'Access key')}{' '}
+          <span className="font-normal text-muted-foreground">
+            {t('auto.components.settings.RuntimeHostAccessForm.optional', '(optional)')}
+          </span>
+        </Label>
+        <Input
+          id="runtime-server-access-key"
+          value={accessKey}
+          disabled={busy}
+          onChange={(event) => setAccessKey(event.target.value)}
+          placeholder={t(
+            'auto.components.settings.RuntimeHostAccessForm.accessKeyPlaceholder',
+            'e.g. default_orca_access_key'
+          )}
+          className="min-w-0 font-mono"
+        />
+        <p className="text-xs text-muted-foreground">
+          {t(
+            'auto.components.settings.RuntimeHostAccessForm.accessKeyHelp',
+            'Overrides the link’s access key, for example the host’s fixed default key.'
+          )}
+        </p>
+      </div>
+
+      {effective ? (
         <div className="space-y-1 rounded-md border border-border/60 bg-background/60 px-3 py-2">
           <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
             <span>
               {t('auto.components.settings.RuntimeHostAccessForm.destination', 'Link destination')}
             </span>
             <Badge variant="outline">
-              {translateRemotePairingEndpointKind(parsed.value.endpointKind, t)}
+              {translateRemotePairingEndpointKind(effective.endpointKind, t)}
             </Badge>
           </div>
           <div className="font-mono text-sm" aria-live="polite">
-            {parsed.value.displayEndpoint}
+            {effective.displayEndpoint}
           </div>
         </div>
       ) : null}
 
-      {loopbackBlocked && parsed.ok ? (
+      {loopbackBlocked ? (
         <div
           id="runtime-server-loopback-error"
           role="alert"
@@ -140,7 +278,7 @@ export function RuntimeHostAccessForm({
             {t(
               'auto.components.settings.RuntimeHostAccessForm.loopbackDescription',
               'It uses {{endpoint}}, which points back to the device opening the link—not the other computer that created it.',
-              { endpoint: parsed.value.displayEndpoint }
+              { endpoint: effective?.displayEndpoint ?? '' }
             )}
           </p>
           <p className="text-xs text-muted-foreground">
@@ -152,7 +290,7 @@ export function RuntimeHostAccessForm({
         </div>
       ) : null}
 
-      {parsed.ok && parsed.value.endpointKind === 'loopback' ? (
+      {effective?.endpointKind === 'loopback' && !openAccessMode ? (
         <label className="flex items-start gap-2 text-sm">
           <Checkbox
             className="mt-0.5"
@@ -200,7 +338,7 @@ export function RuntimeHostAccessForm({
         <RuntimeHostAccessFailureAlert
           id="runtime-server-verification-error"
           failure={failure}
-          endpoint={parsed.ok ? parsed.value.displayEndpoint : null}
+          endpoint={effective?.displayEndpoint ?? null}
         />
       ) : null}
 

@@ -1,4 +1,5 @@
 import type { WebSocket } from 'ws'
+import { join } from 'node:path'
 import type { TerminalStreamFrame } from '../../../../shared/terminal/stream/terminal-stream-protocol'
 import { DeviceRegistry } from './pairing/device-registry'
 import { loadOrCreateE2EEKeypair, type E2EEKeypair } from './pairing/e2ee-keypair'
@@ -10,6 +11,7 @@ import {
   pairingUnavailable,
   type PairingIdentityInitialization
 } from './runtime-rpc-pairing-types'
+import { OPEN_ACCESS_MODE_FILENAME } from '../../../../shared/remote-runtime/open-access/open-access'
 
 export class RuntimeRpcBinaryRouting extends RuntimeRpcState {
   protected registerBinaryStreamHandler(
@@ -104,7 +106,11 @@ export class RuntimeRpcBinaryRouting extends RuntimeRpcState {
     }
     let deviceRegistry: DeviceRegistry
     try {
-      deviceRegistry = new DeviceRegistry(this.userDataPath)
+      deviceRegistry = new DeviceRegistry(
+        this.userDataPath,
+        // The registry reads the mode file live, so the share dialog's toggle needs no restart.
+        join(this.userDataPath, OPEN_ACCESS_MODE_FILENAME)
+      )
     } catch (error) {
       console.error('[runtime] Failed to initialize pairing registry:', error)
       return {

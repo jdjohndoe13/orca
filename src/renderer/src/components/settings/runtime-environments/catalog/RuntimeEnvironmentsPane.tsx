@@ -263,7 +263,7 @@ export function RuntimeEnvironmentsPane({
         }}
         onClose={closeAddServerForm}
         onCloseAutoFocus={restoreAddFocus}
-        onSubmit={(allowLoopback) => void addEnvironment(allowLoopback)}
+        onSubmit={(submission) => void addEnvironment(submission)}
       />
 
       {managedCatalog.api ? (

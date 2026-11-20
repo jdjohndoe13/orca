@@ -7,6 +7,10 @@ import {
 const pendingSubscriptions = new Map<string, WebRuntimeSubscriptionRegistration>()
 import type { PreloadApi } from '../../../../../preload/api-types'
 import { parseHostAccessLink } from '../../../../../shared/remote-runtime/pairing/remote-pairing-address'
+import {
+  applyDeviceTokenOverride,
+  applyEndpointOverride
+} from '../../../../../shared/remote-runtime/open-access/open-access-link'
 import { verifyRemotePairingRuntimeStatus } from '../../../../../shared/remote-runtime/pairing/remote-pairing-verification'
 import type { RuntimeRpcResponse } from '../../../../../shared/remote-runtime/rpc/runtime-rpc-envelope'
 import type { RuntimeStatus } from '../../../../../shared/remote-runtime/session-graph/runtime-session-contracts'
@@ -61,7 +65,19 @@ export function createRuntimeEnvironmentsApi(): PreloadApi['runtimeEnvironments'
       saveStoredWebRuntimeEnvironment(webRuntimeState.activeEnvironment)
       return { environment: redactStoredWebRuntimeEnvironment(webRuntimeState.activeEnvironment) }
     },
-    verifyAndAddFromPairingCode: async ({ name, pairingCode, allowLoopback }) => {
+    verifyAndAddFromPairingCode: async ({ name, pairingCode, allowLoopback, endpointOverride, deviceTokenOverride }) => {
+      // Why first: the browser cannot TOFU-pin (its key schedule needs the pinned key), so the
+      // IP-only mode is desktop-only; say so rather than dial a placeholder key and fail obscurely.
+      if (pairingCode.trim() === '' && (endpointOverride?.trim() ?? '') !== '') {
+        return {
+          ok: false,
+          kind: 'access-link-invalid' as const,
+          message: translate(
+            'auto.web.webPreloadApi.openAccessPairingUnavailable',
+            'Connecting by address without an access link is not available in the browser. Pair with a link.'
+          )
+        }
+      }
       const parsed = parseHostAccessLink(pairingCode)
       if (!parsed.ok) {
         return {
@@ -70,7 +86,16 @@ export function createRuntimeEnvironmentsApi(): PreloadApi['runtimeEnvironments'
           message: translateHostAccessLinkError(parsed.kind)
         }
       }
-      if (parsed.value.endpointKind === 'loopback' && !allowLoopback) {
+      const link = applyDeviceTokenOverride(parsed.value, deviceTokenOverride?.trim() ?? '')
+      const withEndpoint = applyEndpointOverride(link, endpointOverride?.trim() ?? '')
+      if (!withEndpoint.ok) {
+        return {
+          ok: false,
+          kind: 'access-link-invalid',
+          message: withEndpoint.message
+        }
+      }
+      if (withEndpoint.value.endpointKind === 'loopback' && !allowLoopback) {
         return {
           ok: false,
           kind: 'host-unreachable',
@@ -83,7 +108,7 @@ export function createRuntimeEnvironmentsApi(): PreloadApi['runtimeEnvironments'
       let client: WebRuntimeClient | null = null
       let runtimeStatus: RuntimeStatus
       try {
-        client = new WebRuntimeClient(pairedRuntimeConnectionFromOffer(parsed.value.pairing))
+        client = new WebRuntimeClient(pairedRuntimeConnectionFromOffer(withEndpoint.value.pairing))
         const response = (await client.call('status.get', undefined, {
           timeoutMs: 15_000
         })) as RuntimeRpcResponse<RuntimeStatus>
@@ -126,17 +151,18 @@ export function createRuntimeEnvironmentsApi(): PreloadApi['runtimeEnvironments'
           message: translate(
             'auto.web.webPreloadApi.remotePairingUnreachable',
             'Cannot reach Orca at {{endpoint}}.',
-            { endpoint: parsed.value.displayEndpoint }
+            { endpoint: withEndpoint.value.displayEndpoint }
           )
         }
       } finally {
         client?.close()
       }
-      const usesSshTunnel = parsed.value.endpointKind === 'loopback' && allowLoopback === true
+      const usesSshTunnel =
+        withEndpoint.value.endpointKind === 'loopback' && allowLoopback === true
       const nextEnvironment = {
         ...createStoredWebRuntimeEnvironment({
           name,
-          offer: parsed.value.pairing,
+          offer: withEndpoint.value.pairing,
           previousEnvironment: webRuntimeState.activeEnvironment,
           ...(usesSshTunnel ? { connectionDependency: 'ssh-tunnel' as const } : {})
         }),

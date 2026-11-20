@@ -7,6 +7,11 @@ import { EMPTY_FORM, type EditingTarget } from '../../../ssh-host-form/ssh-targe
 import type { SshConfigHostSummary } from '../../../../../../shared/remote-runtime/ssh/ssh-types'
 import { parseHostAccessLink } from '../../../../../../shared/remote-runtime/pairing/remote-pairing-address'
 import {
+  applyDeviceTokenOverride,
+  applyEndpointOverride,
+  normalizeOpenAccessEndpoint
+} from '../../../../../../shared/remote-runtime/open-access/open-access-link'
+import {
   translateHostAccessLinkError,
   translateRemotePairingFailureDescription
 } from '@/lib/remote-pairing/remote-pairing-copy'
@@ -61,15 +66,68 @@ export function AddRemoteHostDialog({
   const [serverName, setServerName] = useState('')
   const [pairingCode, setPairingCode] = useState('')
   const [allowLoopback, setAllowLoopback] = useState(false)
+  const [serverAddress, setServerAddress] = useState('')
+  const [serverAccessKey, setServerAccessKey] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const configSearchGeneration = useRef(0)
   const configSearchQuery = useRef('')
   const configResolveGeneration = useRef(0)
   const parsedServerLink = useMemo(() => parseHostAccessLink(pairingCode), [pairingCode])
+  const trimmedServerAddress = serverAddress.trim()
+  const trimmedServerAccessKey = serverAccessKey.trim()
+  const hasServerLink = pairingCode.trim() !== ''
+  const openAccessMode = !hasServerLink && trimmedServerAddress !== ''
+  const openAccessEndpoint = useMemo(
+    () => (openAccessMode ? normalizeOpenAccessEndpoint(trimmedServerAddress) : null),
+    [openAccessMode, trimmedServerAddress]
+  )
+  const serverAddressError =
+    trimmedServerAddress !== '' &&
+    (openAccessMode
+      ? !openAccessEndpoint?.ok
+      : parsedServerLink.ok &&
+        !applyEndpointOverride(parsedServerLink.value, trimmedServerAddress).ok)
+  // Why the same rule as main: the override wins over the link's endpoint for the preview and the
+  // loopback check; with no link at all, the address itself is the destination.
+  const effectiveServerEndpoint = useMemo(() => {
+    if (openAccessMode) {
+      return openAccessEndpoint?.ok
+        ? {
+            displayEndpoint: openAccessEndpoint.value.displayEndpoint,
+            endpointKind: openAccessEndpoint.value.endpointKind
+          }
+        : null
+    }
+    if (!parsedServerLink.ok || serverAddressError) {
+      return null
+    }
+    const overridden = applyEndpointOverride(
+      applyDeviceTokenOverride(parsedServerLink.value, trimmedServerAccessKey),
+      trimmedServerAddress
+    )
+    return overridden.ok
+      ? {
+          displayEndpoint: overridden.value.displayEndpoint,
+          endpointKind: overridden.value.endpointKind
+        }
+      : null
+  }, [
+    openAccessEndpoint,
+    openAccessMode,
+    parsedServerLink,
+    serverAddressError,
+    trimmedServerAccessKey,
+    trimmedServerAddress
+  ])
+  // Why the relaxed check: an empty link with an address is the connect-by-IP mode; only "no link
+  // and no address" is unusable.
   const serverFormCanSubmit =
     serverName.trim() !== '' &&
-    parsedServerLink.ok &&
-    (parsedServerLink.value.endpointKind !== 'loopback' || allowLoopback)
+    !serverAddressError &&
+    (openAccessMode
+      ? openAccessEndpoint?.ok === true
+      : parsedServerLink.ok &&
+        (effectiveServerEndpoint?.endpointKind !== 'loopback' || allowLoopback))
   const setSshTargetsMetadata = useAppStore((s) => s.setSshTargetsMetadata)
   const recordSshRepoReadoptions = useAppStore((s) => s.recordSshRepoReadoptions)
   const setRuntimeEnvironments = useAppStore((s) => s.setRuntimeEnvironments)
@@ -100,6 +158,8 @@ export function AddRemoteHostDialog({
     setServerName('')
     setPairingCode('')
     setAllowLoopback(false)
+    setServerAddress('')
+    setServerAccessKey('')
   }
 
   const close = () => {
@@ -246,7 +306,9 @@ export function AddRemoteHostDialog({
   const saveRemoteServer = async () => {
     const trimmedName = serverName.trim()
     const trimmedPairingCode = pairingCode.trim()
-    if (!trimmedName || !trimmedPairingCode) {
+    // Why the relaxed check: an empty link with an address is the connect-by-IP mode; the main
+    // process builds the open-access offer there, so only "no link and no address" is unusable.
+    if (!trimmedName || (trimmedPairingCode === '' && trimmedServerAddress === '')) {
       toast.error(
         t(
           'auto.components.sidebar.AddRemoteHostDialog.serverFieldsRequired',
@@ -255,11 +317,20 @@ export function AddRemoteHostDialog({
       )
       return
     }
-    if (!parsedServerLink.ok) {
+    if (trimmedPairingCode !== '' && !parsedServerLink.ok) {
       toast.error(translateHostAccessLinkError(parsedServerLink.kind))
       return
     }
-    if (parsedServerLink.value.endpointKind === 'loopback' && !allowLoopback) {
+    if (serverAddressError) {
+      toast.error(
+        t(
+          'auto.components.sidebar.AddRemoteHostDialog.addressError',
+          'Enter an address like 192.168.250.29:6768 or ws://192.168.250.29:6768.'
+        )
+      )
+      return
+    }
+    if (effectiveServerEndpoint?.endpointKind === 'loopback' && !allowLoopback) {
       toast.error(
         t(
           'auto.components.sidebar.AddRemoteHostDialog.loopbackBlocked',
@@ -276,7 +347,11 @@ export function AddRemoteHostDialog({
           const result = await window.api.runtimeEnvironments.verifyAndAddFromPairingCode({
             name: trimmedName,
             pairingCode: trimmedPairingCode,
-            allowLoopback
+            allowLoopback,
+            ...(trimmedServerAddress !== '' ? { endpointOverride: trimmedServerAddress } : {}),
+            ...(trimmedServerAccessKey !== ''
+              ? { deviceTokenOverride: trimmedServerAccessKey }
+              : {})
           })
           if (!result.ok) {
             toast.error(
@@ -284,7 +359,7 @@ export function AddRemoteHostDialog({
                 ? remoteServerPairingFailureMessage(result)
                 : translateRemotePairingFailureDescription(
                     result.kind,
-                    parsedServerLink.value.displayEndpoint
+                    effectiveServerEndpoint?.displayEndpoint ?? ''
                   )
             )
             return
@@ -391,6 +466,15 @@ export function AddRemoteHostDialog({
               setAllowLoopback(false)
             }}
             onAllowLoopbackChange={setAllowLoopback}
+            address={serverAddress}
+            onAddressChange={(value) => {
+              setAllowLoopback(false)
+              setServerAddress(value)
+            }}
+            accessKey={serverAccessKey}
+            onAccessKeyChange={setServerAccessKey}
+            addressError={serverAddressError}
+            effectiveEndpoint={effectiveServerEndpoint}
             onSubmit={() => void saveRemoteServer()}
             onCancel={close}
           />

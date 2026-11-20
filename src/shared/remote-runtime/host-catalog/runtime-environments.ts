@@ -101,7 +101,8 @@ export function createEnvironmentFromPairingOffer(args: {
         label: 'WebSocket',
         endpoint: args.offer.endpoint,
         deviceToken: args.offer.deviceToken,
-        publicKeyB64: args.offer.publicKeyB64
+        publicKeyB64: args.offer.publicKeyB64,
+        ...(args.offer.openAccess ? { openAccess: true as const } : {})
       }
     ],
     preferredEndpointId: endpointId
@@ -179,7 +180,8 @@ export function getPreferredPairedRuntimeConnection(
     endpoint: endpoint.endpoint,
     deviceToken: endpoint.deviceToken,
     publicKeyB64: endpoint.publicKeyB64,
-    pairedDeviceId: environment.pairedDeviceId
+    pairedDeviceId: environment.pairedDeviceId,
+    openAccess: endpoint.openAccess
   })
 }
 
@@ -190,7 +192,8 @@ export function getPreferredPairingOffer(environment: PreferredEndpointSource): 
     endpoint: endpoint.endpoint,
     deviceToken: endpoint.deviceToken,
     publicKeyB64: endpoint.publicKeyB64,
-    ...(environment.pairedDeviceId ? { pairedDeviceId: environment.pairedDeviceId } : {})
+    ...(environment.pairedDeviceId ? { pairedDeviceId: environment.pairedDeviceId } : {}),
+    ...(endpoint.openAccess ? { openAccess: true as const } : {})
   }
 }
 

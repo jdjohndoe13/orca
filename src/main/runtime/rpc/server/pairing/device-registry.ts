@@ -40,8 +40,47 @@ import {
   type TokenDeviceEntry
 } from './device-entry'
 import type { MobilePushRegistration } from '../../../../../shared/notifications/mobile-push-contract'
+import {
+  OPEN_ACCESS_DEVICE_ID,
+  OPEN_ACCESS_DEVICE_NAME
+} from '../../../../../shared/remote-runtime/open-access/open-access'
+import { readOpenAccessModeFile } from './open-access-mode'
 
 export class DeviceRegistry extends DeviceRegistrySightings {
+  /** Path of the open-access mode file; null when this host has no open-access support wired. */
+  private readonly openAccessPath: string | null
+
+  constructor(userDataPath: string, openAccessModePath?: string) {
+    super(userDataPath)
+    this.openAccessPath = openAccessModePath ?? null
+  }
+
+  /**
+   * Why: the open-access principal is rebuilt from the presented token on every check and never
+   * enters `this.devices`, so it cannot be persisted, listed, or revoked as a row — toggling the
+   * mode file off is the only revoke, and it takes effect on the next request.
+   */
+  private openAccessDevice(token: string): DeviceEntry {
+    return {
+      deviceId: OPEN_ACCESS_DEVICE_ID,
+      name: OPEN_ACCESS_DEVICE_NAME,
+      token,
+      scope: 'runtime',
+      pairedAt: 0,
+      lastSeenAt: 0,
+      pairingReach: 'network',
+      grants: []
+    }
+  }
+
+  /** The mode file says on; read live per auth path so the toggle needs no restart. */
+  private openAccessEnabled(): boolean {
+    return (
+      this.openAccessPath !== null &&
+      readOpenAccessModeFile(this.openAccessPath).acceptAnyAccessKey
+    )
+  }
+
   addDevice(
     name: string,
     scope: DeviceScope = 'mobile',
@@ -237,12 +276,25 @@ export class DeviceRegistry extends DeviceRegistrySightings {
   validateToken(token: string): DeviceEntry | null {
     this.adoptExternalEdits()
     const device = findTokenDevice(this.devices, token, this.seenDeviceIds)
-    return device && isExchangeSignIn(device, token) ? this.retirePairingToken(device) : device
+    if (device) {
+      return isExchangeSignIn(device, token) ? this.retirePairingToken(device) : device
+    }
+    // Open-access LAN mode: any token presentation authenticates as the synthetic principal.
+    // Nothing is persisted — the synthetic row never enters this.devices, so the registry file
+    // is untouched and the toggle itself is the only revocation.
+    return token && this.openAccessEnabled() ? this.openAccessDevice(token) : null
   }
 
   /** Durable before the reply, so a client that stores the replacement can always sign in with it. */
   exchangePairingTicket(deviceId: string, presentedToken: string, exchangeToken: string): void {
     this.adoptExternalEdits()
+    // A socket whose presented token resolved to the synthetic open-access principal has no
+    // row to swap its token on: exchanging is a no-op, not a failure — the client keeps its
+    // token on any error anyway. The synthetic id is only ever minted by the open-access auth
+    // path, so it cannot collide with a real row (those ids are UUIDs).
+    if (deviceId === OPEN_ACCESS_DEVICE_ID && this.openAccessEnabled()) {
+      return
+    }
     const next = planTicketExchange(this.devices, deviceId, presentedToken, exchangeToken)
     this.devices = this.save(next, { durable: true })
   }
@@ -327,6 +379,15 @@ export class DeviceRegistry extends DeviceRegistrySightings {
 
   resolveAuthenticatedPrincipal(principal: AuthenticatedPrincipalBinding): DeviceEntry | null {
     this.adoptExternalEdits()
+    if (principal.deviceId === OPEN_ACCESS_DEVICE_ID) {
+      // Why: the socket authenticated as the synthetic principal; its per-request recheck
+      // succeeds only while the mode file still says on, so toggling off revokes live
+      // sockets immediately. The binding's token is the credential the E2EE handshake proved.
+      // The synthetic row carries no credentialRevision, so any binding revision matches.
+      return this.openAccessEnabled() && principal.deviceToken !== undefined
+        ? this.openAccessDevice(principal.deviceToken)
+        : null
+    }
     return findPrincipalDevice(this.devices, principal)
   }
 }

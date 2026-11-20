@@ -18,6 +18,12 @@ export type PairedE2EEV2ClientSessionArgs = {
   relayHostId?: string
   clientNonce?: Uint8Array
   clientKeyPair?: PairedE2EEKeyPair
+  /**
+   * Open-access (accept-any-key) dial: the link carries no host key, so the first ready's key is
+   * pinned instead of compared. Only the open-access placeholder path may set this; the token stays
+   * an authenticated payload, so a MITM still cannot finish auth without the host's key.
+   */
+  trustOnFirstUse?: boolean
 }
 
 export class PairedE2EEV2ClientSession {
@@ -30,7 +36,9 @@ export class PairedE2EEV2ClientSession {
   private constructor(
     private readonly primitives: PairedE2EEPrimitives,
     private readonly clientSecretKey: Uint8Array,
-    private readonly pinnedDesktopPublicKey: Uint8Array,
+    // Reassigned only by a trust-on-first-use accept, which pins the presented key.
+    private pinnedDesktopPublicKey: Uint8Array | null,
+    private readonly trustOnFirstUse: boolean,
     hello: MobileE2EEV2Hello
   ) {
     this.hello = hello
@@ -46,7 +54,10 @@ export class PairedE2EEV2ClientSession {
     return new PairedE2EEV2ClientSession(
       primitives,
       keyPair.secretKey,
-      primitives.publicKeyFromBase64(args.desktopPublicKeyB64),
+      args.trustOnFirstUse
+        ? decodeDesktopKeyOrNone(primitives, args.desktopPublicKeyB64)
+        : primitives.publicKeyFromBase64(args.desktopPublicKeyB64),
+      args.trustOnFirstUse === true,
       {
         type: 'e2ee_hello',
         v: 2,
@@ -66,14 +77,23 @@ export class PairedE2EEV2ClientSession {
 
   acceptReady(ready: unknown): boolean {
     const handshake = validateMobileE2EEV2Handshake(this.hello, ready)
-    if (!handshake || !equalBytes(handshake.desktopPublicKey, this.pinnedDesktopPublicKey)) {
+    if (!handshake) {
       return false
     }
+    // Why TOFU pins rather than compares: the open-access offer carries no key to check against;
+    // the auth token is checked inside the keyed channel, so a wrong key fails auth, not pairing.
+    const desktopPublicKey = this.trustOnFirstUse
+      ? handshake.desktopPublicKey
+      : this.pinnedDesktopPublicKey &&
+          equalBytes(handshake.desktopPublicKey, this.pinnedDesktopPublicKey)
+        ? this.pinnedDesktopPublicKey
+        : null
+    if (!desktopPublicKey) {
+      return false
+    }
+    this.pinnedDesktopPublicKey = desktopPublicKey
     this.schedule = this.primitives.deriveV2KeySchedule({
-      sharedSecret: this.primitives.deriveSharedKey(
-        this.clientSecretKey,
-        this.pinnedDesktopPublicKey
-      ),
+      sharedSecret: this.primitives.deriveSharedKey(this.clientSecretKey, desktopPublicKey),
       transcript: encodeMobileE2EEV2Transcript(handshake),
       clientNonce: handshake.clientNonce,
       desktopNonce: handshake.desktopNonce
@@ -177,4 +197,17 @@ function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
     difference |= left[index]! ^ right[index]!
   }
   return difference === 0
+}
+
+// Why lenient: a TOFU offer carries a placeholder instead of a key; a real key that fails to
+// decode still reads as "no key", which the accept path then pins from the ready.
+function decodeDesktopKeyOrNone(
+  primitives: PairedE2EEPrimitives,
+  desktopPublicKeyB64: string
+): Uint8Array | null {
+  try {
+    return primitives.publicKeyFromBase64(desktopPublicKeyB64)
+  } catch {
+    return null
+  }
 }

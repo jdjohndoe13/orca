@@ -2,6 +2,7 @@ import { DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/co
 import { Button } from '@/components/ui/button'
 import { useTranslate } from '@/i18n/use-translate'
 import type { ParseHostAccessLinkResult } from '../../../../../../shared/remote-runtime/pairing/remote-pairing-address'
+import type { RemotePairingEndpointKind } from '../../../../../../shared/remote-runtime/pairing/remote-pairing-address'
 import { RemoteServerFields } from './AddRemoteHostFields'
 
 export function AddRemoteHostServerFormPanel({
@@ -14,6 +15,12 @@ export function AddRemoteHostServerFormPanel({
   onNameChange,
   onPairingCodeChange,
   onAllowLoopbackChange,
+  address,
+  onAddressChange,
+  accessKey,
+  onAccessKeyChange,
+  addressError,
+  effectiveEndpoint,
   onSubmit,
   onCancel
 }: {
@@ -26,6 +33,12 @@ export function AddRemoteHostServerFormPanel({
   onNameChange: (value: string) => void
   onPairingCodeChange: (value: string) => void
   onAllowLoopbackChange: (value: boolean) => void
+  address: string
+  onAddressChange: (value: string) => void
+  accessKey: string
+  onAccessKeyChange: (value: string) => void
+  addressError: boolean
+  effectiveEndpoint: { displayEndpoint: string; endpointKind: RemotePairingEndpointKind } | null
   onSubmit: () => void
   onCancel: () => void
 }): React.JSX.Element {
@@ -53,6 +66,12 @@ export function AddRemoteHostServerFormPanel({
         onPairingCodeChange={onPairingCodeChange}
         allowLoopback={allowLoopback}
         onAllowLoopbackChange={onAllowLoopbackChange}
+        address={address}
+        onAddressChange={onAddressChange}
+        accessKey={accessKey}
+        onAccessKeyChange={onAccessKeyChange}
+        addressError={addressError}
+        effectiveEndpoint={effectiveEndpoint}
         onSubmit={onSubmit}
       />
 

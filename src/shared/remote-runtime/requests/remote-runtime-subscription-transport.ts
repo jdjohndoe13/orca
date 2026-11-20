@@ -50,7 +50,9 @@ export async function subscribeRemoteRuntimeTransport<TResult>(
     idlePassive: options?.idlePassive
   })
   return await new Promise((resolve, reject) => {
-    const handshake = createRemoteRuntimeClientHandshake(connection.hostPublicKeyB64)
+    const handshake = createRemoteRuntimeClientHandshake(connection.hostPublicKeyB64, {
+      trustOnFirstUse: connection.trustOnFirstUse === true
+    })
     let settled = false
     let closing = false
     let terminalFailure = false

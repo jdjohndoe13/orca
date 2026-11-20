@@ -2,6 +2,7 @@ import { withDeviceSighting, type DeviceSightingFraming } from './device-sightin
 import { DeviceRegistryStore } from './device-registry-store'
 import type { DeviceEntry } from './device-entry'
 import type { NetworkSourceClass } from '../../transports/websocket/source-admission/network-source-class'
+import { OPEN_ACCESS_DEVICE_ID } from '../../../../../shared/remote-runtime/open-access/open-access'
 
 // Coalesce reconnect bookkeeping: each Windows save otherwise spawns synchronous ACL PowerShell twice.
 const LAST_SEEN_FLUSH_DELAY_MS = 250
@@ -19,6 +20,12 @@ export class DeviceRegistrySightings extends DeviceRegistryStore {
     sourceClass?: NetworkSourceClass,
     framing?: DeviceSightingFraming
   ): void {
+    // Why: the synthetic open-access principal has no row to mark; recording it would only
+    // pollute the seen-set the offer planner reads. (replaceRow already tolerates the missing
+    // row, but the sighting is meaningless here, so refuse it outright.)
+    if (deviceId === OPEN_ACCESS_DEVICE_ID) {
+      return
+    }
     // Persist first sighting inline or rotation could delete a paired row still pending on disk.
     this.seenDeviceIds.add(deviceId)
     const seenAt = Date.now()

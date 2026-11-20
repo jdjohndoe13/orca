@@ -6,9 +6,10 @@ import type { GlobalSettings } from '../../../../../../shared/settings/global-se
 import type { PublicKnownRuntimeEnvironment } from '../../../../../../shared/remote-runtime/host-catalog/runtime-environments'
 import type { RuntimeStatus } from '../../../../../../shared/remote-runtime/session-graph/runtime-session-contracts'
 import { isRuntimeEnvironmentRemovalBlocked } from './runtime-environment-host-details'
-import { defaultServerNameForAccessLink } from '../../../../../../shared/remote-runtime/host-catalog/runtime-host-default-name'
+import { defaultServerNameForAccessLink, defaultServerNameForOpenAccessAddress } from '../../../../../../shared/remote-runtime/host-catalog/runtime-host-default-name'
 import { forgetCachedRuntimeHostDetails } from './use-runtime-environment-catalog'
 import type { RuntimeHostAccessFailure } from '../../../runtime-access/RuntimeHostAccessFailureAlert'
+import type { RuntimeHostAccessSubmission } from '../../../runtime-access/RuntimeHostAccessForm'
 import { warnWslHostServerStop } from '../../../sidebar/host-lifecycle/wsl-host-removal'
 
 type RuntimeEnvironmentMutationActionParams = {
@@ -49,12 +50,20 @@ export function useRuntimeEnvironmentMutationActions({
     setAddServerFailure(null)
   }
 
-  const addEnvironment = async (allowLoopback: boolean): Promise<void> => {
+  const addEnvironment = async (
+    submission: RuntimeHostAccessSubmission
+  ): Promise<void> => {
     const trimmedPairingCode = pairingCode.trim()
+    const endpointOverride = submission.endpointOverride?.trim() ?? ''
+    const deviceTokenOverride = submission.deviceTokenOverride?.trim() ?? ''
     const trimmedName =
       name.trim() ||
-      defaultServerNameForAccessLink(trimmedPairingCode, useAppStore.getState().runtimeEnvironments)
-    if (!trimmedName || !trimmedPairingCode) {
+      (trimmedPairingCode === ''
+        ? defaultServerNameForOpenAccessAddress(endpointOverride, useAppStore.getState().runtimeEnvironments)
+        : defaultServerNameForAccessLink(trimmedPairingCode, useAppStore.getState().runtimeEnvironments))
+    // Why the relaxed check: an empty link with an address is the connect-by-IP mode; the main
+    // process builds the open-access offer there, so only "no link and no address" is unusable.
+    if (!trimmedName || (trimmedPairingCode === '' && endpointOverride === '')) {
       toast.error(
         t(
           'auto.components.settings.RuntimeEnvironmentsPane.0c55a47480',
@@ -70,7 +79,9 @@ export function useRuntimeEnvironmentMutationActions({
       const result = await window.api.runtimeEnvironments.verifyAndAddFromPairingCode({
         name: trimmedName,
         pairingCode: trimmedPairingCode,
-        allowLoopback
+        allowLoopback: submission.allowLoopback,
+        ...(endpointOverride !== '' ? { endpointOverride } : {}),
+        ...(deviceTokenOverride !== '' ? { deviceTokenOverride } : {})
       })
       if (!result.ok) {
         if (mountedRef.current) {

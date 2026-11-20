@@ -79,6 +79,8 @@ export type PairedE2EEClientHandshakeArgs = {
   v2TokenCapabilities?: boolean
   clientKeyPair?: PairedE2EEKeyPair
   clientNonce?: Uint8Array
+  /** Open-access dial: pin the ready's key instead of comparing (see PairedE2EEV2ClientSessionArgs). */
+  trustOnFirstUse?: boolean
 }
 
 export function createPairedE2EEClientHandshake(
@@ -174,7 +176,8 @@ function createV2Handshake(args: PairedE2EEClientHandshakeArgs): PairedE2EEClien
     transport: args.transport,
     relayHostId: args.relayHostId,
     clientKeyPair: args.clientKeyPair,
-    clientNonce: args.clientNonce
+    clientNonce: args.clientNonce,
+    trustOnFirstUse: args.trustOnFirstUse
   })
   return {
     framing: 'v2',

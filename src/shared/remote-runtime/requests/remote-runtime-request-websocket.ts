@@ -94,7 +94,9 @@ function createSocket(
   | { ok: false; error: RemoteRuntimeClientError } {
   let handshake: PairedE2EEClientHandshake
   try {
-    handshake = createRemoteRuntimeClientHandshake(connection.hostPublicKeyB64)
+    handshake = createRemoteRuntimeClientHandshake(connection.hostPublicKeyB64, {
+      trustOnFirstUse: connection.trustOnFirstUse === true
+    })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     return {

@@ -83,6 +83,9 @@ export function createPairingOfferSchema(now: () => number = () => Date.now()) {
       pairedDeviceId: z.string().min(1).max(128).optional(),
       scope: PairingScopeSchema.optional(),
       relay: relaySchema.optional(),
+      // Why true-only: the flag is a marker, not data; it says the host accepts any access key
+      // (LAN open-access mode), so the client keeps the default token and pins keys on first use.
+      openAccess: z.literal(true).optional(),
       // Why catch: a descriptor this build cannot read is dropped, never a reason to refuse pairing.
       hostDescriptor: RuntimeHostDescriptorSchema.optional().catch(undefined)
     })

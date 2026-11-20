@@ -41,6 +41,14 @@ export class RuntimeRpcPairing extends RuntimeRpcNetworkExposure {
     return this.deviceRegistry
   }
 
+  /**
+   * Why: the share dialog's IPC handlers read/write the open-access mode file beside the
+   * device registry, so they must resolve the same userData dir the server persists to.
+   */
+  getPairingUserDataPath(): string {
+    return this.userDataPath
+  }
+
   getE2EEPublicKey(): string | null {
     return this.e2eeKeypair?.publicKeyB64 ?? null
   }

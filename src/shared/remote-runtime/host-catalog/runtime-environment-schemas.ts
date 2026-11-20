@@ -15,7 +15,9 @@ export const RuntimeAccessEndpointSchema = lazyZodSchema(() =>
     label: z.string().min(1),
     endpoint: z.string().min(1),
     deviceToken: z.string().min(1),
-    publicKeyB64: z.string().min(1)
+    publicKeyB64: z.string().min(1),
+    // Survives the pairing round-trip: the saved pairing came from an open-access (accept-any-key) host.
+    openAccess: z.literal(true).optional()
   })
 )
 

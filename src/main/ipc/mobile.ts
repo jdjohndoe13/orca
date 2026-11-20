@@ -32,6 +32,11 @@ import {
   repairWindowsMobileFirewall,
   type WindowsMobileFirewallEnvironment
 } from '../runtime/rpc/server/pairing/network/windows-mobile-firewall'
+import {
+  readOpenAccessMode,
+  writeOpenAccessMode
+} from '../runtime/rpc/server/pairing/open-access-mode'
+import type { OpenAccessModeFile } from '../../shared/remote-runtime/open-access/open-access'
 
 function toRuntimeAccessGrant(
   device: DeviceEntry,
@@ -128,12 +133,18 @@ export function registerMobileHandlers(
   ipc.handle(
     'mobile:getRuntimePairingUrl',
     async (_event, args?: { address?: string; rotate?: boolean; reach?: RuntimePairingReach }) => {
+      // Why: open-access LAN mode is reached by IP, so a local-only dialog intent must not
+      // keep the listener loopback-bound and advertise an unreachable endpoint.
+      const reach =
+        readOpenAccessMode(rpcServer.getPairingUserDataPath()).acceptAnyAccessKey
+          ? ('network' as const)
+          : args?.reach
       const offer = await requestRuntimePairingOffer(
         rpcServer,
         {
           address: args?.address,
           rotate: args?.rotate,
-          reach: args?.reach,
+          reach,
           offerTtlMs: RUNTIME_PAIRING_OFFER_TTL_MS
         },
         getDefaultRouteInterfaceNames
@@ -152,6 +163,26 @@ export function registerMobileHandlers(
         endpoint: offer.endpoint,
         deviceId: offer.deviceId,
         expiresAt: offer.offerExpiresAt
+      }
+    }
+  )
+
+  ipc.handle(
+    'runtimeEnvironments:getOpenAccessMode',
+    (): { acceptAnyAccessKey: boolean } => readOpenAccessMode(rpcServer.getPairingUserDataPath())
+  )
+
+  ipc.handle(
+    'runtimeEnvironments:setOpenAccessMode',
+    (_event, args: { acceptAnyAccessKey: boolean }): { ok: boolean } => {
+      const mode: OpenAccessModeFile = { acceptAnyAccessKey: args?.acceptAnyAccessKey === true }
+      try {
+        writeOpenAccessMode(rpcServer.getPairingUserDataPath(), mode)
+        return { ok: true }
+      } catch (error) {
+        // The registry reads the file live, so a failed write means the toggle did not take.
+        console.error('[runtime] Failed to write the open-access mode file:', error)
+        return { ok: false }
       }
     }
   )

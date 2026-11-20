@@ -7,7 +7,10 @@ import {
   DialogHeader,
   DialogTitle
 } from '../../../ui/dialog'
-import { RuntimeHostAccessForm } from '../../../runtime-access/RuntimeHostAccessForm'
+import {
+  RuntimeHostAccessForm,
+  type RuntimeHostAccessSubmission
+} from '../../../runtime-access/RuntimeHostAccessForm'
 import type { RuntimeHostAccessFailure } from '../../../runtime-access/RuntimeHostAccessFailureAlert'
 
 type RuntimeAddServerDialogProps = {
@@ -20,7 +23,7 @@ type RuntimeAddServerDialogProps = {
   onAccessLinkChange: (value: string) => void
   onClose: () => void
   onCloseAutoFocus: (event: Event) => void
-  onSubmit: (allowLoopback: boolean) => void
+  onSubmit: (submission: RuntimeHostAccessSubmission) => void
 }
 
 export function RuntimeAddServerDialog({

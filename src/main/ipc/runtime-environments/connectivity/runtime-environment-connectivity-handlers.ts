@@ -17,7 +17,10 @@ import { connectThroughOwningService } from './runtime-environment-host-service-
 import type { RuntimeRpcResponse } from '../../../../shared/remote-runtime/rpc/runtime-rpc-envelope'
 import type { RuntimeStatus } from '../../../../shared/remote-runtime/session-graph/runtime-session-contracts'
 import { readSettingsWithRuntimeEnvironmentPreference } from '../catalog/runtime-environment-preference'
-import { verifyAndAddRuntimeEnvironmentFromPairingCode } from '../pairing/runtime-environment-pairing-verification'
+import {
+  verifyAndAddRuntimeEnvironmentFromPairingCode,
+  type VerifyAndAddRuntimeEnvironmentArgs
+} from '../pairing/runtime-environment-pairing-verification'
 import { publishVerifiedPairing } from '../pairing/runtime-environment-verified-pairing-publish'
 import { getRuntimeEnvironmentStatusSnapshots } from '../connections/runtime-environment-request-connections'
 import {
@@ -88,7 +91,10 @@ export function registerRuntimeEnvironmentConnectivityHandlers({
   )
   ipcMain.handle(
     'runtimeEnvironments:verifyAndAddFromPairingCode',
-    async (_event, args: { name: string; pairingCode: string; allowLoopback?: boolean }) => {
+    async (
+      _event,
+      args: VerifyAndAddRuntimeEnvironmentArgs
+    ) => {
       const result = await verifyAndAddRuntimeEnvironmentFromPairingCode(getUserDataPath(), args)
       if (result.ok) {
         await publishVerifiedPairing(

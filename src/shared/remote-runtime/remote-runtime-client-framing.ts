@@ -52,6 +52,8 @@ type HandshakeOptions = {
   probeV2?: boolean
   // Legacy dial to a latched host that only reads its status (see latchedHostPredatesV2Token).
   latchedHostCheck?: boolean
+  /** Open-access dial: the placeholder key is not a host identity, so the v2 latch policy is skipped. */
+  trustOnFirstUse?: boolean
 }
 
 /**
@@ -63,6 +65,23 @@ export function createRemoteRuntimeClientHandshake(
   hostPublicKeyB64: string,
   options: HandshakeOptions = {}
 ): RemoteRuntimeClientHandshake {
+  // Why outside the latch: an open-access offer pins no key, so the placeholder would make every
+  // open-access host share one latch entry, and the host's real key is only known after the ready.
+  if (options.trustOnFirstUse) {
+    const tofuHandshake = createPairedE2EEClientHandshake({
+      primitives: NODE_PAIRED_E2EE_PRIMITIVES,
+      hostPublicKeyB64,
+      // Why forced v2: the legacy key schedule derives from the pinned key, which a TOFU dial lacks.
+      framing: 'v2',
+      transport: 'direct',
+      v2TokenCapabilities: true,
+      trustOnFirstUse: true,
+      parseJson: parseRemoteRuntimeJsonText,
+      serializeJson: serializeRemoteRuntimePayload
+    })
+    // Why no fallback: a TOFU dial never redials legacy, so a refusal is simply the dial's error.
+    return { ...tofuHandshake, v2Refusal: () => null }
+  }
   const store = remoteRuntimeE2EEV2HostLatchStore()
   const policy = framingPolicyFor(hostPublicKeyB64, store)
   const latched = store.isLatched(hostPublicKeyB64) === true

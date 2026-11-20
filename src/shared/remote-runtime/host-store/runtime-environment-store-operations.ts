@@ -85,7 +85,11 @@ function saveEnvironmentFromPairingCode(
   const offer = parseRemotePairingCode(userDataPath, args.pairingCode)
   const now = args.now ?? Date.now()
   const store = readPersistedEnvironmentStore(userDataPath, { recoverBlankStore: true })
-  const samePersisted = findEnvironmentWithHostKey(store.environments, offer.publicKeyB64)
+  // Why the skip: an open-access offer carries a placeholder key, not a host identity, so every
+  // such pairing would "match" the last one saved; the address is the identity in that mode.
+  const samePersisted = offer.openAccess
+    ? undefined
+    : findEnvironmentWithHostKey(store.environments, offer.publicKeyB64)
   // Why the overlaid entry: SSH access or a deployment lives only there, and the guard reads it.
   const samePaired =
     samePersisted &&

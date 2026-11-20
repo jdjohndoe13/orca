@@ -57,11 +57,15 @@ export const runtimeEnvironmentsApi = {
     name: string
     pairingCode: string
     allowLoopback?: boolean
+    endpointOverride?: string
+    deviceTokenOverride?: string
   }): Promise<VerifyAndAddRuntimeEnvironmentResult> =>
     ipcRenderer.invoke('runtimeEnvironments:verifyAndAddFromPairingCode', args),
   repairFromPairingCode: (args: {
     selector: string
     pairingCode: string
+    endpointOverride?: string
+    deviceTokenOverride?: string
   }): Promise<VerifyAndAddRuntimeEnvironmentResult> =>
     ipcRenderer.invoke('runtimeEnvironments:repairFromPairingCode', args),
   resolve: (args: { selector: string }): Promise<PublicKnownRuntimeEnvironment> =>
@@ -114,6 +118,11 @@ export const runtimeEnvironmentsApi = {
   },
   prepareBrowserClientHostPlacement: (args) =>
     ipcRenderer.invoke('runtimeEnvironments:prepareBrowserClientHostPlacement', args),
+  // Fork extension: the host's own "accept any access key" LAN mode, read/written by the share dialog.
+  getOpenAccessMode: (): Promise<{ acceptAnyAccessKey: boolean }> =>
+    ipcRenderer.invoke('runtimeEnvironments:getOpenAccessMode'),
+  setOpenAccessMode: (args: { acceptAnyAccessKey: boolean }): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke('runtimeEnvironments:setOpenAccessMode', args),
   retryConnectionsNow: (): Promise<void> =>
     ipcRenderer.invoke('runtimeEnvironments:retryConnectionsNow'),
   call: (args: {

@@ -119,11 +119,17 @@ export type RuntimeApi = {
       name: string
       pairingCode: string
       allowLoopback?: boolean
+      /** host:port or ws(s):// URL; overrides the link's endpoint, or names the host without a link. */
+      endpointOverride?: string
+      /** Overrides the link's deviceToken, e.g. the host's fixed default access key. */
+      deviceTokenOverride?: string
     }) => Promise<VerifyAndAddRuntimeEnvironmentResult>
     /** Replaces a revoked pairing in place; refuses a link for a different server. */
     repairFromPairingCode: (args: {
       selector: string
       pairingCode: string
+      endpointOverride?: string
+      deviceTokenOverride?: string
     }) => Promise<VerifyAndAddRuntimeEnvironmentResult>
     resolve: (args: { selector: string }) => Promise<PublicKnownRuntimeEnvironment>
     remove: (args: { selector: string }) => Promise<RuntimeEnvironmentRemoval>
@@ -155,6 +161,10 @@ export type RuntimeApi = {
     prepareBrowserClientHostPlacement: (
       args: BrowserClientHostPlacementPreparationRequest
     ) => Promise<BrowserPageCreationPlacement>
+    // Fork extension: the host's own "accept any access key" LAN mode. Absent in the web
+    // client, which has no host-side mode file to toggle.
+    getOpenAccessMode?: () => Promise<{ acceptAnyAccessKey: boolean }>
+    setOpenAccessMode?: (args: { acceptAnyAccessKey: boolean }) => Promise<{ ok: boolean }>
     // Resume/online events advance only pending shared-control reconnect timers.
     retryConnectionsNow?: () => Promise<void>
     call: (args: {

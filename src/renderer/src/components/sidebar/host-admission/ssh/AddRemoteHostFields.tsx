@@ -8,7 +8,10 @@ import {
   translateHostAccessLinkError,
   translateRemotePairingEndpointKind
 } from '@/lib/remote-pairing/remote-pairing-copy'
-import type { ParseHostAccessLinkResult } from '../../../../../../shared/remote-runtime/pairing/remote-pairing-address'
+import type {
+  ParseHostAccessLinkResult,
+  RemotePairingEndpointKind
+} from '../../../../../../shared/remote-runtime/pairing/remote-pairing-address'
 import {
   applyParsedSshHostInput,
   type EditingTarget
@@ -155,6 +158,12 @@ export function RemoteServerFields({
   onPairingCodeChange,
   allowLoopback,
   onAllowLoopbackChange,
+  address,
+  onAddressChange,
+  accessKey,
+  onAccessKeyChange,
+  addressError,
+  effectiveEndpoint,
   onSubmit
 }: {
   name: string
@@ -165,12 +174,19 @@ export function RemoteServerFields({
   onPairingCodeChange: (value: string) => void
   allowLoopback: boolean
   onAllowLoopbackChange: (value: boolean) => void
+  address: string
+  onAddressChange: (value: string) => void
+  accessKey: string
+  onAccessKeyChange: (value: string) => void
+  addressError: boolean
+  /** The endpoint the overrides leave in effect, so the preview shows what will actually be dialed. */
+  effectiveEndpoint: { displayEndpoint: string; endpointKind: RemotePairingEndpointKind } | null
   onSubmit: () => void
 }) {
   const t = useTranslate()
   const inputError = pairingCode.trim() !== '' && !parsedLink.ok
   const loopbackBlocked =
-    parsedLink.ok && parsedLink.value.endpointKind === 'loopback' && !allowLoopback
+    effectiveEndpoint?.endpointKind === 'loopback' && !allowLoopback && parsedLink.ok
   const pairingCodeDescriptionId = inputError
     ? 'add-server-pairing-code-error'
     : loopbackBlocked
@@ -229,16 +245,75 @@ export function RemoteServerFields({
           </p>
         ) : null}
       </div>
-      {parsedLink.ok ? (
+      <div className="space-y-1.5">
+        <Label htmlFor="add-server-address">
+          {t('auto.components.sidebar.AddRemoteHostDialog.address', 'Address')}{' '}
+          <span className="font-normal text-muted-foreground">
+            {t('auto.components.sidebar.AddRemoteHostDialog.optional', '(optional)')}
+          </span>
+        </Label>
+        <Input
+          id="add-server-address"
+          aria-invalid={addressError}
+          value={address}
+          disabled={disabled}
+          onChange={(event) => onAddressChange(event.target.value)}
+          placeholder={t(
+            'auto.components.sidebar.AddRemoteHostDialog.addressPlaceholder',
+            'e.g. 192.168.250.29:6768'
+          )}
+          className="font-mono"
+        />
+        <p className="text-xs text-muted-foreground">
+          {t(
+            'auto.components.sidebar.AddRemoteHostDialog.addressHelp',
+            'Overrides the link destination. With no link, connects to a host that accepts any access key.'
+          )}
+        </p>
+        {addressError ? (
+          <p role="alert" className="text-xs text-destructive">
+            {t(
+              'auto.components.sidebar.AddRemoteHostDialog.addressError',
+              'Enter an address like 192.168.250.29:6768 or ws://192.168.250.29:6768.'
+            )}
+          </p>
+        ) : null}
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="add-server-access-key">
+          {t('auto.components.sidebar.AddRemoteHostDialog.accessKey', 'Access key')}{' '}
+          <span className="font-normal text-muted-foreground">
+            {t('auto.components.sidebar.AddRemoteHostDialog.optional', '(optional)')}
+          </span>
+        </Label>
+        <Input
+          id="add-server-access-key"
+          value={accessKey}
+          disabled={disabled}
+          onChange={(event) => onAccessKeyChange(event.target.value)}
+          placeholder={t(
+            'auto.components.sidebar.AddRemoteHostDialog.accessKeyPlaceholder',
+            'e.g. default_orca_access_key'
+          )}
+          className="font-mono"
+        />
+        <p className="text-xs text-muted-foreground">
+          {t(
+            'auto.components.sidebar.AddRemoteHostDialog.accessKeyHelp',
+            'Overrides the link’s access key, for example the host’s fixed default key.'
+          )}
+        </p>
+      </div>
+      {effectiveEndpoint ? (
         <div className="space-y-1 rounded-md border border-border/60 p-3">
           <div className="flex items-center gap-2 text-xs font-medium">
             {t('auto.components.sidebar.AddRemoteHostDialog.linkDestination', 'Link destination')}
             <Badge variant="outline">
-              {translateRemotePairingEndpointKind(parsedLink.value.endpointKind, t)}
+              {translateRemotePairingEndpointKind(effectiveEndpoint.endpointKind, t)}
             </Badge>
           </div>
-          <div className="font-mono text-sm">{parsedLink.value.displayEndpoint}</div>
-          {parsedLink.value.endpointKind === 'loopback' ? (
+          <div className="font-mono text-sm">{effectiveEndpoint.displayEndpoint}</div>
+          {effectiveEndpoint.endpointKind === 'loopback' && parsedLink.ok ? (
             <label className="mt-2 flex items-start gap-2 text-xs">
               <Checkbox
                 checked={allowLoopback}
