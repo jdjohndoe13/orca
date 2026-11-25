@@ -31,7 +31,7 @@ import type { WebSessionTabsSyncState } from './state'
  * `apply-worktree-records.ts` and `apply-active-state.ts`) — the same list the reader resolves
  * by session key and the contest-rekey pass walks.
  */
-const MIRROR_REKEYED_RECORD_FIELDS = [
+const SEAM_MIRROR_REKEYED_RECORD_FIELDS = [
   'tabsByWorktree',
   'browserTabsByWorktree',
   'unifiedTabsByWorktree',
@@ -45,7 +45,7 @@ const MIRROR_REKEYED_RECORD_FIELDS = [
   'activeTabTypeByWorktree'
 ] as const satisfies readonly (keyof WebSessionTabsSyncState)[]
 
-type MirrorRekeyedField = (typeof MIRROR_REKEYED_RECORD_FIELDS)[number]
+type MirrorRekeyedField = (typeof SEAM_MIRROR_REKEYED_RECORD_FIELDS)[number]
 
 /**
  * The pipeline's read view: this host's qualified rows fold onto the bare key the host
@@ -64,7 +64,7 @@ export function foldWebSessionTabsRowsToBareView(
     return state
   }
   let next: Record<string, unknown> | undefined
-  for (const field of MIRROR_REKEYED_RECORD_FIELDS) {
+  for (const field of SEAM_MIRROR_REKEYED_RECORD_FIELDS) {
     const record = state[field]
     if (!isWorkspaceSessionRecord(record)) {
       continue
@@ -114,7 +114,7 @@ export function rekeyWebSessionTabsPatchToHost(
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the field name comes from the record list above, which classifies it as a worktree-keyed record, and the value is that field's own content with its keys re-spelled.
     ;(next as Record<string, unknown>)[field] = value
   }
-  for (const field of MIRROR_REKEYED_RECORD_FIELDS) {
+  for (const field of SEAM_MIRROR_REKEYED_RECORD_FIELDS) {
     if (!isNoOp && Object.hasOwn(patch, field)) {
       const record = patch[field]
       if (isWorkspaceSessionRecord(record)) {

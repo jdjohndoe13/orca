@@ -19,6 +19,7 @@ import {
   selectSendApprovalGuardEnvironmentIds
 } from '@/runtime/hosts/capabilities/send-approval-guard-hosts'
 import { resolveWorkspaceSessionKey } from '@/store/workspace-session-key'
+import { selectWorktreesByRepo } from '@/store/workspaces/catalog/workspace-record-fields'
 
 export type RunningAgentTargetState = Pick<
   AppState,
@@ -90,12 +91,13 @@ export function runningAgentSendTargetAgentType(
  * same answer an install without a collision has.
  */
 export function runningAgentRowKey(state: RunningAgentTargetState, worktreeId: string): string {
-  if (!state.worktreesByRepo) {
+  const catalog = selectWorktreesByRepo(state)
+  if (!catalog) {
     return worktreeId
   }
   return resolveWorkspaceSessionKey(
     {
-      worktreesByRepo: state.worktreesByRepo,
+      worktreesByRepo: catalog,
       activeWorkspaceExecutionHostId: state.activeWorkspaceExecutionHostId ?? null,
       activeWorktreeId: state.activeWorktreeId ?? null
     },

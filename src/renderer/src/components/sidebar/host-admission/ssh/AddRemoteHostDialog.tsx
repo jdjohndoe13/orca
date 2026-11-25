@@ -3,7 +3,6 @@ import { lazyWithRetry as lazy } from '@/app-shell/startup/lazy-with-retry'
 import { useLatchedOpen } from '@/app-shell/root-surfaces/use-latched-open'
 import type { AddRemoteHostDialogProps, AddRemoteHostMode } from './AddRemoteHostDialogSurface'
 export type { AddRemoteHostMode }
-
 const AddRemoteHostDialogSurface = lazy(() =>
   import('./AddRemoteHostDialogSurface').then((module) => ({
     default: module.AddRemoteHostDialog

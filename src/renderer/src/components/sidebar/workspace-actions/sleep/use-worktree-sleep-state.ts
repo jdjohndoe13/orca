@@ -14,6 +14,7 @@ import {
 import type { AppState } from '@/store/types'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host/execution-host'
 import { getContestedWorktreeIds } from '@/store/slices/worktrees/listing/worktree-catalog-index'
+import { selectWorktreesByRepo } from '@/store/workspaces/catalog/workspace-record-fields'
 import { resolveWorkspaceSessionHost } from '@/store/workspace-session-key'
 import { workspaceSessionKey } from '../../../../../../shared/workspace-session-worktree-key'
 
@@ -37,7 +38,7 @@ type SleepStateInput = {
 type LiveAgentGeneration = {
   agentStatusByPaneKey: SleepStateInput['agentStatusByPaneKey']
   tabsByWorktree: SleepStateInput['tabsByWorktree']
-  worktreesByRepo: SleepStateInput['worktreesByRepo']
+  worktreeCatalog: SleepStateInput['worktreesByRepo']
   agentStatusNow: number
   worktreeIds: ReadonlySet<string>
 }
@@ -47,11 +48,13 @@ let liveAgentGeneration: LiveAgentGeneration | null = null
 // Cache the whole-store live-agent scan across cards by relevant snapshots and freshness epoch.
 export function selectWorktreeIdsWithLiveAgent(state: SleepStateInput): ReadonlySet<string> {
   const agentStatusNow = getAgentStatusEpochNow(state.agentStatusEpoch ?? 0)
+  // Read through the catalog selector so the record fields stay behind one seam.
+  const worktreeCatalog = selectWorktreesByRepo(state)
   if (
     liveAgentGeneration &&
     liveAgentGeneration.agentStatusByPaneKey === state.agentStatusByPaneKey &&
     liveAgentGeneration.tabsByWorktree === state.tabsByWorktree &&
-    liveAgentGeneration.worktreesByRepo === state.worktreesByRepo &&
+    liveAgentGeneration.worktreeCatalog === worktreeCatalog &&
     liveAgentGeneration.agentStatusNow === agentStatusNow
   ) {
     return liveAgentGeneration.worktreeIds
@@ -60,12 +63,12 @@ export function selectWorktreeIdsWithLiveAgent(state: SleepStateInput): Readonly
     state.agentStatusByPaneKey,
     state.tabsByWorktree,
     agentStatusNow,
-    getContestedWorktreeIds(state.worktreesByRepo)
+    getContestedWorktreeIds(worktreeCatalog)
   )
   liveAgentGeneration = {
     agentStatusByPaneKey: state.agentStatusByPaneKey,
     tabsByWorktree: state.tabsByWorktree,
-    worktreesByRepo: state.worktreesByRepo,
+    worktreeCatalog,
     agentStatusNow,
     worktreeIds
   }
@@ -107,7 +110,7 @@ export function selectIsSleepingWorktree(
       worktreeId,
       hostId
     ),
-    getContestedWorktreeIds(state.worktreesByRepo)
+    getContestedWorktreeIds(selectWorktreesByRepo(state))
   )
   if (
     hasUnknownStructuredChat(

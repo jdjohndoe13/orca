@@ -6,10 +6,9 @@ import {
   normalizeWorktreePathForId,
   splitWorktreeId,
   swapWorktreeIdPathSpelling,
+  worktreeIdsShareCheckout,
   worktreeIdentityKey
 } from './id'
-
-import { worktreeIdsShareCheckout } from './id'
 
 const BASE_ID = 'folder-repo::/home/ada/notes'
 const INSTANCE_A = `${BASE_ID}::workspace:3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b`

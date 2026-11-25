@@ -1,5 +1,6 @@
 import type { ExecutionHostId } from '../../../shared/execution-host/execution-host'
 import { useAppStore } from '../store'
+import { selectWorktreesByRepo } from '../store/workspaces/catalog/workspace-record-fields'
 import {
   readWorkspaceSessionRecord,
   resolveWorkspaceSessionKey,
@@ -32,7 +33,7 @@ export type WorkspaceSessionRowState = Parameters<typeof readWorkspaceSessionRec
  * absent contested set, so the empty catalog is the faithful stand-in, not a fallback.
  */
 function cataloged(state: WorkspaceSessionRowState): WorkspaceSessionRowState {
-  return state.worktreesByRepo ? state : { ...state, worktreesByRepo: {} }
+  return selectWorktreesByRepo(state) ? state : { ...state, worktreesByRepo: {} }
 }
 
 /**

@@ -62,6 +62,7 @@ function createDeps(repos: Repo[]): RepoWorktreeRowDeps & {
     getProjects: () => [],
     getSettings: () => ({}),
     setWorktreeMeta: ({ id: worktreeId }: HostWorktreeTarget, updates: Partial<WorktreeMeta>) => {
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the metaById fixture is seeded with complete WorktreeMeta rows before any update is applied.
       const next = { ...metaById[worktreeId], ...updates } as WorktreeMeta
       metaById[worktreeId] = next
       return next
@@ -85,6 +86,7 @@ describe('host-qualified scoped worktree resolution', () => {
       })
     ])
     const worktreeId = 'shared::/same/worktree'
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture omits unrelated required WorktreeMeta fields; the resolver only reads the fields present here.
     deps.metaById[worktreeId] = {
       displayName: 'local workspace',
       hostId: 'local',
@@ -139,7 +141,8 @@ describe('host-qualified scoped worktree resolution', () => {
       hostId: 'runtime:win-b',
       instanceId: 'win-b-instance'
     } as unknown as WorktreeMeta
-    ;(
+    ;// oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the store stub is a partial mock; adding the member this test needs is the whole point of the extension.
+    (
       deps.store as Store & {
         getWorktreeMetaForHost: () => WorktreeMeta
       }
@@ -174,7 +177,9 @@ describe('host-qualified scoped worktree resolution', () => {
     const worktreeId = 'folders::/shared/folder'
     deps.listFolderWorkspaces.mockImplementation((owner) =>
       owner === remote
-        ? ([
+        ? // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture omits unrelated required Worktree fields; the resolver only reads the fields present here.
+          ([
+            // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture omits unrelated required Worktree fields; the resolver only reads the fields present here.
             {
               id: worktreeId,
               repoId: owner.id,

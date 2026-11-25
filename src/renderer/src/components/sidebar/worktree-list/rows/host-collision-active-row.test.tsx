@@ -488,6 +488,7 @@ describe('sidebar host-collision active row', () => {
         hostId: 'local'
       } as unknown as Worktree
     }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture rows carry the parent/child fields the dispatcher reads; the rest of RenderRow is unreached.
     const rows = [parent, localChild] as RenderRow[]
 
     const dispatchContext = (

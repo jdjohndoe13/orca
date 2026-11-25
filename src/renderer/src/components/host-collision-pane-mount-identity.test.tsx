@@ -20,6 +20,7 @@ import type { TerminalController } from './terminal/workbench/use-terminal-contr
 // These tests pin that the pane remounts when the host flips while the tab id does not, and
 // that an uncontested workspace keeps the exact bare mount identity.
 
+// oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the flag is a global React testing hook; the cast only names the member this suite sets.
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const harness = vi.hoisted(() => ({

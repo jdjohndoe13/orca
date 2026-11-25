@@ -204,11 +204,15 @@ describe('paired repo catalog mirror triggers', () => {
       expect(dial('repo.list')).toEqual([paired.id])
     })
 
+    // The refused candidates are rejected synchronously by the mirror gate, so they
+    // can never add a dial; wait on the accepted engage's own second dial instead of
+    // a fixed settle.
     engageOnEnvironmentConnected(userDataPath, resolveEnvironment(userDataPath, disconnected.id))
     engageOnEnvironmentConnected(userDataPath, resolveEnvironment(userDataPath, relayed.id))
-    await new Promise<void>((resolve) => setTimeout(resolve, 20))
+    await vi.waitFor(() => {
+      expect(dial('worktree.detectedList')).toHaveLength(1)
+    })
     expect(dial('repo.list')).toEqual([paired.id])
     expect(dial('repo.list')).not.toContain(other.id)
-    expect(dial('worktree.detectedList')).toHaveLength(1)
   })
 })

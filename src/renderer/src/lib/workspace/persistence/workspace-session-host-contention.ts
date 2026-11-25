@@ -14,10 +14,8 @@ import {
 } from '../../../../../shared/workspace-session/workspace-session-host-records'
 import { qualifyHostWorkspaceSessionSlices } from '../../../../../shared/workspace-session-key-qualification'
 import type { WorkspaceRuntimeOwnerProjection } from '../ownership/workspace-runtime-host-ownership'
-import {
-  mergeWorkspaceSessionsFromHosts,
-  type HostSessionSlices
-} from './workspace-session-host-split'
+import { mergeWorkspaceSessionsFromHosts } from './workspace-session-host-merge'
+import type { HostSessionSlices } from './workspace-session-host-split'
 
 /**
  * Which execution hosts publish each workspace id, and what persistence does when two of them

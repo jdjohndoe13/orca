@@ -50,10 +50,10 @@ import { registerRuntimeEnvironmentHandlers } from '../runtime-environments'
 import { channelHandlerLookup, pairingCode } from '../runtime-environments-ipc-test-harness'
 import {
   applyDeviceTokenOverride,
-  applyEndpointOverride
+  applyEndpointOverride,
+  isPlaceholderHostKey
 } from '../../../../shared/remote-runtime/open-access/open-access-link'
 import { parseHostAccessLink } from '../../../../shared/remote-runtime/pairing/remote-pairing-address'
-import { isPlaceholderHostKey } from '../../../../shared/remote-runtime/open-access/open-access-link'
 
 const handler = channelHandlerLookup(handleMock)
 
@@ -86,6 +86,7 @@ function dialedConnection(): {
   trustOnFirstUse?: boolean
 } {
   expect(sendRemoteRuntimeRequestMock).toHaveBeenCalled()
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the request shape is asserted by the caller's expectations; the cast only restores the typed args tuple.
   return sendRemoteRuntimeRequestMock.mock.calls[0]![0] as never
 }
 

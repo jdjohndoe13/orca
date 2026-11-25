@@ -9,7 +9,7 @@ import '@/diagnostics/crash-reporting/crash-diagnostics'
 import { recordRendererCrashBreadcrumb } from '../../../../diagnostics/crash-reporting/crash-breadcrumb-recorder'
 import { activateWorktreeFromSidebar } from '@/lib/workspace/activation/sidebar-worktree-activation'
 import { useAppStore } from '@/store/index'
-import { findRepoForHost } from '@/store/repos/repo-host-identity'
+import { getResolvedExecutionHostIdForWorktree } from '@/lib/workspace/ownership/resolved-worktree-execution-host'
 import { isEventTargetInsideCurrentTarget } from './worktree-card-dom-events'
 import {
   noteWorktreeRowHoverEnd,
@@ -34,17 +34,21 @@ type LinkedDetails = ReturnType<typeof useWorktreeCardLinkedDetails>
  */
 function resolveCardActivationHostId(
   worktreeHostId: ExecutionHostId | undefined,
-  repoId: string,
+  worktreeId: string,
   repo: Repo | undefined
 ): ExecutionHostId | undefined {
   if (worktreeHostId) {
     return worktreeHostId
   }
-  const { repos, settings } = useAppStore.getState()
+  const state = useAppStore.getState()
   // Why: an unseeded catalog can't disprove the prop's host; the colliding-map
   // bug only exists when the catalog holds the same repo id on several hosts.
-  const owner = repos?.length ? findRepoForHost(repos, repoId, { settings }) : repo
-  return owner ? getRepoExecutionHostId(owner) : undefined
+  if (!state.repos?.length) {
+    return repo ? getRepoExecutionHostId(repo) : undefined
+  }
+  // Route by the row's owner from the catalog — the active-server setting is not
+  // evidence of which host owns this row, and a contested id resolves to nothing.
+  return getResolvedExecutionHostIdForWorktree(state, worktreeId) ?? undefined
 }
 
 export function useWorktreeCardActivationActions({
@@ -125,7 +129,7 @@ export function useWorktreeCardActivationActions({
       onImmediateActivate?.(worktree.id, activationRowKey)
       void activateWorktreeFromSidebar(
         worktree.id,
-        resolveCardActivationHostId(worktree.hostId, worktree.repoId, repo)
+        resolveCardActivationHostId(worktree.hostId, worktree.id, repo)
       )
       onActivate?.()
     },

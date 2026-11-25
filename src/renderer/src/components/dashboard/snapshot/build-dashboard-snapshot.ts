@@ -7,6 +7,7 @@ import {
 import type { RepoIcon } from '../../../../../shared/repository/appearance/repo-icon'
 import { workspaceSessionKey } from '../../../../../shared/workspace-session-worktree-key'
 import { getContestedWorktreeIds } from '@/store/slices/worktrees/listing/worktree-catalog-index'
+import { selectWorktreesByRepo } from '@/store/workspaces/catalog/workspace-record-fields'
 import { resolveDashboardCardContext } from './dashboard-card-context'
 import { readDashboardClientHost } from './dashboard-client-host'
 import { selectTerminalLayoutsForWorktree } from '../../sidebar/workspace-card/activity/worktree-agent-row-selectors'
@@ -101,7 +102,7 @@ export function buildDashboardSnapshot(
     const rowKey = workspaceSessionKey(
       worktreeId,
       worktree.hostId,
-      getContestedWorktreeIds(state.worktreesByRepo)
+      getContestedWorktreeIds(selectWorktreesByRepo(state))
     )
     const previous = dirtyWorktrees ? reuse?.workspaces.get(workspace) : undefined
     const firstCard = cards.length

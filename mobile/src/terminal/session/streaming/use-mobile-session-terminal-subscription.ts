@@ -11,6 +11,7 @@ import {
   runTerminalViewportFitPass
 } from './mobile-terminal-viewport-resubscribe'
 import { updateTerminalCwdFromStreamEvent } from './terminal-stream-cwd'
+import { applyTerminalStreamResized } from './terminal-stream-resize'
 import * as terminalOutput from '../../output-flow/terminal-output-ack'
 import { acceptTerminalLayoutSeq, terminalDisplayModeAdopter } from './terminal-stream-layout'
 import { createTerminalStreamResumeCursor } from './terminal-stream-resume'
@@ -259,33 +260,20 @@ export function useMobileSessionTerminalSubscription(
               settle: outputAck.owe(data)
             })
           } else if (data.type === 'resized') {
-            updateTerminalCwdFromStreamEvent(handle, data, terminalCwdRef.current)
-            // Width reflow needs full-buffer reinit; geometry-only events just resize.
-            const viewport = viewportMeasuredRef.current ? viewportRef.current : null
-            const [cols, rows] = viewportResubscribeBudgetRef.current.observeResize(
+            applyTerminalStreamResized(data, {
               handle,
-              data,
-              viewport
-            )
-            const serialized = typeof data.serialized === 'string' ? data.serialized : null
-            diagnostics.streamResized(handle, seq, eventSeq, data, getTerminalRef(handle) != null)
-            const oscLinks = isTerminalOscLinkRanges(data.oscLinks) ? data.oscLinks : undefined
-            if (serialized != null) {
-              resume.invalidate()
-              getTerminalRef(handle)?.init({
-                cols,
-                rows,
-                initialData: serialized,
-                preserveScroll: true,
-                oscLinks,
-                kittyFlags: data.kittyKeyboardFlags,
-                frame: terminalFrameRef.current
-              })
-            } else {
-              getTerminalRef(handle)?.resize(cols, rows, terminalFrameRef.current)
-            }
-            adoptDisplayMode(data.displayMode)
-            lifetime.scheduleSettledFit(getTerminalRef(handle))
+              seq,
+              diagnostics,
+              viewportBudget: viewportResubscribeBudgetRef.current,
+              viewportRef,
+              viewportMeasuredRef,
+              terminalFrameRef,
+              terminalCwdRef,
+              resume,
+              adoptDisplayMode,
+              scheduleSettledFit: lifetime.scheduleSettledFit,
+              getTerminalRef
+            })
           }
         },
         lifetime.end,

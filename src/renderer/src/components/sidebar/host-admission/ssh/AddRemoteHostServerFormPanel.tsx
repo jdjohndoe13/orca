@@ -1,8 +1,10 @@
 import { DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { useTranslate } from '@/i18n/use-translate'
-import type { ParseHostAccessLinkResult } from '../../../../../../shared/remote-runtime/pairing/remote-pairing-address'
-import type { RemotePairingEndpointKind } from '../../../../../../shared/remote-runtime/pairing/remote-pairing-address'
+import type {
+  ParseHostAccessLinkResult,
+  RemotePairingEndpointKind
+} from '../../../../../../shared/remote-runtime/pairing/remote-pairing-address'
 import { RemoteServerFields } from './AddRemoteHostFields'
 
 export function AddRemoteHostServerFormPanel({

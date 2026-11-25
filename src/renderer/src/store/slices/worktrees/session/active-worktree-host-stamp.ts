@@ -5,6 +5,7 @@ import {
   getContestedWorktreeIds,
   getIndexedWorktreesById
 } from '../../worktrees/listing/worktree-catalog-index'
+import { selectWorktreesByRepo } from '../../../workspaces/catalog/workspace-record-fields'
 
 /**
  * The host to stamp when an activation names no host of its own.
@@ -21,11 +22,12 @@ export function getContestedHostStamp(
 ): ExecutionHostId | null {
   // The contested set holds the canonical id; the caller may hold the raw Windows spelling.
   // `hasContestedClaim` folds both sides — the gate must not byte-miss a two-spelling collision.
-  if (!hasContestedClaim(getContestedWorktreeIds(state.worktreesByRepo), worktreeId)) {
+  const catalog = selectWorktreesByRepo(state)
+  if (!hasContestedClaim(getContestedWorktreeIds(catalog), worktreeId)) {
     return null
   }
   const hostIds = new Set<ExecutionHostId>()
-  for (const row of getIndexedWorktreesById(state.worktreesByRepo, worktreeId)) {
+  for (const row of getIndexedWorktreesById(catalog, worktreeId)) {
     if (row.hostId) {
       hostIds.add(row.hostId)
     }

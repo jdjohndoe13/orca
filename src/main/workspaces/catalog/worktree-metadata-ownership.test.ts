@@ -18,6 +18,7 @@ const sshRepo: Repo = {
   connectionId: 'build-box',
   executionHostId: 'ssh:build-box'
 }
+// oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture carries only the fields the metadata resolver reads; the rest of WorktreeMeta stays absent on purpose.
 const localMeta = { hostId: 'local', displayName: 'local metadata' } as WorktreeMeta
 
 function resolve(repo: Repo, ownerCount: number): WorktreeMeta | undefined {

@@ -13,6 +13,7 @@ import { isHostQualifiableWorkspaceId } from '../../../shared/workspace-session-
 import { getResolvedExecutionHostIdForWorktree } from '@/lib/workspace/ownership/resolved-worktree-execution-host'
 import type { AppState } from './types'
 import { getContestedWorktreeIds } from './slices/worktrees/listing/worktree-catalog-index'
+import { selectWorktreesByRepo } from './workspaces/catalog/workspace-record-fields'
 
 /**
  * Keeps the live per-worktree rows under the key the readers resolve when the contested gate flips.
@@ -43,7 +44,7 @@ import { getContestedWorktreeIds } from './slices/worktrees/listing/worktree-cat
  * entity-space — written from `Tab.worktreeId` / `activeWorktreeId`, which stay bare — so they
  * must not move.
  */
-const CONTEST_REKEYED_STORE_FIELDS = [
+const SEAM_CONTEST_REKEYED_STORE_FIELDS = [
   'tabsByWorktree',
   'activeTabIdByWorktree',
   'tabBarOrderByWorktree',
@@ -146,7 +147,7 @@ export function buildContestRekeyPatch(
 ): Partial<AppState> | null {
   const movable = movableContestedIds(
     contested,
-    getContestedWorktreeIds(hostEvidence.worktreesByRepo)
+    getContestedWorktreeIds(selectWorktreesByRepo(hostEvidence))
   )
   if (movable.size === 0) {
     return null
@@ -159,7 +160,7 @@ export function buildContestRekeyPatch(
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the field name comes from the two lists below, which name the store's worktree-keyed records and arrays, and the value is that field's own content with its keys re-spelled.
     ;(patch as Record<string, unknown>)[field] = value
   }
-  for (const field of CONTEST_REKEYED_STORE_FIELDS) {
+  for (const field of SEAM_CONTEST_REKEYED_STORE_FIELDS) {
     const record = state[field]
     if (!isWorkspaceSessionRecord(record)) {
       continue
@@ -221,8 +222,8 @@ function rekeyContestRecord(
  */
 export function installContestRekey(api: Pick<StoreApi<AppState>, 'setState' | 'subscribe'>): void {
   api.subscribe((state, previous) => {
-    const contested = getContestedWorktreeIds(state.worktreesByRepo)
-    if (contested === getContestedWorktreeIds(previous.worktreesByRepo)) {
+    const contested = getContestedWorktreeIds(selectWorktreesByRepo(state))
+    if (contested === getContestedWorktreeIds(selectWorktreesByRepo(previous))) {
       return
     }
     // A catalog refresh that flags the same ids is a false positive of the identity check, and the

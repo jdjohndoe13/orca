@@ -8,7 +8,6 @@ import {
   RUNTIME_ENVIRONMENT_RELAY_DOWNSTREAM_LIST_METHOD,
   RUNTIME_ENVIRONMENT_RELAY_DOWNSTREAM_UNSUBSCRIBE_METHOD,
   RUNTIME_ENVIRONMENT_RELAY_METHOD,
-  RuntimeEnvironmentDownstreamListParamsSchema,
   RuntimeEnvironmentGatewayCallParamsSchema,
   RuntimeEnvironmentGatewaySubscribeParamsSchema,
   runtimeEnvironmentRelayPhase1AllowlistMessage
@@ -154,7 +153,8 @@ function snapshotFor(
     environmentId,
     pairingRevision: 1,
     sequence: 1,
-    checkedAt: Date.now(),
+    // The projection only checks `checkedAt !== 0`, so a fixed epoch keeps the fixture deterministic.
+    checkedAt: 1,
     // RuntimeStatus carries far more live fields than the census reads; only the
     // projection's presence and capability list matter here.
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: fixture only satisfies the census projection (status presence + capabilities), not every live RuntimeStatus field.
@@ -234,10 +234,7 @@ describe('runtime environment gateway methods', () => {
         snapshotFor(web.id)
       ])
 
-      const result = await listMethod.handler(
-        RuntimeEnvironmentDownstreamListParamsSchema.parse({}),
-        ctxFixture(null)
-      )
+      const result = await listMethod.handler(undefined, ctxFixture(null))
 
       expect(result.environments).toEqual([
         {
@@ -277,10 +274,7 @@ describe('runtime environment gateway methods', () => {
       })
       statusSnapshotsMock.mockReturnValue([])
 
-      const result = await listMethod.handler(
-        RuntimeEnvironmentDownstreamListParamsSchema.parse({}),
-        ctxFixture(null)
-      )
+      const result = await listMethod.handler(undefined, ctxFixture(null))
 
       expect(result.environments.map((row) => [row.gatewayEnvironmentId, row.name])).toEqual([
         [null, 'local'],
@@ -296,10 +290,7 @@ describe('runtime environment gateway methods', () => {
       })
       statusSnapshotsMock.mockReturnValue([snapshotFor(gateway.id, { checkedAt: 0 })])
 
-      const result = await listMethod.handler(
-        RuntimeEnvironmentDownstreamListParamsSchema.parse({}),
-        ctxFixture(null)
-      )
+      const result = await listMethod.handler(undefined, ctxFixture(null))
 
       expect(result.environments[1]!.state).toBe('unknown')
     })

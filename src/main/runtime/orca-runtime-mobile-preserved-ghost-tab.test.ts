@@ -126,6 +126,7 @@ function createHarness(options: {
     },
     flushOrThrow: () => {}
   })
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the stub carries only the members the preserved-ghost-tab path reads; the rest of the store is unreached.
   const runtime = new OrcaRuntimeService(store as never)
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the stub carries only the members close paths read; the rest of the notifier is unreached.
   runtime.setNotifier({ closeTerminal: vi.fn(), closeTerminalTab: vi.fn(async () => {}) } as never)

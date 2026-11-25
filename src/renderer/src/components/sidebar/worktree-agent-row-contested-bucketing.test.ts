@@ -24,7 +24,9 @@ import { selectLiveAgentStatusEntriesForWorktree } from './workspace-card/activi
 
 const REPO_ID = 'repo-1'
 const CONTESTED_ID = `${REPO_ID}::C:\\vmd`
+// oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: an ExecutionHostId is a branded string; the literal is one of the two spellings the host-id parser accepts.
 const RUNTIME_HOST = 'runtime:web-env-1' as ExecutionHostId
+// oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: an ExecutionHostId is a branded string; the literal is one of the two spellings the host-id parser accepts.
 const LOCAL_HOST = 'local' as ExecutionHostId
 const LEAF_ID = '11111111-1111-4111-8111-111111111111'
 const NOW = 1_700_000_000_000

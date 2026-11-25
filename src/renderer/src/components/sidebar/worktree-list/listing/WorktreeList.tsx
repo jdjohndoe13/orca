@@ -36,10 +36,7 @@ import { useProjectGroupDialogs } from '../rows/use-project-group-dialogs'
 import { useSidebarRevealRequests } from '../navigation/use-reveal-requests'
 import { useSidebarWorktreeFilters } from './use-filters'
 import { useSidebarWorktreeSelection } from '../navigation/use-selection'
-import { useWindowSidebarListModel } from './use-window-list-model'
-import { useMainSidebarListModel } from './use-main-list-model'
-import { isPairedWebClientWindow } from '@/app-shell/chrome/desktop-window-chrome'
-import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../../../shared/sidebar-list/feed/sidebar-inputs-switch'
+import { useSidebarListModel } from './sidebar-list-model-selection'
 import { useWorktreeStatusMutations } from '../drag/use-status-mutations'
 import { shouldFiltersHideAllRows } from './sidebar-empty-state-gate'
 import { useWorkspaceBoardStatuses } from '../../workspace-status/presentation/use-workspace-board-statuses'
@@ -53,7 +50,8 @@ import {
 } from './project-collapse-all'
 import {
   selectDetectedWorktreesByRepo,
-  selectFolderWorkspaces
+  selectFolderWorkspaces,
+  selectWorktreesByRepo
 } from '@/store/workspaces/catalog/workspace-record-fields'
 import { getContestedWorktreeIds } from '@/store/slices/worktrees/listing/worktree-catalog-index'
 
@@ -67,12 +65,6 @@ type WorktreeListProps = {
   onWorkspaceBoardDragPreviewCancel?: () => void
   projectsCollapseTarget?: HTMLElement | null
 }
-
-// Desktop windows consume main’s sidebar inputs; paired web clients derive their own view.
-const useSidebarListModel =
-  ORCA_SIDEBAR_INPUTS_IS_MAIN && !isPairedWebClientWindow()
-    ? useMainSidebarListModel
-    : useWindowSidebarListModel
 
 const WorktreeList = React.memo(function WorktreeList({
   scrollOffsetRef,
@@ -96,7 +88,7 @@ const WorktreeList = React.memo(function WorktreeList({
   const activeWorktreeId = useAppStore((s) => s.activeWorktreeId)
   const activeWorkspaceExecutionHostId = useAppStore((s) => s.activeWorkspaceExecutionHostId)
   // WeakMap-cached per catalog reference, so the selector is identity-stable across unrelated writes.
-  const contestedWorktreeIds = useAppStore((s) => getContestedWorktreeIds(s.worktreesByRepo))
+  const contestedWorktreeIds = useAppStore((s) => getContestedWorktreeIds(selectWorktreesByRepo(s)))
   const activeWorkspaceKey = useAppStore((s) => s.activeWorkspaceKey)
   const currentSidebarWorktreeId = useMemo(
     () => getActiveSidebarWorkspaceId(activeWorkspaceKey, activeWorktreeId),

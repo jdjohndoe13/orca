@@ -10,6 +10,7 @@ import {
   executionHostIdForSessionTabsOwner
 } from '../../native-chat/local-sessions/local-structured-session-owner'
 import { getContestedWorktreeIds } from '../../../store/slices/worktrees/listing/worktree-catalog-index'
+import { selectWorktreesByRepo } from '../../../store/workspaces/catalog/workspace-record-fields'
 import {
   foldWebSessionTabsRowsToBareView,
   rekeyWebSessionTabsPatchToHost
@@ -62,7 +63,7 @@ export function applyWebSessionTabsSnapshotWithContext(
       )
     : {}
   const worktreeId = rawSnapshot.worktree
-  const contested = getContestedWorktreeIds(state.worktreesByRepo)
+  const contested = getContestedWorktreeIds(selectWorktreesByRepo(state))
   // Why the batchContext gate: a batch mutates its record copies in place on the state it
   // owns, so `applyWebSessionTabsSnapshots` folds once and re-keys the merged patch itself;
   // folding inside a batch frame would strand those mutations on the folded copy.

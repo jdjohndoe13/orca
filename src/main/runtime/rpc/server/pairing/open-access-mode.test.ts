@@ -1,10 +1,10 @@
 // Fork extension: "accept any access key" LAN mode. The registry authenticates any token as
 // the synthetic open-access principal while the mode file says on, and never persists it.
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { setTimeout as delay } from 'node:timers/promises'
+import { removeTempDirs } from '../../../../../shared/testing/remove-temp-dirs.test-support'
 import { DeviceRegistry } from './device-registry'
 import { DEVICE_REGISTRY_FILENAME } from './mobile-pairing-files'
 import { openAccessModePath, readOpenAccessMode, writeOpenAccessMode } from './open-access-mode'
@@ -30,6 +30,7 @@ function registryWithMode(): DeviceRegistry {
 
 function readRegistryFile(): { deviceId: string }[] {
   try {
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the test reads back the file it wrote through the same writer; the shape is the registry's own.
     return JSON.parse(readFileSync(join(dir, DEVICE_REGISTRY_FILENAME), 'utf-8')) as {
       deviceId: string
     }[]
@@ -44,27 +45,11 @@ beforeEach(() => {
 })
 
 afterEach(async () => {
-  // Why the retry: the secure-file writer propagates the directory DACL asynchronously
-  // (restrictWindowsDirectory), and the addon holds a handle to the temp dir while it
-  // walks; rmSync hits EPERM until that finishes. The DACL itself grants the user full
-  // control, so a short retry is all this Windows race needs.
-  for (let attempt = 0; ; attempt++) {
-    try {
-      rmSync(dir, { recursive: true, force: true })
-      return
-    } catch (error) {
-      if (attempt >= 10 || !isPermissionDenied(error)) {
-        throw error
-      }
-      await delay(50)
-    }
-  }
+  // The secure-file writer propagates the directory DACL asynchronously and the addon
+  // holds a handle to the temp dir while it walks; the shared removal helper owns the
+  // bounded Windows transient-lock retry.
+  await removeTempDirs([dir])
 })
-
-function isPermissionDenied(error: unknown): boolean {
-  const code = (error as NodeJS.ErrnoException | null)?.code
-  return code === 'EPERM' || code === 'EACCES' || code === 'EBUSY'
-}
 
 describe('open-access mode', () => {
   it('accepts an arbitrary token when the mode file says on', () => {

@@ -30,7 +30,9 @@ export async function sendTerminalLiveAccessoryRawBytes(
     activeHandle: args.activeHandle,
     activeSessionTabType: args.activeSessionTabType
   })
-  if (!args.client || !rawSendTarget || args.connState !== 'connected') {
+  // Why hoisted: the closure below cannot see the guard's narrowing of a property.
+  const client = args.client
+  if (!client || !rawSendTarget || args.connState !== 'connected') {
     return false
   }
   const sendParams = buildTerminalSendParams({
@@ -41,8 +43,8 @@ export async function sendTerminalLiveAccessoryRawBytes(
   })
   // Why: a mirrored row's raw send rides the gateway relay; the local path keeps
   // the ordered-input seam upstream introduced.
-  return forwardOrLocal(args.client, args.sessionRelay, 'terminal.send', sendParams, () =>
-    args.sendTerminalUserInput(args.client, sendParams, TERMINAL_INPUT_SEND_OPTIONS)
+  return forwardOrLocal(client, args.sessionRelay, 'terminal.send', sendParams, () =>
+    args.sendTerminalUserInput(client, sendParams, TERMINAL_INPUT_SEND_OPTIONS)
   ).then(
     (reply) => {
       return terminalInputSend.interpret(reply) === true

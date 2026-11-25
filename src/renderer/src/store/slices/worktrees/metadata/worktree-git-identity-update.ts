@@ -110,7 +110,10 @@ export function createUpdateWorktreeGitIdentity(
     // Keep the detached-title cache per host only where the id is contested (STA-4343), so a
     // patch for one host cannot re-derive another host's auto title; the bare key is the
     // byte-identical spelling for every other install.
-    const contested = hasContestedClaim(getContestedWorktreeIds(get().worktreesByRepo), worktreeId)
+    const contested = hasContestedClaim(
+      getContestedWorktreeIds(selectWorktreesByRepo(get())),
+      worktreeId
+    )
     const detachedKey =
       contested && ownerHostId ? composeWorktreeHostIdentity(ownerHostId, worktreeId) : worktreeId
     const initialTargets = gitIdentityTargets(get(), worktreeId, ownerHostId)

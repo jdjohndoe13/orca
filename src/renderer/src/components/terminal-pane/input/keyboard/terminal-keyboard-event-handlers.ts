@@ -1,7 +1,5 @@
 import { keybindingMatchesAction } from '../../../../../../shared/keybindings/matching'
-import type { KeybindingPlatform } from '../../../../../../shared/keybindings/types'
-import type { KeyboardHandlersDeps } from './terminal-keyboard-dependencies'
-import type { createTerminalKeyboardRuntime } from './terminal-keyboard-runtime'
+import type { TerminalKeyboardEventContext } from './terminal-keyboard-event-context'
 import { normalizeSelectedTextForFileSearch } from '@/lib/files/search/file-search-selection'
 import { handleEmptyFloatingWorkspacePanelCloseShortcut } from '@/components/floating-terminal/workspace/floating-workspace-terminal-actions'
 import { useAppStore } from '@/store/index'
@@ -25,30 +23,7 @@ import { isInsideNativeChatCover } from '../../chat/native-chat-covered-pane'
 
 const MAX_OBSERVED_ENTER_KEYDOWNS_PER_CODE = 8
 
-type Runtime = ReturnType<typeof createTerminalKeyboardRuntime>
-type EventContext = KeyboardHandlersDeps & {
-  isMac: boolean
-  isWindows: boolean
-  shortcutPlatform: KeybindingPlatform
-  resolveShortcutEvent: Runtime['resolveShortcutEvent']
-  createCapturedInputSender: Runtime['createCapturedInputSender']
-  reconcileHeldImeEnterModifiers: Runtime['reconcileHeldImeEnterModifiers']
-  getImeEnterModifier: Runtime['getImeEnterModifier']
-  getModifiedEnterChord: Runtime['getModifiedEnterChord']
-  getKeyboardSplitTelemetrySource: () => 'contextual_tour' | 'keyboard'
-  getKittyKeyboardFlagsActivePane: Runtime['getKittyKeyboardFlagsActivePane']
-  nativeOnlyShortcutTracker: Runtime['nativeOnlyShortcutTracker']
-  optionKeyLocations: Runtime['optionKeyLocations']
-  optionKittyReleases: Runtime['optionKittyReleases']
-  heldImeEnterModifiers: Runtime['heldImeEnterModifiers']
-  terminalImeEnterModifierKeydowns: Runtime['terminalImeEnterModifierKeydowns']
-  deferredNewlineSender: Runtime['deferredNewlineSender']
-  deferredChordSender: Runtime['deferredChordSender']
-  modifiedEnterChordOwner: Runtime['modifiedEnterChordOwner']
-  observedEnterKeydownTimeStamps: Runtime['observedEnterKeydownTimeStamps']
-}
-
-export function createTerminalKeyboardEventHandlers(context: EventContext) {
+export function createTerminalKeyboardEventHandlers(context: TerminalKeyboardEventContext) {
   const {
     tabId,
     worktreeId,

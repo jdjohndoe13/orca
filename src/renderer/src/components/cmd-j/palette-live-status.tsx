@@ -13,6 +13,7 @@ import {
   type TabPaneInputSources
 } from '../../../../shared/sidebar-list/sorting/smart-attention'
 import { getContestedWorktreeIds } from '@/store/slices/worktrees/listing/worktree-catalog-index'
+import { selectWorktreesByRepo } from '@/store/workspaces/catalog/workspace-record-fields'
 import { resolveWorkspaceSessionKey } from '@/store/workspace-session-key'
 import {
   isAgentStatusFresh,
@@ -95,7 +96,7 @@ export function PaletteLiveStatusProvider({
     )
   )
   const statusEpoch = useAppStore((s) => (active ? s.agentStatusEpoch : 0))
-  const worktreesByRepo = useAppStore((s) => (active ? s.worktreesByRepo : undefined))
+  const worktreesByRepo = useAppStore((s) => (active ? selectWorktreesByRepo(s) : undefined))
 
   const value = useMemo<PaletteLiveStatus>(() => {
     // Share one freshness tick so worktree state and its done dot cannot expire at different times.

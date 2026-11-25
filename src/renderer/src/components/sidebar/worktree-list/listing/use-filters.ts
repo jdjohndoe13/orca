@@ -15,6 +15,7 @@ import {
 import type { Repo } from '../../../../../../shared/repository/repo-types'
 import {
   activeWorkspaceRowFilterKeys,
+  isSleepingSweepExempt,
   type WorkspaceRowFilters
 } from '../../../../../../shared/workspace-view/workspace-row-filters'
 import { resolveVisibleWorkspaceHostIds } from '../../../../../../shared/workspace-view/workspace-host-visibility'
@@ -36,8 +37,10 @@ import {
   getPairedDeviceIdsByEnvironment,
   isWorkspaceOwnedBySomeoneElse
 } from '../../../../../../shared/workspace-view/workspace-creator-visibility'
-import { isSleepingSweepExempt } from '../../../../../../shared/workspace-view/workspace-row-filters'
-import { selectFolderWorkspaces } from '@/store/workspaces/catalog/workspace-record-fields'
+import {
+  selectFolderWorkspaces,
+  selectWorktreesByRepo
+} from '@/store/workspaces/catalog/workspace-record-fields'
 import { getAgentStatusEpochNow } from '@/lib/agent-status/evidence/agent-status-epoch-clock'
 import {
   getWorktreeIdsWithLiveAgent,
@@ -107,7 +110,7 @@ const REVEAL_WORKSPACE: Record<keyof WorkspaceRowFilters, (context: RevealContex
     // Why the row key (STA-4343): a contested id's rows live under `host|id`,
     // so the bare read would call this card asleep and flip the wrong
     // user-facing filter on.
-    const contested = getContestedWorktreeIds(state.worktreesByRepo)
+    const contested = getContestedWorktreeIds(selectWorktreesByRepo(state))
     const tabsByWorktree = getVisibleWorktreeTerminalActivityTabs(state.tabsByWorktree)
     const browserTabsByWorktree = getVisibleWorktreeBrowserActivityTabs(state.browserTabsByWorktree)
     const liveAgentWorktrees = getWorktreeIdsWithLiveAgent(

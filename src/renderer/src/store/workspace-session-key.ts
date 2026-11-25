@@ -6,6 +6,7 @@ import {
 } from '../../../shared/workspace-session-worktree-key'
 import { getResolvedExecutionHostIdForWorktree } from '@/lib/workspace/ownership/resolved-worktree-execution-host'
 import { getContestedWorktreeIds } from './slices/worktrees/listing/worktree-catalog-index'
+import { selectWorktreesByRepo } from './workspaces/catalog/workspace-record-fields'
 
 /**
  * Where a workspace's row lives, resolved from the store.
@@ -47,7 +48,7 @@ export function resolveWorkspaceSessionKey(
   return workspaceSessionKey(
     worktreeId,
     resolveWorkspaceSessionHost(state, worktreeId, hostId),
-    getContestedWorktreeIds(state.worktreesByRepo)
+    getContestedWorktreeIds(selectWorktreesByRepo(state))
   )
 }
 
@@ -67,7 +68,7 @@ export function readWorkspaceSessionRecord<T>(
     record,
     worktreeId,
     resolveWorkspaceSessionHost(state, worktreeId, hostId),
-    getContestedWorktreeIds(state.worktreesByRepo)
+    getContestedWorktreeIds(selectWorktreesByRepo(state))
   )
 }
 

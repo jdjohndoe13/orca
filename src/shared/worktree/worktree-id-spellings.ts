@@ -7,8 +7,8 @@ import { isFolderRepo } from '../repository/repo-kind'
 import { getWorktreeIdFromHostIdentity, isWorktreeHostIdentity } from './host-qualified-identity'
 import {
   FOLDER_WORKSPACE_INSTANCE_SEPARATOR,
-  WORKTREE_ID_SEPARATOR,
-  canonicalizeWorktreeId
+  canonicalizeWorktreeId,
+  getRepoMainWorktreeId
 } from './id'
 
 /**
@@ -46,7 +46,7 @@ export function collectHostByteExactWorktreeIds(
   const protectedRoots = new Set<string>()
   for (const repo of repos) {
     if (isFolderRepo(repo) || repo.folderUpgradeGitRootPath) {
-      protectedRoots.add(`${repo.id}${WORKTREE_ID_SEPARATOR}${repo.path}`)
+      protectedRoots.add(getRepoMainWorktreeId(repo))
     }
   }
   return protectedRoots

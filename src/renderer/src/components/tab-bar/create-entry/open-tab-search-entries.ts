@@ -184,7 +184,7 @@ function openTabSearchScope(state: OpenTabSearchBrowserPageState) {
     worktreeOrder: new Map([[worktree.id, 0]]),
     // The palette reads session records by the row key (STA-4343); the gate is the
     // catalog's contested set, which `worktreesByRepo` already carries.
-    contestedWorktreeIds: getContestedWorktreeIds(state.worktreesByRepo)
+    contestedWorktreeIds: getContestedWorktreeIds(selectWorktreesByRepo(state))
   }
 }
 

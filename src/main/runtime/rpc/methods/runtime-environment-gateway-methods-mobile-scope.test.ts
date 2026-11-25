@@ -8,7 +8,6 @@ import {
   RUNTIME_ENVIRONMENT_RELAY_DOWNSTREAM_LIST_METHOD,
   RUNTIME_ENVIRONMENT_RELAY_DOWNSTREAM_UNSUBSCRIBE_METHOD,
   RUNTIME_ENVIRONMENT_RELAY_METHOD,
-  RuntimeEnvironmentDownstreamListParamsSchema,
   RuntimeEnvironmentGatewayCallParamsSchema,
   RuntimeEnvironmentGatewaySubscribeParamsSchema,
   RuntimeEnvironmentGatewayUnsubscribeParamsSchema
@@ -132,7 +131,8 @@ function snapshotFor(environmentId: string): RuntimeHostStatusSnapshot {
     environmentId,
     pairingRevision: 1,
     sequence: 1,
-    checkedAt: Date.now(),
+    // The projection only checks `checkedAt !== 0`, so a fixed epoch keeps the fixture deterministic.
+    checkedAt: 1,
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: fixture only satisfies the census projection (status presence + capabilities), not every live RuntimeStatus field.
     status: {
       runtimeId: 'runtime-box',
@@ -189,10 +189,7 @@ describe('runtime environment gateway mobile scope', () => {
     })
     statusSnapshotsMock.mockReturnValue([snapshotFor(gateway.id)])
 
-    const result = await listMethod.handler(
-      RuntimeEnvironmentDownstreamListParamsSchema.parse({}),
-      ctxFixture(null, 'mobile')
-    )
+    const result = await listMethod.handler(undefined, ctxFixture(null, 'mobile'))
 
     expect(result.environments.map((row) => row.gatewayEnvironmentId)).toEqual([null, gateway.id])
   })

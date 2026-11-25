@@ -3,12 +3,12 @@ import { toast } from 'sonner'
 import { useMountedRef } from '@/hooks/useMountedRef'
 import { useAppStore } from '@/store'
 import type { RuntimeAccessGrant } from '../../../../../../shared/remote-runtime/host-catalog/runtime-access-grants'
-import { Checkbox } from '../../../ui/checkbox'
 import { Label } from '../../../ui/label'
 import { RuntimeAccessGrantList } from './RuntimeAccessGrantList'
 import { translate } from '@/i18n/i18n'
 import { useTranslate } from '@/i18n/use-translate'
 import { RuntimePairingGeneratorForm } from './RuntimePairingGeneratorForm'
+import { RuntimePairingOpenAccessToggle } from './RuntimePairingOpenAccessToggle'
 import {
   RUNTIME_PAIRING_LOOPBACK_ADDRESS,
   cacheGeneratedRuntimePairingLink,
@@ -60,8 +60,6 @@ export function RuntimePairingUrlGenerator({
     runtimePairingLinkCache.runtimePairingDeviceId
   )
   const [expiresAt, setExpiresAt] = useState(runtimePairingLinkCache.expiresAt)
-  const [acceptAnyAccessKey, setAcceptAnyAccessKey] = useState(false)
-  const [isTogglingOpenAccess, setIsTogglingOpenAccess] = useState(false)
   const [refreshingNetworkInterfaces, setRefreshingNetworkInterfaces] = useState(false)
   const [revokingGrantId, setRevokingGrantId] = useState<string | null>(null)
   const [isGeneratingPairing, setIsGeneratingPairing] = useState(false)
@@ -136,69 +134,6 @@ export function RuntimePairingUrlGenerator({
       }
     }
   }, [chosenInterface, intent, networkInterfaces, selectedAddress, updateSettings])
-
-  // Why: the mode lives in a file the registry reads live, so the checkbox reflects the
-  // on-disk truth on mount. The web client's API proxy answers unknown members with a
-  // placeholder, so the row shows only once the host has actually answered with the mode.
-  const getOpenAccessMode = window.api.runtimeEnvironments.getOpenAccessMode
-  const [openAccessSupported, setOpenAccessSupported] = useState(false)
-  useEffect(() => {
-    if (!getOpenAccessMode) {
-      return
-    }
-    let cancelled = false
-    void getOpenAccessMode()
-      .then((mode) => {
-        if (!cancelled && mountedRef.current && typeof mode?.acceptAnyAccessKey === 'boolean') {
-          setAcceptAnyAccessKey(mode.acceptAnyAccessKey)
-          setOpenAccessSupported(true)
-        }
-      })
-      .catch(() => {
-        // An unreadable mode file reads as off; the toggle stays available and retries.
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [getOpenAccessMode, mountedRef])
-
-  const toggleOpenAccessMode = async (next: boolean): Promise<void> => {
-    // The bridge members are plain arrow functions; extracting them keeps the narrowing.
-    const setOpenAccessMode = window.api.runtimeEnvironments.setOpenAccessMode
-    if (!setOpenAccessMode) {
-      return
-    }
-    setIsTogglingOpenAccess(true)
-    try {
-      const result = await setOpenAccessMode({ acceptAnyAccessKey: next })
-      if (result?.ok === false) {
-        throw new Error(
-          t(
-            'auto.components.settings.RuntimePairingUrlGenerator.openAccessToggleFailed',
-            'Failed to change the open-access mode.'
-          )
-        )
-      }
-      if (mountedRef.current) {
-        setAcceptAnyAccessKey(next)
-      }
-    } catch (error) {
-      if (mountedRef.current) {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : t(
-                'auto.components.settings.RuntimePairingUrlGenerator.openAccessToggleFailed',
-                'Failed to change the open-access mode.'
-              )
-        )
-      }
-    } finally {
-      if (mountedRef.current) {
-        setIsTogglingOpenAccess(false)
-      }
-    }
-  }
 
   const clearGeneratedUrls = (): void => {
     clearGeneratedRuntimePairingLink()
@@ -440,30 +375,7 @@ export function RuntimePairingUrlGenerator({
         />
       ) : null}
 
-      {openAccessSupported ? (
-        <div className="space-y-1 border-t border-border/40 pt-3">
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="runtime-pairing-accept-any-access-key"
-              checked={acceptAnyAccessKey}
-              disabled={isTogglingOpenAccess}
-              onCheckedChange={(checked) => void toggleOpenAccessMode(checked === true)}
-            />
-            <Label htmlFor="runtime-pairing-accept-any-access-key" className="text-sm font-normal">
-              {t(
-                'auto.components.settings.RuntimePairingUrlGenerator.acceptAnyAccessKey',
-                'Accept any access key (LAN only)'
-              )}
-            </Label>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {t(
-              'auto.components.settings.RuntimePairingUrlGenerator.acceptAnyAccessKeyHelp',
-              'Cloned machines accept any access key. Only use on a trusted network.'
-            )}
-          </p>
-        </div>
-      ) : null}
+      <RuntimePairingOpenAccessToggle mountedRef={mountedRef} />
 
       {runtimeAccessGrants ? (
         <RuntimeAccessGrantList

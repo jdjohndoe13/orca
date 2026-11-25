@@ -14,8 +14,7 @@ import type { SearchableWorkspaceTab } from '@/lib/workspace/search/tabs/workspa
 import { createWorkspaceTabPaletteIndex } from '@/lib/workspace/search/tabs/workspace-tab-palette-index'
 
 import { searchWorkspaceTabs } from '@/lib/workspace/search/tabs/workspace-tab-palette-results'
-import { comparePaletteRankedItems } from '@/lib/workspace/search/palette/cmd-j-section-leadership'
-import { getPaletteWorktreeIdentity } from '@/lib/workspace/search/palette-repo-resolution'
+import { buildPaletteWorktreeItems } from './worktree-jump-palette-worktree-items'
 import type {
   BrowserPaletteItem,
   OpenTabPaletteItem,
@@ -24,7 +23,6 @@ import type {
   WorktreePaletteItem
 } from '../worktree-jump-palette-model'
 import type { WorktreeJumpPaletteOpenTabsInput } from './worktree-jump-palette-open-tabs-input'
-import { encodePaletteIdentity } from '../../../../../shared/palette-match/palette-ranking'
 import {
   buildBrowserPaletteItems,
   buildOpenTabPaletteItems,
@@ -236,46 +234,16 @@ export function useWorktreeJumpPaletteOpenTabs({
       }),
     [workspaceTabEntries, deferredQuery, paletteSearchContext]
   )
-  const worktreeItems = useMemo<WorktreePaletteItem[]>(() => {
-    const items = worktreeMatches
-      .map((match) => {
-        const worktree = resolveWorktree(match.worktreeId, match.worktreeHostId)
-        return worktree
-          ? {
-              id: encodePaletteIdentity(['worktree', getPaletteWorktreeIdentity(worktree)]),
-              type: 'worktree' as const,
-              match,
-              worktree
-            }
-          : null
-      })
-      .filter(
-        (item): item is WorktreePaletteItem =>
-          item !== null && !hidesPaletteWorkspace?.(item.worktree)
-      )
-    if (!hasQuery) {
-      return items
-    }
-    const orderByIdentity = new Map(
-      items.map((item, index) => [getPaletteWorktreeIdentity(item.worktree), index])
-    )
-    return items.sort((left, right) =>
-      comparePaletteRankedItems(
-        {
-          rank: left.match.rank,
-          order: orderByIdentity.get(getPaletteWorktreeIdentity(left.worktree)) ?? 0,
-          identity: left.id,
-          activity: left.match.activity
-        },
-        {
-          rank: right.match.rank,
-          order: orderByIdentity.get(getPaletteWorktreeIdentity(right.worktree)) ?? 0,
-          identity: right.id,
-          activity: right.match.activity
-        }
-      )
-    )
-  }, [hasQuery, hidesPaletteWorkspace, resolveWorktree, worktreeMatches])
+  const worktreeItems = useMemo<WorktreePaletteItem[]>(
+    () =>
+      buildPaletteWorktreeItems({
+        worktreeMatches,
+        hasQuery,
+        hidesPaletteWorkspace,
+        resolveWorktree
+      }),
+    [hasQuery, hidesPaletteWorkspace, resolveWorktree, worktreeMatches]
+  )
   const browserItems = useMemo<BrowserPaletteItem[]>(
     () => buildBrowserPaletteItems(browserMatches),
     [browserMatches]

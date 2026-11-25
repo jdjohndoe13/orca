@@ -845,7 +845,6 @@ import {
 import { ReferenceFind, ReferenceList } from './references/reference-params'
 import { BrowserTarget, ExpectUrlBrowserTarget } from './rpc-param-primitives'
 import {
-  RuntimeEnvironmentDownstreamListParamsSchema,
   RuntimeEnvironmentGatewayCallParamsSchema,
   RuntimeEnvironmentGatewaySubscribeParamsSchema,
   RuntimeEnvironmentGatewayUnsubscribeParamsSchema
@@ -2171,7 +2170,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'runtime.clientEvents.subscribe': ClientEventsSubscribeParams,
   'runtime.clientEvents.unsubscribe': ClientEventsUnsubscribeParams,
   'runtimeEnvironment.call': RuntimeEnvironmentGatewayCallParamsSchema,
-  'runtimeEnvironment.downstream.list': RuntimeEnvironmentDownstreamListParamsSchema,
+  'runtimeEnvironment.downstream.list': null,
   'runtimeEnvironment.downstream.subscribe': RuntimeEnvironmentGatewaySubscribeParamsSchema,
   'runtimeEnvironment.downstream.unsubscribe': RuntimeEnvironmentGatewayUnsubscribeParamsSchema,
   'runtimeEnvironment.wakeRecipeVm': RecipeVmWakeParams,

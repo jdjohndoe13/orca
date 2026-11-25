@@ -3,6 +3,7 @@ import type { Repo } from '../../../../../../shared/repository/repo-types'
 import { getSettingsFocusedExecutionHostId } from '../../../../../../shared/execution-host/execution-host'
 import { getWorktreeIdsWithLiveAgent } from '@/lib/workspace/activity/worktree-activity-state'
 import { getContestedWorktreeIds } from '@/store/slices/worktrees/listing/worktree-catalog-index'
+import { selectWorktreesByRepo } from '@/store/workspaces/catalog/workspace-record-fields'
 import type { useAppStore } from '@/store/index'
 import type { RuntimeStatuses } from '@/store/slices/runtime-status/views/runtime-status-owner'
 import { getWorktreeIdsWithStructuredChat } from './visible-worktree-activity-inputs'
@@ -30,9 +31,9 @@ export function buildVisibleWorktreeOptionsFromState(
       state.agentStatusByPaneKey,
       state.tabsByWorktree,
       Date.now(),
-      getContestedWorktreeIds(state.worktreesByRepo)
+      getContestedWorktreeIds(selectWorktreesByRepo(state))
     ),
-    contestedWorktreeIds: getContestedWorktreeIds(state.worktreesByRepo),
+    contestedWorktreeIds: getContestedWorktreeIds(selectWorktreesByRepo(state)),
     worktreeIdsWithStructuredChat: getWorktreeIdsWithStructuredChat(
       state.unifiedTabsByWorktree,
       state.structuredChatSleptAtByPaneKey

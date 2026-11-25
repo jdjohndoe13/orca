@@ -351,8 +351,6 @@ export type RuntimeEnvironmentGatewayCallResult = z.infer<
   typeof RuntimeEnvironmentGatewayCallResultSchema
 >
 
-export const RuntimeEnvironmentDownstreamListParamsSchema = z.looseObject({})
-
 export const RuntimeEnvironmentGatewaySubscribeParamsSchema = z.looseObject({
   gatewayEnvironmentId: requiredString('Missing gateway environment ID'),
   method: RuntimeEnvironmentRelayMethodSchema,

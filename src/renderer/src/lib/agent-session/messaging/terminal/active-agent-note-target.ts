@@ -15,6 +15,7 @@ import { callRuntimeRpc } from '@/runtime/rpc/calls/runtime-rpc-call'
 import { runtimeEnvironmentIdOrLocalUnlessTwin } from '@/lib/workspace/ownership/worktree-runtime-owner'
 import type { WorktreeRuntimeOwnerState } from '@/lib/workspace/ownership/worktree-runtime-owner-state'
 import { resolveWorkspaceSessionKey } from '@/store/workspace-session-key'
+import { selectWorktreesByRepo } from '@/store/workspaces/catalog/workspace-record-fields'
 import { toRuntimeWorktreeSelector } from '@/runtime/rpc/targets/runtime-worktree-selector'
 import {
   isTerminalLeafId,
@@ -80,7 +81,7 @@ type ActiveAgentRuntimeProbeDescriptor = {
 function noteTargetRowKey(state: ActiveTerminalNoteTargetState, worktreeId: string): string {
   return resolveWorkspaceSessionKey(
     {
-      worktreesByRepo: state.worktreesByRepo ?? {},
+      worktreesByRepo: selectWorktreesByRepo(state) ?? {},
       activeWorkspaceExecutionHostId: state.activeWorkspaceExecutionHostId ?? null,
       activeWorktreeId: state.activeWorktreeId
     },

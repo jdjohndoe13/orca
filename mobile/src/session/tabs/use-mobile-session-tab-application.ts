@@ -1,6 +1,5 @@
 import {
   followTerminalRows,
-  keepsTerminalPaneVisible,
   withReplacedTerminalHandles
 } from '../../terminal/session/pane-layout/mobile-terminal-pane-layout'
 import { orphanedMarkdownDraftTabs } from '../../files/session-documents/orphaned-markdown-draft-tabs'
@@ -26,7 +25,7 @@ import {
   useSessionSnapshotGate
 } from './session-tab-snapshot-gate'
 import type { SessionTabsApplyOutcome } from './mobile-session-tabs-stream-health'
-import { getActiveTabIdForHandle } from './terminal-tab-selection'
+import { applyActiveTerminalHandle, getActiveTabIdForHandle } from './terminal-tab-selection'
 import { rememberClosingTerminalHandles } from './closing-terminal-tab-handles'
 import { resolveActiveSessionTab } from './active-session-tab'
 import { activateMobileSessionTab } from './mobile-session-tab-activation'
@@ -271,38 +270,13 @@ export function useMobileSessionTabApplication(scope: MobileSessionTerminalListM
       activeSessionTabTypeRef.current = active?.type ?? null
       activeSessionTabIdRef.current = active?.id ?? null
       setActiveSessionTabId(active?.id ?? null)
-      if (active?.type === 'terminal') {
-        if (typeof active.terminal !== 'string') {
-          const previous = activeHandleRef.current
-          if (previous) {
-            if (!keepsTerminalPaneVisible(previous, visibleTerminalHandlesRef?.current)) {
-              unsubscribeTerminal(previous)
-            }
-          }
-          activeHandleRef.current = null
-          setActiveHandle(null)
-          return outcome
-        }
-        const previous = activeHandleRef.current
-        if (previous && previous !== active.terminal) {
-          if (!keepsTerminalPaneVisible(previous, visibleTerminalHandlesRef?.current)) {
-            unsubscribeTerminal(previous)
-          }
-        }
-        activeHandleRef.current = active.terminal
-        setActiveHandle(active.terminal)
-        subscribeToTerminal(active.terminal)
-      } else if (active) {
-        // Transient empty snapshots may omit a live terminal; only explicit successful close clears it.
-        const previous = activeHandleRef.current
-        if (previous) {
-          if (!keepsTerminalPaneVisible(previous, visibleTerminalHandlesRef?.current)) {
-            unsubscribeTerminal(previous)
-          }
-        }
-        activeHandleRef.current = null
-        setActiveHandle(null)
-      }
+      applyActiveTerminalHandle(active, {
+        activeHandleRef,
+        visibleHandles: visibleTerminalHandlesRef?.current,
+        setActiveHandle,
+        subscribeToTerminal,
+        unsubscribeTerminal
+      })
       return outcome
     },
     [hostId, worktreeId, subscribeToTerminal, unsubscribeTerminal, setSplitTerminalHandles]

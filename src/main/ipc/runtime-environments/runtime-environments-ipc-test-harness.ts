@@ -68,7 +68,9 @@ export function withRuntimeStatusOwners<T extends Record<string, Mock>>(transpor
       owners.clear()
     },
     closeRemoteRuntimeRequestConnection: (...args: unknown[]) => {
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the IPC handler passes the environment id as its first argument, matching the transport contract.
       owners.get(args[0] as string)?.dispose()
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the IPC handler passes the environment id as its first argument, matching the transport contract.
       owners.delete(args[0] as string)
       transport.closeRemoteRuntimeRequestConnection(...args)
     }
@@ -93,6 +95,7 @@ export function channelHandlerLookup(handleMock: Mock) {
   ): (_event: unknown, args: TArgs) => TResult | Promise<TResult> {
     const match = handleMock.mock.calls.find((call) => call[0] === channel)
     expect(match).toBeTruthy()
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the handler tuple is validated by the expect above; the cast only restores the registered signature.
     return match![1] as (_event: unknown, args: TArgs) => TResult | Promise<TResult>
   }
 }

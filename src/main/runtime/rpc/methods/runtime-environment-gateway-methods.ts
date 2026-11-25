@@ -11,7 +11,6 @@ import {
   RUNTIME_ENVIRONMENT_RELAY_DOWNSTREAM_UNSUBSCRIBE_METHOD,
   isRelayForwardableRuntimeMethod,
   relayForbiddenError,
-  RuntimeEnvironmentDownstreamListParamsSchema,
   RuntimeEnvironmentGatewayCallParamsSchema,
   RuntimeEnvironmentGatewayCallResultSchema,
   RuntimeEnvironmentGatewaySubscribeParamsSchema,
@@ -43,7 +42,9 @@ export { MOBILE_RELAY_VEHICLE_METHODS } from './runtime-environment-gateway-rela
 export const RUNTIME_ENVIRONMENT_GATEWAY_DOWNSTREAM_LIST_METHOD_DEF = defineMethod({
   name: RUNTIME_ENVIRONMENT_RELAY_DOWNSTREAM_LIST_METHOD,
   permission: 'workspace',
-  params: RuntimeEnvironmentDownstreamListParamsSchema,
+  // Why null: the census takes no params; a looseObject({}) would admit unknown keys
+  // that the send-side fence cannot express.
+  params: null,
   handler: (_params, ctx) =>
     withSpan(
       'runtime-environment.gateway.downstream-list',

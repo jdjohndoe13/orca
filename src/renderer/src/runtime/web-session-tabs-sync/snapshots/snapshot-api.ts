@@ -9,6 +9,7 @@ import type {
 } from '../state'
 import { executionHostIdForSessionTabsOwner } from '@/runtime/native-chat/local-sessions/local-structured-session-owner'
 import { getContestedWorktreeIds } from '@/store/slices/worktrees/listing/worktree-catalog-index'
+import { selectWorktreesByRepo } from '@/store/workspaces/catalog/workspace-record-fields'
 import {
   foldWebSessionTabsRowsToBareView,
   rekeyWebSessionTabsPatchToHost
@@ -68,7 +69,7 @@ export function applyWebSessionTabsSnapshots(
   // place on the state object it owns, so the fold must be the object the loop runs on. The
   // merged patch (bare, the host's spelling) is re-spelled to the host's key at the end — the
   // single-frame wrapper is the same mechanism for one frame (see `apply-snapshot.ts`).
-  const contested = getContestedWorktreeIds(state.worktreesByRepo)
+  const contested = getContestedWorktreeIds(selectWorktreesByRepo(state))
   const batchIds = new Set(
     snapshots
       .map((snapshot) => snapshot.worktree)

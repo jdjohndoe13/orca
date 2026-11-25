@@ -613,6 +613,7 @@
 1 src/main/ipc/filesystem/watchers/wsl-watcher-spawn.ts
 2 src/main/ipc/hooks/register-worktree-hook-file-handlers.ts
 1 src/main/ipc/linear/register-handlers.ts
+3 src/main/ipc/mobile.ts # open-access mode get/set handlers: user-initiated toggles from the share dialog, one small mode-file read/write each (same auth path as the device-registry reads)
 7 src/main/ipc/notebook.ts
 5 src/main/ipc/orca-uninstall.ts
 3 src/main/ipc/plugins/plugin-management-ipc.ts # moved from plugins.ts for lazy IPC loading
@@ -1135,7 +1136,7 @@
 2 src/main/runtime/files/watch/file-watches.ts
 16 src/main/runtime/host-instance-identity.ts
 3 src/main/runtime/hosts/platform-probe/host-descriptor.ts
-3 src/main/runtime/hosts/runtime-status.ts
+4 src/main/runtime/hosts/runtime-status.ts # +1 openAccessModeEnabledForHost reads the mode file per status.get so the share toggle needs no restart; the same auth path already baselines the device-registry's sync file reads
 1 src/main/runtime/integrations/git/runtime-git-command-target.ts
 3 src/main/runtime/integrations/git/runtime-git-generation-commands.ts
 1 src/main/runtime/integrations/linear/runtime-linear-connection-commands.ts
@@ -1242,7 +1243,10 @@
 5 src/main/runtime/rpc/server/network-source-policy-store.ts
 11 src/main/runtime/rpc/server/pairing/device-registry-disk-merge.ts
 2 src/main/runtime/rpc/server/pairing/device-registry-file-read.ts
+3 src/main/runtime/rpc/server/pairing/device-registry.ts # open-access token/noop/principal checks read the mode file on the same auth path the registry's own file reads use
 3 src/main/runtime/rpc/server/pairing/e2ee-keypair.ts
+3 src/main/runtime/rpc/server/pairing/open-access-mode.ts # the open-access mode file's own read/write; the device-registry's sync file reads set the precedent for this auth path
+4 src/main/runtime/rpc/server/pairing/open-access-principal.ts # open-access auth checks read the mode file per request; same auth path as the device-registry's sync file reads
 3 src/main/runtime/rpc/server/runtime-metadata.ts
 2 src/main/runtime/rpc/server/runtime-rpc-binary-routing.ts
 8 src/main/runtime/rpc/server/runtime-rpc-lifecycle.ts
@@ -1372,9 +1376,9 @@
 2 src/main/startup/profile-startup/single-instance-lock.ts
 12 src/main/startup/pty-startup/main-process-pty-startup.ts
 1 src/main/startup/quit/main-process-quit.ts # superseded-session unlink on a rare memory-only sign-in or rotation stays ordered with the sync saves, sign-out and quit flush (#44285)
-15 src/main/startup/runtime-startup/main-process-runtime-launch.ts
-3 src/main/startup/runtime-startup/main-process-runtime-service.ts
-1 src/main/startup/serve-launch/headless-serve-ssh-registration.ts
+16 src/main/startup/runtime-startup/main-process-runtime-launch.ts # +1 registerMobileHandlers reads the open-access mode file once at startup registration
+4 src/main/startup/runtime-startup/main-process-runtime-service.ts
+>1 src/main/startup/serve-launch/headless-serve-ssh-registration.ts
 3 src/main/startup/serve-launch/main-process-serve.ts
 3 src/main/startup/serve-launch/serve-cli-registration.ts
 1 src/main/startup/serve-launch/serve-user-data-path-guard.ts
@@ -1565,6 +1569,7 @@
 1 src/shared/remote-runtime/requests/remote-runtime-subscription-transport.ts
 5 src/shared/remote-runtime/serve-supervisor/serve-bundle-park.ts
 2 src/shared/remote-runtime/serve-supervisor/serve-user-data-path.ts
+2 src/shared/runtime-environment-downstream-rows.ts # gateway downstream row upsert/prune write the environment store synchronously; the same pattern as the sibling store-operations callers baselined above
 1 src/shared/secure-storage/bounded-secure-json-file.ts
 1 src/shared/secure-storage/secure-file-async-write.ts # Windows only: the ACL addon creates restricted files synchronously, so the async writer falls back to writeSecureFile there
 19 src/shared/secure-storage/secure-file.ts

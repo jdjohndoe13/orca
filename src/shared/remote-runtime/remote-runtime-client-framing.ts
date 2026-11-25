@@ -57,6 +57,29 @@ type HandshakeOptions = {
 }
 
 /**
+ * An open-access dial's trust-on-first-use handshake. Why outside the latch: an open-access offer
+ * pins no key, so the placeholder would make every open-access host share one latch entry, and the
+ * host's real key is only known after the ready. Why forced v2: the legacy key schedule derives
+ * from the pinned key, which a TOFU dial lacks. Why no fallback: a TOFU dial never redials legacy.
+ * Kept separate so a TOFU dial never touches the blocking latch store.
+ */
+export function createOpenAccessTofuHandshake(
+  hostPublicKeyB64: string
+): RemoteRuntimeClientHandshake {
+  const tofuHandshake = createPairedE2EEClientHandshake({
+    primitives: NODE_PAIRED_E2EE_PRIMITIVES,
+    hostPublicKeyB64,
+    framing: 'v2',
+    transport: 'direct',
+    v2TokenCapabilities: true,
+    trustOnFirstUse: true,
+    parseJson: parseRemoteRuntimeJsonText,
+    serializeJson: serializeRemoteRuntimePayload
+  })
+  return { ...tofuHandshake, v2Refusal: () => null }
+}
+
+/**
  * Desktop and CLI runtime clients. A host this profile has authenticated with v2 always gets v2;
  * legacy reaches it only through the status check below. Otherwise only `probeV2` dials try v2.
  * Throws on an invalid host public key.
@@ -65,22 +88,8 @@ export function createRemoteRuntimeClientHandshake(
   hostPublicKeyB64: string,
   options: HandshakeOptions = {}
 ): RemoteRuntimeClientHandshake {
-  // Why outside the latch: an open-access offer pins no key, so the placeholder would make every
-  // open-access host share one latch entry, and the host's real key is only known after the ready.
   if (options.trustOnFirstUse) {
-    const tofuHandshake = createPairedE2EEClientHandshake({
-      primitives: NODE_PAIRED_E2EE_PRIMITIVES,
-      hostPublicKeyB64,
-      // Why forced v2: the legacy key schedule derives from the pinned key, which a TOFU dial lacks.
-      framing: 'v2',
-      transport: 'direct',
-      v2TokenCapabilities: true,
-      trustOnFirstUse: true,
-      parseJson: parseRemoteRuntimeJsonText,
-      serializeJson: serializeRemoteRuntimePayload
-    })
-    // Why no fallback: a TOFU dial never redials legacy, so a refusal is simply the dial's error.
-    return { ...tofuHandshake, v2Refusal: () => null }
+    return createOpenAccessTofuHandshake(hostPublicKeyB64)
   }
   const store = remoteRuntimeE2EEV2HostLatchStore()
   const policy = framingPolicyFor(hostPublicKeyB64, store)
@@ -161,9 +170,7 @@ export async function withRemoteRuntimeFramingFallback<TResult>(
 ): Promise<TResult> {
   if (dial.trustOnFirstUse) {
     // Why no fallback: a TOFU dial is already v2-forced, so the pinned-key refusal paths are moot.
-    return await dial.attempt(
-      createRemoteRuntimeClientHandshake(hostPublicKeyB64, { trustOnFirstUse: true })
-    )
+    return await dial.attempt(createOpenAccessTofuHandshake(hostPublicKeyB64))
   }
   const first = createRemoteRuntimeClientHandshake(hostPublicKeyB64, { probeV2: true })
   try {

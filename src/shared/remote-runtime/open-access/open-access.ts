@@ -35,6 +35,7 @@ export function parseOpenAccessModeFile(raw: string): OpenAccessModeFile {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       return OPEN_ACCESS_MODE_DEFAULT
     }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the guard above proves parsed is a non-null, non-array object; the field read below still checks its own type.
     const value = (parsed as Record<string, unknown>).acceptAnyAccessKey
     return typeof value === 'boolean' ? { acceptAnyAccessKey: value } : OPEN_ACCESS_MODE_DEFAULT
   } catch {

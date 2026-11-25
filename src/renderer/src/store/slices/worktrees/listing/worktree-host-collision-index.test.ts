@@ -27,6 +27,7 @@ import { buildWorktreeByIdIndex } from '../../../terminals/hydration/workspace-t
 
 const SHARED_ID = 'repo-1::/work/orca'
 
+// oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture carries only the fields the collision index reads; the spread rows below add the rest.
 const baseWorktree: Worktree = {
   id: SHARED_ID,
   repoId: 'repo-1',
@@ -42,6 +43,7 @@ const baseWorktree: Worktree = {
   comment: '',
   isUnread: false,
   isPinned: false
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture carries only the fields the collision index reads; the spread rows below add the rest.
 } as Worktree
 
 const localRow: Worktree = { ...baseWorktree, hostId: 'local', displayName: 'local orca' }

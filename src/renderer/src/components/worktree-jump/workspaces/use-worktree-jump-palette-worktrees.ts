@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 import { getStructuredChatWorktreeIds } from '@/components/sidebar/worktree-list/listing/visible-worktree-activity-inputs'
-import { filterWorkspaceRows } from '../../../../../shared/workspace-view/workspace-row-filters'
-import { buildDesktopWorkspaceRowFactReader } from '@/components/sidebar/worktree-list/listing/desktop-workspace-row-facts'
+import { usePaletteEmptyQueryVisibleWorktrees } from './worktree-jump-palette-empty-query-rows'
 import { sortWorktreesSmart } from '../../../../../shared/sidebar-list/sorting/smart-sort'
 import { buildWorktreeChecksReviewIndex } from '@/components/cmd-j/worktree-checks-review-index'
 import { getLiveAgentStatusByWorktreeId } from '@/lib/workspace/activity/worktree-activity-state'
@@ -106,56 +105,27 @@ export function useWorktreeJumpPaletteWorktrees({
     () => indexHiddenProjects(repos, defaultHostId),
     [repos, defaultHostId]
   )
-  const emptyQueryVisibleWorktrees = useMemo(() => {
-    // Why no project or host scope: the palette ignores the sidebar's scope; filterPredicate scopes it.
-    const visible = filterWorkspaceRows(
-      workspaces,
-      {
-        hideSleepingWorkspaces: !showSleepingWorkspaces,
-        alwaysShowDefaultBranchWorkspace,
-        hideDefaultBranchWorkspace,
-        hideAutomationGeneratedWorkspaces,
-        hideCliCreatedWorkspaces,
-        hideDetachedHeadWorkspaces,
-        hideWorkspacesFromOtherDevices,
-        filterRepoIds: [],
-        visibleHostIds: null
-      },
-      buildDesktopWorkspaceRowFactReader({
-        repoMap,
-        hiddenProjects,
-        defaultHostId,
-        pairedDeviceIdsByEnvironment,
-        tabsByWorktree,
-        ptyIdsByTabId,
-        browserTabsByWorktree,
-        worktreeIdsWithLiveAgent,
-        worktreeIdsWithStructuredChat,
-        contestedWorktreeIds
-      })
-    )
-    return filterPredicate ? visible.filter(filterPredicate.matchesWorktree) : visible
-  }, [
+  const emptyQueryVisibleWorktrees = usePaletteEmptyQueryVisibleWorktrees({
     workspaces,
-    alwaysShowDefaultBranchWorkspace,
-    browserTabsByWorktree,
-    contestedWorktreeIds,
     filterPredicate,
-    hideAutomationGeneratedWorkspaces,
-    hideCliCreatedWorkspaces,
-    hideDefaultBranchWorkspace,
-    hideDetachedHeadWorkspaces,
-    hideWorkspacesFromOtherDevices,
-    pairedDeviceIdsByEnvironment,
-    ptyIdsByTabId,
     repoMap,
     hiddenProjects,
     defaultHostId,
-    showSleepingWorkspaces,
+    pairedDeviceIdsByEnvironment,
     tabsByWorktree,
+    ptyIdsByTabId,
+    browserTabsByWorktree,
     worktreeIdsWithLiveAgent,
-    worktreeIdsWithStructuredChat
-  ])
+    worktreeIdsWithStructuredChat,
+    contestedWorktreeIds,
+    showSleepingWorkspaces,
+    alwaysShowDefaultBranchWorkspace,
+    hideDefaultBranchWorkspace,
+    hideAutomationGeneratedWorkspaces,
+    hideCliCreatedWorkspaces,
+    hideDetachedHeadWorkspaces,
+    hideWorkspacesFromOtherDevices
+  })
   const { visibleWorktreesForState, switchableWorktreesForRows } = useMemo(
     () =>
       orderEmptyQueryWorktrees({
