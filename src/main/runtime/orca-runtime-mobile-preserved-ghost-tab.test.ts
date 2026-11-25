@@ -148,7 +148,7 @@ function createHarness(options: {
   runtime.attachWindow(1)
 
   const publishRendererSnapshot = (tabIds: readonly string[], snapshotVersion: number) => {
-    runtime.syncWindowGraph(1, {
+    const published = runtime.syncWindowGraph(1, {
       tabs: tabIds.map((tabId) => ({
         tabId,
         worktreeId: WORKTREE_ID,
@@ -182,6 +182,16 @@ function createHarness(options: {
           }))
         }
       ]
+    })
+    // Publishing twice in a row is the point of this suite: the second sync
+    // supersedes the first's reply generation, and the first's reply promise
+    // rejects with the superseded-generation error. That reply is expected and
+    // discarded here; any other rejection must still surface as an error.
+    published.catch((error: unknown) => {
+      if (error instanceof Error && error.message.includes('superseded renderer generation')) {
+        return
+      }
+      throw error
     })
   }
 
