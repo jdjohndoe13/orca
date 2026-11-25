@@ -17,9 +17,13 @@ import {
  */
 test('a pre-relay build still loads an environment store carrying relay downstream rows', async () => {
   const checkout = await materializeReleaseCheckout(resolveBaselineReleaseRef())
+  // The store's read path is the sync operations core; the public
+  // runtime-environment-store.ts is a worker-client wrapper that returns promises
+  // and cannot run in the test process. The old build's worker and CLI inline path
+  // both run these same functions, so this is what a downgraded build reads with.
   const oldStore = await importReleaseCheckoutModule(
     checkout,
-    'src/shared/runtime-environment-store.ts'
+    'src/shared/remote-runtime/host-store/runtime-environment-store-operations.ts'
   )
   // The old build's sources are not part of this bundle: the boundary is
   // inherently untyped.
