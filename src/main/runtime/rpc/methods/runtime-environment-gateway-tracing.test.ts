@@ -21,9 +21,12 @@ import {
 const { subscribeRuntimeEnvironmentMock } = vi.hoisted(() => ({
   subscribeRuntimeEnvironmentMock: vi.fn()
 }))
-vi.mock('../../../ipc/runtime-environment-transport-routing', () => ({
-  subscribeRuntimeEnvironment: subscribeRuntimeEnvironmentMock
-}))
+vi.mock(
+  '../../../ipc/runtime-environments/requests/runtime-environment-subscription-routing',
+  () => ({
+    subscribeRuntimeEnvironment: subscribeRuntimeEnvironmentMock
+  })
+)
 
 // Why: the relay path is the field-debug surface for "phone sees no tabs" — the
 // spans must reach the trace file with the forwarded method and outcome on them.

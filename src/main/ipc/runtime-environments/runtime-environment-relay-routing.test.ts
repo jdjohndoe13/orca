@@ -64,11 +64,8 @@ function downstreamRow(userDataPath: string): {
 describe('callDownstreamEnvironment', () => {
   const tempDirs: string[] = []
   let userDataPath = ''
-  const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')
 
   beforeEach(() => {
-    // Store writes must not harden Windows ACLs inside unit tests.
-    Object.defineProperty(process, 'platform', { configurable: true, value: 'linux' })
     callRuntimeEnvironmentMock.mockReset()
     userDataPath = mkdtempSync(join(tmpdir(), 'orca-relay-routing-'))
     tempDirs.push(userDataPath)
@@ -85,9 +82,6 @@ describe('callDownstreamEnvironment', () => {
   })
 
   afterEach(() => {
-    if (originalPlatform) {
-      Object.defineProperty(process, 'platform', originalPlatform)
-    }
     for (const dir of tempDirs.splice(0)) {
       rmSync(dir, { recursive: true, force: true })
     }

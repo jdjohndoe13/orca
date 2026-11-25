@@ -2429,7 +2429,8 @@
         "remotePairingUnreachable": "Cannot reach Orca at {{endpoint}}.",
         "remotePairingInvalidDetails": "This access link contains invalid connection details.",
         "remotePairingSaveFailed": "Orca verified the host but could not save it. Check browser storage and try again.",
-        "remotePairingRepairUnavailable": "Re-pairing is not available in the browser. Pair this browser with the server again."
+        "remotePairingRepairUnavailable": "Re-pairing is not available in the browser. Pair this browser with the server again.",
+        "openAccessPairingUnavailable": "Connecting by address without an access link is not available in the browser. Pair with a link."
       },
       "web": {
         "preload": {
@@ -8607,7 +8608,15 @@
           "sshImportSynced_one": "Added {{count}} host to Orca.",
           "sshImportSynced_other": "Added {{count}} hosts to Orca.",
           "sshConfigPickerInvalidResponse": "Invalid SSH config host response",
-          "sshImportSynced": "Added {{value0}} host{{value1}} to Orca."
+          "sshImportSynced": "Added {{value0}} host{{value1}} to Orca.",
+          "addressError": "Enter an address like 192.168.250.29:6768 or ws://192.168.250.29:6768.",
+          "address": "Address",
+          "optional": "(optional)",
+          "addressPlaceholder": "e.g. 192.168.250.29:6768",
+          "addressHelp": "Overrides the link destination. With no link, connects to a host that accepts any access key.",
+          "accessKey": "Access key",
+          "accessKeyPlaceholder": "e.g. default_orca_access_key",
+          "accessKeyHelp": "Overrides the link’s access key, for example the host’s fixed default key."
         },
         "ForgetSshWorkspaceDialog": {
           "cancel": "Cancel",
@@ -10497,7 +10506,10 @@
           "accessLinkHelp": "Paste this into Add server on the other Orca.",
           "staleAddressCreate": "The connection address changed. Create a new link for {{address}}.",
           "linkExpired": "Link expired",
-          "unusedLinkExpires": "Unused link expires at {{time}}"
+          "unusedLinkExpires": "Unused link expires at {{time}}",
+          "openAccessToggleFailed": "Failed to change the open-access mode.",
+          "acceptAnyAccessKey": "Accept any access key (LAN only)",
+          "acceptAnyAccessKeyHelp": "Cloned machines accept any access key. Only use on a trusted network."
         },
         "Settings": {
           "3bf149e873": "Project Settings > {{value0}}",
@@ -13878,7 +13890,14 @@
           "addServer": "Add server",
           "nameLabel": "Name",
           "optional": "(optional)",
-          "headlessHelpPrefix": "Running Orca without a window? On that computer, run"
+          "headlessHelpPrefix": "Running Orca without a window? On that computer, run",
+          "addressLabel": "Address",
+          "addressPlaceholder": "e.g. 192.168.250.29:6768",
+          "addressHelp": "Overrides the link destination. With no link, connects to a host that accepts any access key.",
+          "addressError": "Enter an address like 192.168.250.29:6768 or ws://192.168.250.29:6768.",
+          "accessKeyLabel": "Access key",
+          "accessKeyPlaceholder": "e.g. default_orca_access_key",
+          "accessKeyHelp": "Overrides the link’s access key, for example the host’s fixed default key."
         },
         "CloudVmSetupGuide": {
           "cardTitle": "Cloud VMs",

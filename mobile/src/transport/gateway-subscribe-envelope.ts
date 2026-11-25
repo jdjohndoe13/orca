@@ -9,6 +9,7 @@ import {
   RUNTIME_ENVIRONMENT_RELAY_ATTACH_SUBSCRIBE_METHOD,
   RUNTIME_ENVIRONMENT_RELAY_DOWNSTREAM_UNSUBSCRIBE_METHOD
 } from '../../../src/shared/rpc-contract/runtime-environment-relay-params'
+import { translate } from '../i18n/mobile-i18n'
 
 export const GATEWAY_BRIDGE_SUBSCRIBE_METHOD = RUNTIME_ENVIRONMENT_RELAY_ATTACH_SUBSCRIBE_METHOD
 export const GATEWAY_BRIDGE_UNSUBSCRIBE_METHOD =
@@ -105,7 +106,13 @@ export type GatewayBridgeUnwrap =
  */
 export function unwrapGatewayBridgeEvent(result: unknown): GatewayBridgeUnwrap {
   if (!result || typeof result !== 'object') {
-    return { kind: 'error', message: 'Unreadable gateway relay response.' }
+    return {
+      kind: 'error',
+      message: translate(
+        'connection.gatewaySubscribeEnvelope.unreadableResponse',
+        'Unreadable gateway relay response.'
+      )
+    }
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the object check above; every member is read as unknown and narrowed before use.
   const event = result as { type?: unknown; response?: unknown; message?: unknown }
@@ -119,7 +126,13 @@ export function unwrapGatewayBridgeEvent(result: unknown): GatewayBridgeUnwrap {
     }
   }
   if (event.type !== 'response' || !event.response || typeof event.response !== 'object') {
-    return { kind: 'error', message: 'Unreadable gateway relay response.' }
+    return {
+      kind: 'error',
+      message: translate(
+        'connection.gatewaySubscribeEnvelope.unreadableResponse',
+        'Unreadable gateway relay response.'
+      )
+    }
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the object check above; every member is read as unknown and narrowed before use.
   const response = event.response as {

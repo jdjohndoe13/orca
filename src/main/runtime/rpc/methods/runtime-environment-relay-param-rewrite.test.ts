@@ -26,9 +26,12 @@ import {
 const { subscribeRuntimeEnvironmentMock } = vi.hoisted(() => ({
   subscribeRuntimeEnvironmentMock: vi.fn()
 }))
-vi.mock('../../../ipc/runtime-environment-transport-routing', () => ({
-  subscribeRuntimeEnvironment: subscribeRuntimeEnvironmentMock
-}))
+vi.mock(
+  '../../../ipc/runtime-environments/requests/runtime-environment-subscription-routing',
+  () => ({
+    subscribeRuntimeEnvironment: subscribeRuntimeEnvironmentMock
+  })
+)
 
 function ownCode(error: unknown): unknown {
   if (error instanceof Error) {

@@ -37,9 +37,12 @@ vi.mock(
     getRuntimeEnvironmentStatusSnapshots: statusSnapshotsMock
   })
 )
-vi.mock('../../../ipc/runtime-environment-transport-routing', () => ({
-  subscribeRuntimeEnvironment: subscribeRuntimeEnvironmentMock
-}))
+vi.mock(
+  '../../../ipc/runtime-environments/requests/runtime-environment-subscription-routing',
+  () => ({
+    subscribeRuntimeEnvironment: subscribeRuntimeEnvironmentMock
+  })
+)
 
 function pairingCode(endpoint = 'ws://10.0.0.1:6768'): string {
   return encodePairingOffer({

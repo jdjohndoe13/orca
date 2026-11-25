@@ -2,7 +2,7 @@ import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { removeTempDirs } from '../../testing/remove-temp-dirs.test-support'
-import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { encodePairingOffer } from '../pairing/pairing'
 import { getPreferredPairingOffer } from '../host-catalog/runtime-environments'
 import {
@@ -85,16 +85,8 @@ describe('runtime environment store', () => {
 
 describe('runtime environment store source vocabulary', () => {
   const tempDirs: string[] = []
-  const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')
-
-  beforeEach(() => {
-    Object.defineProperty(process, 'platform', { configurable: true, value: 'linux' })
-  })
 
   afterEach(async () => {
-    if (originalPlatform) {
-      Object.defineProperty(process, 'platform', originalPlatform)
-    }
     await removeTempDirs(tempDirs.splice(0))
   })
 

@@ -41,9 +41,6 @@ import {
 } from './runtime-environment-repo-catalog-triggers'
 import { closeTestStores, createStore, testState } from '../../persistence/persistence-test-harness'
 
-// The store writes harden Windows ACLs outside the sandbox: pin the platform.
-const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')
-
 const CATALOG_ROW = {
   id: 'repo-a',
   path: '/srv/prj/app',
@@ -71,12 +68,15 @@ function serveCatalog(): void {
   })
 }
 
+// The host key is derived from the endpoint so every fixture endpoint is a distinct server:
+// the store refuses duplicate host keys, and these tests dial several paired hosts at once.
 function pairingCode(endpoint = 'ws://10.0.0.9:6768'): string {
+  const keyByte = Number(endpoint.match(/(\d+)\.(\d+)\.(\d+)\.(\d+):/)?.[4] ?? 1)
   return encodePairingOffer({
     v: 2,
     endpoint,
     deviceToken: 'device-token',
-    publicKeyB64: Buffer.from(new Uint8Array(32).fill(1)).toString('base64')
+    publicKeyB64: Buffer.from(new Uint8Array(32).fill(keyByte)).toString('base64')
   })
 }
 
@@ -91,7 +91,6 @@ let userDataPath = ''
 const tempDirs: string[] = []
 
 beforeEach(() => {
-  Object.defineProperty(process, 'platform', { configurable: true, value: 'linux' })
   callRuntimeEnvironmentMock.mockReset()
   userDataPath = mkdtempSync(join(tmpdir(), 'orca-repo-catalog-triggers-'))
   tempDirs.push(userDataPath)
@@ -102,9 +101,6 @@ beforeEach(() => {
 })
 
 afterEach(async () => {
-  if (originalPlatform) {
-    Object.defineProperty(process, 'platform', originalPlatform)
-  }
   await closeTestStores()
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true })

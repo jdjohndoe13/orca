@@ -18,12 +18,12 @@ import {
 import { getPreferredPairingOffer } from '../../../shared/remote-runtime/host-catalog/runtime-environments'
 import { synchronizeDownstreamEnvironmentRows } from './runtime-environment-pairing-downstream-sync'
 
-function pairingCode(endpoint = 'ws://10.0.0.1:6768'): string {
+function pairingCode(endpoint = 'ws://10.0.0.1:6768', keyByte = 1): string {
   return encodePairingOffer({
     v: 2,
     endpoint,
     deviceToken: 'device-token',
-    publicKeyB64: Buffer.from(new Uint8Array(32).fill(1)).toString('base64')
+    publicKeyB64: Buffer.from(new Uint8Array(32).fill(keyByte)).toString('base64')
   })
 }
 
@@ -50,11 +50,8 @@ describe('synchronizeDownstreamEnvironmentRows', () => {
   const tempDirs: string[] = []
   let userDataPath = ''
   let gateway: KnownRuntimeEnvironment | undefined
-  const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')
 
   beforeEach(() => {
-    // Store writes must not harden Windows ACLs inside unit tests.
-    Object.defineProperty(process, 'platform', { configurable: true, value: 'linux' })
     callRuntimeEnvironmentMock.mockReset()
     userDataPath = mkdtempSync(join(tmpdir(), 'orca-downstream-sync-'))
     tempDirs.push(userDataPath)
@@ -65,9 +62,6 @@ describe('synchronizeDownstreamEnvironmentRows', () => {
   })
 
   afterEach(() => {
-    if (originalPlatform) {
-      Object.defineProperty(process, 'platform', originalPlatform)
-    }
     for (const dir of tempDirs.splice(0)) {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -137,7 +131,7 @@ describe('synchronizeDownstreamEnvironmentRows', () => {
     })
     const otherGateway = addEnvironmentFromPairingCode(userDataPath, {
       name: 'other gateway',
-      pairingCode: pairingCode('ws://10.0.0.2:6768')
+      pairingCode: pairingCode('ws://10.0.0.2:6768', 2)
     })
     upsertDownstreamEnvironment(userDataPath, {
       gatewayEnvironmentId: 'env-other',

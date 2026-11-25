@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { encodePairingOffer } from './remote-runtime/pairing/pairing'
 import { getPreferredPairingOffer } from './remote-runtime/host-catalog/runtime-environments'
 import {
@@ -15,29 +15,24 @@ import {
   upsertDownstreamEnvironment
 } from './runtime-environment-downstream-rows'
 
-function pairingCode(endpoint = 'ws://127.0.0.1:6768', pairedDeviceId?: string): string {
+function pairingCode(
+  endpoint = 'ws://127.0.0.1:6768',
+  pairedDeviceId?: string,
+  keyByte = 1
+): string {
   return encodePairingOffer({
     v: 2,
     endpoint,
     deviceToken: 'device-token',
-    publicKeyB64: Buffer.from(new Uint8Array(32).fill(1)).toString('base64'),
+    publicKeyB64: Buffer.from(new Uint8Array(32).fill(keyByte)).toString('base64'),
     ...(pairedDeviceId ? { pairedDeviceId } : {})
   })
 }
 
 describe('relay downstream environment rows', () => {
   const tempDirs: string[] = []
-  const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')
-
-  beforeEach(() => {
-    // Why: this suite tests store timestamps, while secure-file tests cover Windows ACLs.
-    Object.defineProperty(process, 'platform', { configurable: true, value: 'linux' })
-  })
 
   afterEach(() => {
-    if (originalPlatform) {
-      Object.defineProperty(process, 'platform', originalPlatform)
-    }
     for (const dir of tempDirs.splice(0)) {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -142,7 +137,7 @@ describe('relay downstream environment rows', () => {
     })
     const otherGateway = addEnvironmentFromPairingCode(userDataPath, {
       name: 'other gateway',
-      pairingCode: pairingCode('ws://10.0.0.2:6768'),
+      pairingCode: pairingCode('ws://10.0.0.2:6768', undefined, 2),
       now: 5_000
     })
     upsertDownstreamEnvironment(userDataPath, {

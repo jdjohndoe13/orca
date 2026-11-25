@@ -38,16 +38,19 @@ vi.mock(
     getRuntimeEnvironmentStatusSnapshots: statusSnapshotsMock
   })
 )
-vi.mock('../../../ipc/runtime-environment-transport-routing', () => ({
-  subscribeRuntimeEnvironment: subscribeRuntimeEnvironmentMock
-}))
+vi.mock(
+  '../../../ipc/runtime-environments/requests/runtime-environment-subscription-routing',
+  () => ({
+    subscribeRuntimeEnvironment: subscribeRuntimeEnvironmentMock
+  })
+)
 
-function pairingCode(endpoint = 'ws://10.0.0.1:6768'): string {
+function pairingCode(endpoint = 'ws://10.0.0.1:6768', keyByte = 1): string {
   return encodePairingOffer({
     v: 2,
     endpoint,
     deviceToken: 'device-token',
-    publicKeyB64: Buffer.from(new Uint8Array(32).fill(1)).toString('base64')
+    publicKeyB64: Buffer.from(new Uint8Array(32).fill(keyByte)).toString('base64')
   })
 }
 
@@ -219,11 +222,11 @@ describe('runtime environment gateway methods', () => {
       })
       const web = addEnvironmentFromPairingCode(userDataPath, {
         name: 'web box',
-        pairingCode: pairingCode('ws://10.0.0.2:6768')
+        pairingCode: pairingCode('ws://10.0.0.2:6768', 2)
       })
       addEnvironmentFromPairingCode(userDataPath, {
         name: 'db box',
-        pairingCode: pairingCode('ws://10.0.0.3:6768'),
+        pairingCode: pairingCode('ws://10.0.0.3:6768', 3),
         source: 'ephemeral-vm'
       })
       statusSnapshotsMock.mockReturnValue([

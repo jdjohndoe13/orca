@@ -26,10 +26,7 @@ import { retirePairedEnvironmentRepoCatalog } from './runtime-environment-repo-c
 import { configurePairedEnvironmentRepoCatalogMirror } from './runtime-environment-repo-catalog-mirror'
 import { closeTestStores, createStore, testState } from '../../persistence/persistence-test-harness'
 
-// The stores below write through the real one, and its writes harden Windows ACLs
-// outside the sandbox: pair the exercises with this platform pin.
-const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')
-
+// The stores below write through the real one.
 const CALL_TIMEOUT_MS = 15_000
 
 function rpcOk(result: unknown): { ok: true; result: unknown } {
@@ -75,8 +72,6 @@ function catalogsByRepoId(
 }
 
 beforeEach(() => {
-  // Store writes must not harden Windows ACLs inside unit tests.
-  Object.defineProperty(process, 'platform', { configurable: true, value: 'linux' })
   userDataPath = mkdtempSync(join(tmpdir(), 'orca-repo-catalog-mirror-'))
   tempDirs.push(userDataPath)
   testState.dir = userDataPath
@@ -88,9 +83,6 @@ beforeEach(() => {
 })
 
 afterEach(async () => {
-  if (originalPlatform) {
-    Object.defineProperty(process, 'platform', originalPlatform)
-  }
   await closeTestStores()
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true })

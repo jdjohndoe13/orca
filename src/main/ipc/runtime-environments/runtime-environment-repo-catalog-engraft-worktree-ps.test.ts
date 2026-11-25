@@ -39,9 +39,6 @@ import { engagePairedEnvironmentRepoCatalogMirror } from './runtime-environment-
 import { configurePairedEnvironmentRepoCatalogMirror } from './runtime-environment-repo-catalog-mirror'
 import { closeTestStores, createStore, testState } from '../../persistence/persistence-test-harness'
 
-// The store writes harden Windows ACLs outside the sandbox: pin the platform.
-const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')
-
 const REPO_ID = 'repo-a'
 const REPO_PATH = '/srv/prj/app'
 const FEATURE_PATH = '/srv/prj/app.BranchFeature'
@@ -57,7 +54,6 @@ const tempDirs: string[] = []
 let userDataPath = ''
 
 beforeEach(() => {
-  Object.defineProperty(process, 'platform', { configurable: true, value: 'linux' })
   callRuntimeEnvironmentMock.mockReset()
   listWorktreesStrictMock.mockReset()
   listWorktreesStrictMock.mockRejectedValue(new Error('git unavailable'))
@@ -72,9 +68,6 @@ beforeEach(() => {
 })
 
 afterEach(async () => {
-  if (originalPlatform) {
-    Object.defineProperty(process, 'platform', originalPlatform)
-  }
   await closeTestStores()
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true })
