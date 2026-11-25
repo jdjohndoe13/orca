@@ -102,6 +102,7 @@ const ctx: WorktreeItemRowContext = {
   nativeLineageDropTargetIdentity: null,
   activeWorktreeId: null,
   activeWorkspaceExecutionHostId: null,
+  contestedWorktreeIds: new Set(),
   currentWorktreeId: null,
   highlightedRevealRowKey: null,
   selectedWorktreeIds: new Set(),

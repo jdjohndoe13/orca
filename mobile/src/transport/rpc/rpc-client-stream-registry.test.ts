@@ -152,7 +152,9 @@ describe('RpcClientStreamRegistry', () => {
 
       const events2: unknown[] = []
       registry.subscribe(bridgeMethod, bridgeParams, (event) => events2.push(event))
-      registry.handleResponse(streamingResponse(sent[1]!.id, { type: 'error', message: 'bridge died' }))
+      registry.handleResponse(
+        streamingResponse(sent[1]!.id, { type: 'error', message: 'bridge died' })
+      )
       expect(events2).toEqual([{ type: 'error', message: 'bridge died' }])
     })
 

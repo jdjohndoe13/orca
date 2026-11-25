@@ -145,6 +145,8 @@ type FramingDial<TResult> = {
     handshake: RemoteRuntimeClientHandshake
   ) => Promise<RuntimeRpcResponse<RuntimeStatus>>
   signal?: AbortSignal
+  /** Open-access dial: the placeholder key pins no identity, so v2 fallback is skipped entirely. */
+  trustOnFirstUse?: boolean
 }
 
 /**
@@ -157,6 +159,12 @@ export async function withRemoteRuntimeFramingFallback<TResult>(
   hostPublicKeyB64: string,
   dial: FramingDial<TResult>
 ): Promise<TResult> {
+  if (dial.trustOnFirstUse) {
+    // Why no fallback: a TOFU dial is already v2-forced, so the pinned-key refusal paths are moot.
+    return await dial.attempt(
+      createRemoteRuntimeClientHandshake(hostPublicKeyB64, { trustOnFirstUse: true })
+    )
+  }
   const first = createRemoteRuntimeClientHandshake(hostPublicKeyB64, { probeV2: true })
   try {
     return await dial.attempt(first)

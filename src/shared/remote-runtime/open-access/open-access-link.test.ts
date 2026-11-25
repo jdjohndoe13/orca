@@ -145,9 +145,9 @@ describe('endpoint/token overrides over a parsed link', () => {
     if (!link.ok) {
       throw new Error('fixture link must parse')
     }
-    expect(
-      applyDeviceTokenOverride(link.value, DEFAULT_ORCA_ACCESS_KEY).pairing.deviceToken
-    ).toBe(DEFAULT_ORCA_ACCESS_KEY)
+    expect(applyDeviceTokenOverride(link.value, DEFAULT_ORCA_ACCESS_KEY).pairing.deviceToken).toBe(
+      DEFAULT_ORCA_ACCESS_KEY
+    )
     expect(applyDeviceTokenOverride(link.value, '')).toBe(link.value)
   })
 })

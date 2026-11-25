@@ -162,9 +162,7 @@ export function createTabsCreateActions(
             ]
           ]),
           activeGroupIdByWorktree: nextActiveGroupId
-            ? replaceRecordEntries(current.activeGroupIdByWorktree, [
-                [rowKey, nextActiveGroupId]
-              ])
+            ? replaceRecordEntries(current.activeGroupIdByWorktree, [[rowKey, nextActiveGroupId]])
             : current.activeGroupIdByWorktree,
           layoutByWorktree: replaceRecordEntries(current.layoutByWorktree, [
             [

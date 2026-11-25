@@ -94,9 +94,7 @@ export function useTerminalBulkCloseActions(
         }
         if ((state.tabsByWorktree[rowKey] ?? []).some((tab) => tab.id === id)) {
           closeTab(id)
-        } else if (
-          (state.browserTabsByWorktree[rowKey] ?? []).some((tab) => tab.id === id)
-        ) {
+        } else if ((state.browserTabsByWorktree[rowKey] ?? []).some((tab) => tab.id === id)) {
           closeBrowserTab(id, browserCloseOptions)
           // closeBrowserTab announces the MRU target before guest teardown can trigger bridge fallback.
           destroyWorkspaceWebviews(state.browserPagesByWorkspace, id)
@@ -115,9 +113,8 @@ export function useTerminalBulkCloseActions(
     (tabIds: string[]) => {
       const state = useAppStore.getState()
       const tabs = activeWorktreeId
-        ? (state.unifiedTabsByWorktree[
-            resolveWorktreeSessionRowKeyFromStore(activeWorktreeId)
-          ] ?? [])
+        ? (state.unifiedTabsByWorktree[resolveWorktreeSessionRowKeyFromStore(activeWorktreeId)] ??
+          [])
         : []
       const entityByTab = new Map(tabs.map((tab) => [tab.id, tab.entityId]))
       const fileIdOf = (id: string): string => entityByTab.get(id) ?? id

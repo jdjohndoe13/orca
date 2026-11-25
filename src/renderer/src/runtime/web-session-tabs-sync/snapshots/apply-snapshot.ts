@@ -97,7 +97,15 @@ export function applyWebSessionTabsSnapshotWithContext(
       contested
     )
   }
-  return runWebSessionTabsPipeline(state, rawSnapshot, environmentId, now, batchContext, options, identityPatch)
+  return runWebSessionTabsPipeline(
+    state,
+    rawSnapshot,
+    environmentId,
+    now,
+    batchContext,
+    options,
+    identityPatch
+  )
 }
 
 function runWebSessionTabsPipeline(

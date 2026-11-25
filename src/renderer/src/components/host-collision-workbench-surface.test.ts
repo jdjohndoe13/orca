@@ -3,7 +3,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { useAppStore } from '@/store'
-import { makeRepo, makeTerminalTab, makeWorktree } from './worktree-jump/worktree-jump-palette-test-fixtures'
+import {
+  makeRepo,
+  makeTerminalTab,
+  makeWorktree
+} from './worktree-jump/worktree-jump-palette-test-fixtures'
 import { useTerminalWorkspaceFoundation } from './terminal/workbench/use-terminal-workspace-foundation'
 import { useTerminalWorkspaceStoreBindings } from './terminal/workbench/use-terminal-workspace-store-bindings'
 import { useTerminalWorkspaceProjection } from './terminal/workbench/use-terminal-workspace-projection'

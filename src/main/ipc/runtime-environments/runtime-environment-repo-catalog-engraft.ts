@@ -7,7 +7,10 @@
 import type { Store } from '../../persistence/loading-store/store'
 import type { KnownRuntimeEnvironment } from '../../../shared/remote-runtime/host-catalog/runtime-environments'
 import { isEphemeralVmRuntimeEnvironment } from '../../../shared/remote-runtime/host-catalog/runtime-environments'
-import { getRepoExecutionHostId, toRuntimeExecutionHostId } from '../../../shared/execution-host/execution-host'
+import {
+  getRepoExecutionHostId,
+  toRuntimeExecutionHostId
+} from '../../../shared/execution-host/execution-host'
 import type { Repo } from '../../../shared/repository/repo-types'
 import { normalizeRuntimePathForComparison } from '../../../shared/file-access/cross-platform-path'
 import { runtimePathsEqual } from '../../runtime/workspaces/catalog/runtime-worktree-path-identity'

@@ -9,7 +9,10 @@ import { recordPtyConnectDiagnostic } from '../instrumentation/pty-connect-diagn
 import { canRestorePairedParkedTerminal } from './paired-parked-terminal-restore'
 import { isPtySessionIdOwnedByWorktree as isSessionOwnedByWorktree } from '../../../../../../shared/terminal/pty/lifecycle/pty-session-id-format'
 import { startDeferredSessionReattachUnlessHiddenAgentResume } from '../spawn/hidden-agent-resume-deferral'
-import { findPaneWorktreeRowForState, reconcilePaneRestoredPtyId } from '../pane-worktree-row-lookup'
+import {
+  findPaneWorktreeRowForState,
+  reconcilePaneRestoredPtyId
+} from '../pane-worktree-row-lookup'
 
 import type { ConnectPanePtySession } from '../connect-pane-pty-session'
 

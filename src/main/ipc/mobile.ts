@@ -135,10 +135,9 @@ export function registerMobileHandlers(
     async (_event, args?: { address?: string; rotate?: boolean; reach?: RuntimePairingReach }) => {
       // Why: open-access LAN mode is reached by IP, so a local-only dialog intent must not
       // keep the listener loopback-bound and advertise an unreachable endpoint.
-      const reach =
-        readOpenAccessMode(rpcServer.getPairingUserDataPath()).acceptAnyAccessKey
-          ? ('network' as const)
-          : args?.reach
+      const reach = readOpenAccessMode(rpcServer.getPairingUserDataPath()).acceptAnyAccessKey
+        ? ('network' as const)
+        : args?.reach
       const offer = await requestRuntimePairingOffer(
         rpcServer,
         {
@@ -169,8 +168,7 @@ export function registerMobileHandlers(
 
   ipc.handle(
     'runtimeEnvironments:getOpenAccessMode',
-    (): { acceptAnyAccessKey: boolean } => readOpenAccessMode(rpcServer.getPairingUserDataPath())
-  )
+    (): { acceptAnyAccessKey: boolean } => readOpenAccessMode(rpcServer.getPairingUserDataPath())  )
 
   ipc.handle(
     'runtimeEnvironments:setOpenAccessMode',

@@ -3,7 +3,10 @@
  * here: drops only rows stamped with the removed environment's runtime host id.
  */
 
-import { getRepoExecutionHostId, toRuntimeExecutionHostId } from '../../../shared/execution-host/execution-host'
+import {
+  getRepoExecutionHostId,
+  toRuntimeExecutionHostId
+} from '../../../shared/execution-host/execution-host'
 import {
   getPairedEnvironmentRepoCatalogMirrorDeps,
   invalidateRuntimeCatalog,

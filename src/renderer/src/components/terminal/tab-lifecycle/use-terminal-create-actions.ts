@@ -142,9 +142,7 @@ export function useTerminalCreateActions(controller: TerminalColdActivationContr
       }
       const state = useAppStore.getState()
       const tabs =
-        state.browserTabsByWorktree[
-          resolveWorktreeSessionRowKeyFromStore(activeWorktreeId)
-        ] ?? []
+        state.browserTabsByWorktree[resolveWorktreeSessionRowKeyFromStore(activeWorktreeId)] ?? []
       const source = tabs.find((tab) => tab.id === browserTabId)
       if (!source) {
         return

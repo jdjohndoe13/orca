@@ -127,9 +127,7 @@ export function RuntimeHostAccessForm({
   const canSubmit =
     !busy &&
     !addressError &&
-    (openAccessMode
-      ? openAccessEndpoint?.ok === true
-      : parsed.ok && !loopbackBlocked)
+    (openAccessMode ? openAccessEndpoint?.ok === true : parsed.ok && !loopbackBlocked)
   const defaultName = openAccessMode
     ? defaultServerNameForOpenAccessAddress(trimmedAddress, takenNames)
     : defaultServerNameForAccessLink(accessLink, takenNames)

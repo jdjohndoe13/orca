@@ -17,7 +17,10 @@ import { splitWorkspaceSessionByHost } from './workspace/persistence/workspace-s
 import { buildHostIdByWorktreeId } from './workspace/persistence/workspace-session-host-persistence'
 import type { HostPersistenceState } from './workspace/persistence/workspace-session-host-persistence'
 import { getDefaultWorkspaceSession } from '../../../shared/orca-profiles/constants'
-import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../../shared/execution-host/execution-host'
+import {
+  LOCAL_EXECUTION_HOST_ID,
+  type ExecutionHostId
+} from '../../../shared/execution-host/execution-host'
 import type { Repo } from '../../../shared/repository/repo-types'
 import type { Worktree } from '../../../shared/worktree/types'
 import type { TerminalTab } from '../../../shared/workspace-layout/terminal-tab-types'

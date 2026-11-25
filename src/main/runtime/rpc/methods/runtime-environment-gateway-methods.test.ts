@@ -32,9 +32,12 @@ const { statusSnapshotsMock, subscribeRuntimeEnvironmentMock } = vi.hoisted(() =
   statusSnapshotsMock: vi.fn(),
   subscribeRuntimeEnvironmentMock: vi.fn()
 }))
-vi.mock('../../../ipc/runtime-environments/connections/runtime-environment-request-connections', () => ({
-  getRuntimeEnvironmentStatusSnapshots: statusSnapshotsMock
-}))
+vi.mock(
+  '../../../ipc/runtime-environments/connections/runtime-environment-request-connections',
+  () => ({
+    getRuntimeEnvironmentStatusSnapshots: statusSnapshotsMock
+  })
+)
 vi.mock('../../../ipc/runtime-environment-transport-routing', () => ({
   subscribeRuntimeEnvironment: subscribeRuntimeEnvironmentMock
 }))

@@ -32,7 +32,6 @@ function rowKeyOf(state: TerminalStoreSnapshot, worktreeId: string): string {
   return resolveWorktreeSessionRowKey(state, worktreeId)
 }
 
-
 function findActiveUnifiedTab(state: TerminalStoreSnapshot, worktreeId: string): Tab | null {
   const rowKey = rowKeyOf(state, worktreeId)
   const activeGroupId = state.activeGroupIdByWorktree[rowKey]

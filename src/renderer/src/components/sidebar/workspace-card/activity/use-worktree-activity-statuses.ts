@@ -13,19 +13,13 @@ export type WorktreeActivityStatusRow = {
   hostId?: ExecutionHostId | null
 }
 
-function rowKeyFor(
-  state: AppState,
-  row: string | WorktreeActivityStatusRow
-): string {
+function rowKeyFor(state: AppState, row: string | WorktreeActivityStatusRow): string {
   return typeof row === 'string'
     ? resolveWorkspaceSessionKey(state, row)
     : resolveWorkspaceSessionKey(state, row.id, row.hostId)
 }
 
-function statusFor(
-  state: AppState,
-  row: string | WorktreeActivityStatusRow
-): WorktreeStatus {
+function statusFor(state: AppState, row: string | WorktreeActivityStatusRow): WorktreeStatus {
   return typeof row === 'string'
     ? selectWorktreeActivityStatus(state, row)
     : selectWorktreeActivityStatus(state, row.id, row.hostId)

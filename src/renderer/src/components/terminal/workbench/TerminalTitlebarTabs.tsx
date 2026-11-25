@@ -3,7 +3,10 @@ import type { TerminalTab } from '../../../../../shared/workspace-layout/termina
 import { useAppStore } from '../../../store/index'
 import { selectActiveTabForWorktree } from '../../../store/slices/tabs/active-tab-selection'
 import TabBar from '../../tab-bar/TabBar'
-import { readWorktreeSessionRow, resolveWorkspaceRowKey } from '../../terminal-workspace-session-row'
+import {
+  readWorktreeSessionRow,
+  resolveWorkspaceRowKey
+} from '../../terminal-workspace-session-row'
 import type { TerminalController } from './use-terminal-controller'
 
 const EMPTY_TERMINAL_TABS: TerminalTab[] = []
@@ -71,10 +74,8 @@ export function TerminalTitlebarTabs({
   // makes a host switch — which keeps the bare id — re-point this subscription.
   const activeSimulatorTabId = useAppStore((state) =>
     activeTabType === 'simulator' && renderedActiveWorktreeId
-      ? (selectActiveTabForWorktree(
-          state,
-          resolveWorkspaceRowKey(state, renderedActiveWorktreeId)
-        )?.id ?? null)
+      ? (selectActiveTabForWorktree(state, resolveWorkspaceRowKey(state, renderedActiveWorktreeId))
+          ?.id ?? null)
       : null
   )
   if (!renderedActiveWorktreeId || effectiveActiveLayout || !titlebarTabsTarget) {

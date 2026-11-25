@@ -51,8 +51,7 @@ export function useActivationDeferredTabAdmission(
       // Why the row key: the restriction refs are mount-keyed (bare id) but the tab
       // row is host-qualified for a contested id, so the two must not be confused.
       const state = useAppStore.getState()
-      const tabs =
-        state.tabsByWorktree[resolveWorktreeSessionRowKeyFromStore(worktreeId)] ?? []
+      const tabs = state.tabsByWorktree[resolveWorktreeSessionRowKeyFromStore(worktreeId)] ?? []
       const allTabIds = tabs.map((tab) => tab.id)
       // Unbound saved tabs spawn nothing while hidden, so warming them only leaves an empty xterm that can never park; they mount when shown.
       const warmableTabIds = tabs

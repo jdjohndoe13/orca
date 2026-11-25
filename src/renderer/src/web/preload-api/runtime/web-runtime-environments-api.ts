@@ -65,7 +65,13 @@ export function createRuntimeEnvironmentsApi(): PreloadApi['runtimeEnvironments'
       saveStoredWebRuntimeEnvironment(webRuntimeState.activeEnvironment)
       return { environment: redactStoredWebRuntimeEnvironment(webRuntimeState.activeEnvironment) }
     },
-    verifyAndAddFromPairingCode: async ({ name, pairingCode, allowLoopback, endpointOverride, deviceTokenOverride }) => {
+    verifyAndAddFromPairingCode: async ({
+      name,
+      pairingCode,
+      allowLoopback,
+      endpointOverride,
+      deviceTokenOverride
+    }) => {
       // Why first: the browser cannot TOFU-pin (its key schedule needs the pinned key), so the
       // IP-only mode is desktop-only; say so rather than dial a placeholder key and fail obscurely.
       if (pairingCode.trim() === '' && (endpointOverride?.trim() ?? '') !== '') {
@@ -157,8 +163,7 @@ export function createRuntimeEnvironmentsApi(): PreloadApi['runtimeEnvironments'
       } finally {
         client?.close()
       }
-      const usesSshTunnel =
-        withEndpoint.value.endpointKind === 'loopback' && allowLoopback === true
+      const usesSshTunnel = withEndpoint.value.endpointKind === 'loopback' && allowLoopback === true
       const nextEnvironment = {
         ...createStoredWebRuntimeEnvironment({
           name,

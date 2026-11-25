@@ -235,9 +235,7 @@ export function createTerminalTabCreationActions(
         const orphanDeletes = [...orphanTerminalIds].map((orphanId) => [orphanId, null] as const)
         return {
           ...orphanCleanupPatch,
-          tabsByWorktree: replaceTabBuckets(current.tabsByWorktree, [
-            [rowKey, [...existing, tab]]
-          ]),
+          tabsByWorktree: replaceTabBuckets(current.tabsByWorktree, [[rowKey, [...existing, tab]]]),
           // Why: publish the unified tab atomically with the runtime tab so a transient legacy mount can't race the split host.
           unifiedTabsByWorktree: replaceTabBuckets(current.unifiedTabsByWorktree, [
             [

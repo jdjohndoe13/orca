@@ -58,9 +58,7 @@ export function browserTabOpenView(
     activeBrowserTabId: shouldUpdateGlobalActiveSurface ? workspaceId : s.activeBrowserTabId,
     activeBrowserTabIdByWorktree: {
       ...s.activeBrowserTabIdByWorktree,
-      [rowKey]: shouldActivate
-        ? workspaceId
-        : (s.activeBrowserTabIdByWorktree[rowKey] ?? null)
+      [rowKey]: shouldActivate ? workspaceId : (s.activeBrowserTabIdByWorktree[rowKey] ?? null)
     },
     activeTabType: shouldUpdateGlobalActiveSurface ? 'browser' : s.activeTabType,
     activeTabTypeByWorktree: shouldActivate

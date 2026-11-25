@@ -20,7 +20,9 @@ export function defaultServerNameForOpenAccessAddress(
   existing: readonly { name: string }[] = []
 ): string {
   const normalized = normalizeOpenAccessEndpoint(address)
-  return normalized.ok ? defaultServerNameForEndpoint(normalized.value.displayEndpoint, existing) : ''
+  return normalized.ok
+    ? defaultServerNameForEndpoint(normalized.value.displayEndpoint, existing)
+    : ''
 }
 
 function defaultServerNameForEndpoint(

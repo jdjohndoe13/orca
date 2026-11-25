@@ -5,7 +5,10 @@
 
 import type { Store } from '../../persistence/loading-store/store'
 import type { KnownRuntimeEnvironment } from '../../../shared/remote-runtime/host-catalog/runtime-environments'
-import { getRepoExecutionHostId, type toRuntimeExecutionHostId } from '../../../shared/execution-host/execution-host'
+import {
+  getRepoExecutionHostId,
+  type toRuntimeExecutionHostId
+} from '../../../shared/execution-host/execution-host'
 import { splitWorktreeId } from '../../../shared/worktree/id'
 import { normalizeRuntimePathForComparison } from '../../../shared/file-access/cross-platform-path'
 import { runtimePathsEqual } from '../../runtime/workspaces/catalog/runtime-worktree-path-identity'

@@ -91,9 +91,7 @@ describe('canonicalizeWorktreeId', () => {
   })
 
   it('agrees with the comparison key so both spellings address one workspace', () => {
-    expect(worktreeIdentityKey('repo-123::C:\\vmd')).toBe(
-      worktreeIdentityKey('repo-123::C:/vmd')
-    )
+    expect(worktreeIdentityKey('repo-123::C:\\vmd')).toBe(worktreeIdentityKey('repo-123::C:/vmd'))
     // The canonical id is the id the comparison key folds TO (minus case), so a canonical id
     // never needs folding to match itself.
     expect(canonicalizeWorktreeId('repo-123::C:\\vmd')).toBe('repo-123::C:/vmd')

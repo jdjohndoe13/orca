@@ -45,12 +45,13 @@ export type NormalizeOpenAccessEndpointResult =
  * websocket URL. Rejects empty, whitespace, wildcards (0.0.0.0/::), paths, and http(s):// URLs —
  * an open-access dial names a runtime endpoint, not a web page.
  */
-export function normalizeOpenAccessEndpoint(
-  input: string
-): NormalizeOpenAccessEndpointResult {
+export function normalizeOpenAccessEndpoint(input: string): NormalizeOpenAccessEndpointResult {
   const trimmed = input.trim()
   if (trimmed === '' || trimmed.length > PAIRING_ENDPOINT_MAX_CHARACTERS) {
-    return { ok: false, message: 'Enter an address like 192.168.250.29:6768 or ws://192.168.250.29:6768.' }
+    return {
+      ok: false,
+      message: 'Enter an address like 192.168.250.29:6768 or ws://192.168.250.29:6768.'
+    }
   }
   if (/\s/.test(trimmed)) {
     return { ok: false, message: 'The address contains spaces.' }

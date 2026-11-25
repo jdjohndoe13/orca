@@ -172,12 +172,8 @@ export function useMobileTerminalPaste({
             ? { client: { id: deviceTokenRef.current, type: 'mobile' as const } }
             : {})
         }
-        return forwardOrLocal(
-          currentClient,
-          sessionRelay,
-          'terminal.send',
-          pasteParams,
-          () => sendTerminalUserInput(currentClient, pasteParams)
+        return forwardOrLocal(currentClient, sessionRelay, 'terminal.send', pasteParams, () =>
+          sendTerminalUserInput(currentClient, pasteParams)
         ).then(
           (response) => terminalInputSend.interpret(response) === true,
           () => false

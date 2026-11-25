@@ -179,8 +179,7 @@ export function useTerminalParkingPass(controller: TerminalParkingFoundation): v
     }
     const nextEvictionExemptTabIds = new Set<string>()
     for (const worktreeId of forceParkedWorktreeIds) {
-      const forceParkedTabs =
-        tabsByWorktree[resolveWorkspaceRowKeyFromStore(worktreeId)] ?? []
+      const forceParkedTabs = tabsByWorktree[resolveWorkspaceRowKeyFromStore(worktreeId)] ?? []
       let exemptTabIds = exemptionByWorktree.current.get(worktreeId)
       if (!exemptTabIds || dirty.has(worktreeId)) {
         exemptTabIds = selectEvictionExemptTerminalTabIds(worktreeId, forceParkedTabs)

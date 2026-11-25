@@ -43,7 +43,10 @@ export function createOpenFileState(
         const setsGlobal = ownsGlobalSelection(s, worktreeId) && s.activeTabType !== type
         const setsWorktree = Boolean(
           rowKey &&
-          !(Object.hasOwn(s.activeTabTypeByWorktree, rowKey) && s.activeTabTypeByWorktree[rowKey] === type)
+          !(
+            Object.hasOwn(s.activeTabTypeByWorktree, rowKey) &&
+            s.activeTabTypeByWorktree[rowKey] === type
+          )
         )
         // Unchanged selection publishes nothing; every publication wakes every store subscriber.
         if (!setsGlobal && !setsWorktree) {

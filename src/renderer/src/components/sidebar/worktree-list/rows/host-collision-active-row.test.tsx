@@ -11,7 +11,10 @@ import type { ProjectGroup } from '../../../../../../shared/project/groups/proje
 import type { Worktree } from '../../../../../../shared/worktree/types'
 import type { WorktreeItemRow, FolderWorkspaceItemRow } from '../listing/renderable-rows'
 import type { RenderRow } from '../listing/render-row'
-import { buildLineageRowProjection, useLineageRowProjection } from '../listing/lineage-row-projection'
+import {
+  buildLineageRowProjection,
+  useLineageRowProjection
+} from '../listing/lineage-row-projection'
 import type { LineageRowFrame } from '../listing/lineage-row-projection'
 import { WORKTREE_ROW_DRAG_INITIAL_STATE } from '../drag/row-state'
 import { renderWorktreeItemRow, type WorktreeItemRowContext } from './item-row'
@@ -100,7 +103,8 @@ function soloFrame(): LineageRowFrame {
     contentIndent: 0,
     before: 0,
     after: 6,
-    closing: 0
+    closing: 0,
+    guides: null
   }
 }
 

@@ -8,7 +8,6 @@ import {
   ignoreSettledRemoteRuntimeSocketError
 } from '../remote-runtime-client-handshake'
 import {
-  createRemoteRuntimeClientHandshake,
   withRemoteRuntimeFramingFallback,
   type RemoteRuntimeClientHandshake
 } from '../remote-runtime-client-framing'
@@ -303,13 +302,9 @@ export async function sendRemoteRuntimeRequestOnSocket<TResult>(
     })
   const dialed = latchedHostCheck
     ? attempt(latchedHostCheck)
-    : connection.trustOnFirstUse
-      ? // Why no fallback: a TOFU dial is already v2-forced; the pinned-key refusal paths are moot.
-        attempt(createRemoteRuntimeClientHandshake(connection.hostPublicKeyB64, {
-          trustOnFirstUse: true
-        }))
-      : withRemoteRuntimeFramingFallback(connection.hostPublicKeyB64, {
+    : withRemoteRuntimeFramingFallback(connection.hostPublicKeyB64, {
         attempt,
+        trustOnFirstUse: connection.trustOnFirstUse,
         signal,
         readStatus: (handshake) =>
           sendRemoteRuntimeRequestOnSocket<RuntimeStatus>(

@@ -91,10 +91,7 @@ export function registerRuntimeEnvironmentConnectivityHandlers({
   )
   ipcMain.handle(
     'runtimeEnvironments:verifyAndAddFromPairingCode',
-    async (
-      _event,
-      args: VerifyAndAddRuntimeEnvironmentArgs
-    ) => {
+    async (_event, args: VerifyAndAddRuntimeEnvironmentArgs) => {
       const result = await verifyAndAddRuntimeEnvironmentFromPairingCode(getUserDataPath(), args)
       if (result.ok) {
         await publishVerifiedPairing(

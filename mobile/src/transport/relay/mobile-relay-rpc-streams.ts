@@ -5,20 +5,17 @@ import {
 } from '../rpc/rpc-client-terminal-binary-frame'
 import { TerminalUnreadableFrameResets } from '../rpc/terminal-unreadable-frame-resets'
 import {
-  buildStreamUnsubscribe,
-  buildTerminalUnsubscribeParams,
   updateGatewayBridgeTerminalViewport,
   updateTerminalSubscriptionViewport
 } from '../rpc/rpc-client-terminal-subscription'
 import { buildReadyStreamUnsubscribe, isReadyIdStream } from '../rpc/rpc-client-server-subscription'
 import { isStreamingOpenerReply } from '../rpc/rpc-acceptance-policies'
+import { createGatewayBridgeStreams } from '../gateway-bridge-streams'
 import {
-  buildGatewayBridgeUnsubscribe,
-  isGatewayBridgeStream,
-  terminalVehicleKind,
-  TerminalVehicleArbiter,
-  unwrapGatewayBridgeEvent
-} from '../gateway-subscribe-envelope'
+  buildParamsUnsubscribe,
+  unsubscribeSlot,
+  type StreamUnsubscribe
+} from './mobile-relay-stream-unsubscribe'
 import type { RpcClient } from '../rpc/rpc-client-contract'
 import type { RpcEnvelopeFields, RpcRequestFrame } from '../rpc/rpc-envelope-fields'
 import type { RpcResponse, RpcSuccess } from '../rpc/rpc-wire-types'
@@ -41,37 +38,6 @@ type StreamRecord = {
   receivedSnapshot?: boolean
 }
 
-type StreamUnsubscribe = { method: string; params: Record<string, unknown> }
-
-// Include the whole envelope in cleanup-slot identity; sort keys so equivalent routing names the same slot.
-function unsubscribeSlot(
-  { method, params }: StreamUnsubscribe,
-  envelope: RpcEnvelopeFields | undefined
-): string | null {
-  if (!('subscriptionId' in params)) {
-    return null
-  }
-  const client =
-    'client' in params && typeof params.client === 'object' && params.client !== null
-      ? params.client
-      : null
-  const clientId = client && 'id' in client ? client.id : null
-  const routing = envelope ? Object.entries(envelope).sort(([a], [b]) => (a < b ? -1 : 1)) : null
-  return JSON.stringify([method, params.subscriptionId, clientId, routing])
-}
-
-function buildParamsUnsubscribe(
-  method: string,
-  params: unknown,
-  requestId: string
-): StreamUnsubscribe | null {
-  if (method === 'terminal.subscribe') {
-    const unsubscribeParams = buildTerminalUnsubscribeParams(params)
-    return unsubscribeParams ? { method: 'terminal.unsubscribe', params: unsubscribeParams } : null
-  }
-  return buildStreamUnsubscribe(method, params, requestId)
-}
-
 type StreamManagerOptions = {
   nextId: () => string
   // A stream's envelope rides its subscribe and unsubscribes alike, so routing reaches one host.
@@ -88,7 +54,7 @@ export class MobileRelayRpcStreams {
   private readonly terminalListeners = new Map<number, (result: unknown) => void>()
   private readonly terminalSnapshots = new Map<number, TerminalSnapshotState>()
   private readonly unreadableTerminalFrames = new TerminalUnreadableFrameResets()
-  private readonly terminalVehicles = new TerminalVehicleArbiter()
+  private readonly bridge = createGatewayBridgeStreams()
   private activeBrowserStream: StreamRecord | null = null
   private sendCount = 0
 
@@ -112,10 +78,12 @@ export class MobileRelayRpcStreams {
       sendOrder: null
     }
     this.streams.set(id, stream)
-    const vehicle = terminalVehicleKind(method, params)
-    if (vehicle) {
-      for (const evicted of this.terminalVehicles.claim(vehicle, id)) {
-        this.evictTerminalVehicle(evicted)
+    // The arbiter replaced a stream's binary vehicle: end it like a host-ended stream so
+    // the session layer's `end` path (unsubscribe + inventory recovery) can re-subscribe.
+    for (const evicted of this.bridge.claim(method, params, id)) {
+      const stale = this.streams.get(evicted)
+      if (stale && !stale.cancelled) {
+        this.finish(evicted, stale, { type: 'end' })
       }
     }
     void this.options
@@ -183,18 +151,15 @@ export class MobileRelayRpcStreams {
       return true
     }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the ok===false branch above returned; the discriminated union is narrowed to the success arm.
-    let result = (response as RpcSuccess).result
-    if (isGatewayBridgeStream(stream.method)) {
-      const unwrapped = unwrapGatewayBridgeEvent(result)
-      if (unwrapped.kind === 'keepalive') {
-        return true
-      }
-      if (unwrapped.kind === 'error') {
-        this.fail(response.id, stream, unwrapped.message)
-        return true
-      }
-      result = unwrapped.result
+    const unwrapped = this.bridge.unwrap(stream.method, (response as RpcSuccess).result)
+    if (unwrapped.kind === 'keepalive') {
+      return true
     }
+    if (unwrapped.kind === 'error') {
+      this.fail(response.id, stream, unwrapped.message)
+      return true
+    }
+    const result = unwrapped.result
     if (result && typeof result === 'object') {
       const metadata = result as { subscriptionId?: unknown; streamId?: unknown; type?: unknown }
       if (stream.method === 'session.tabs.subscribe' && metadata.type === 'snapshot') {
@@ -255,15 +220,11 @@ export class MobileRelayRpcStreams {
         if (byParams) {
           this.sendUnsubscribe(byParams, stream.sendOrder, stream.envelope, id)
         }
-      } else if (isGatewayBridgeStream(stream.method)) {
-        // The shared socket cannot close its way out of a bridge; the gateway
-        // releases it by the request id that opened it. An old gateway answers
-        // method_not_found, which the stream drops like any lost reply.
-        const release = buildGatewayBridgeUnsubscribe(stream.method, id)
-        if (release) {
-          this.sendUnsubscribe(release, stream.sendOrder, stream.envelope)
-        }
       } else {
+        const bridgeRelease = this.bridge.release(stream.method, id)
+        if (bridgeRelease) {
+          this.sendUnsubscribe(bridgeRelease, stream.sendOrder, stream.envelope)
+        }
         const unsubscribe = stream.subscriptionId
           ? buildReadyStreamUnsubscribe(stream.method, stream.subscriptionId)
           : null
@@ -338,23 +299,13 @@ export class MobileRelayRpcStreams {
       this.terminalSnapshots.delete(streamId)
       this.unreadableTerminalFrames.forget(streamId)
     }
-    this.terminalVehicles.forget(id)
+    this.bridge.forget(id)
     if (this.activeBrowserStream === stream) {
       this.activeBrowserStream = null
     }
     this.streams.delete(id)
     stream.listener = undefined
     stream.onBinaryFrame = undefined
-  }
-
-  /** The arbiter replaced this stream's binary vehicle: end it like a host-ended
-   *  stream so the session layer's `end` path (unsubscribe + inventory recovery)
-   *  runs and the screen can re-subscribe when it regains focus. */
-  private evictTerminalVehicle(id: string): void {
-    const stream = this.streams.get(id)
-    if (stream && !stream.cancelled) {
-      this.finish(id, stream, { type: 'end' })
-    }
   }
 
   private fail(id: string, stream: StreamRecord, message: string, error?: unknown): void {

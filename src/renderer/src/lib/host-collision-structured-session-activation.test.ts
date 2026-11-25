@@ -2,7 +2,10 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
-import { makeRepo, makeWorktree } from '../components/worktree-jump/worktree-jump-palette-test-fixtures'
+import {
+  makeRepo,
+  makeWorktree
+} from '../components/worktree-jump/worktree-jump-palette-test-fixtures'
 import type { AppState } from '../store/types'
 import type { Tab } from '../../../shared/workspace-layout/tab-groups/tab-types'
 import type { ExecutionHostId } from '../../../shared/execution-host/execution-host'
@@ -167,9 +170,9 @@ describe('host-colliding structured session activation', () => {
   it('misses a contested row whose host is unknown instead of painting the other host', () => {
     // No stamp, no explicit target: the empty-prefix bucket holds no row, and falling back to the
     // bare key would focus the FIRST claimant's chat from the other host's card.
-    expect(
-      activateStructuredAgentSessionTab({ worktreeId: CONTESTED_ID, tabId: 'tab-a' })
-    ).toBe(false)
+    expect(activateStructuredAgentSessionTab({ worktreeId: CONTESTED_ID, tabId: 'tab-a' })).toBe(
+      false
+    )
     expect(
       findStructuredAgentSessionTab(useAppStore.getState().unifiedTabsByWorktree, {
         workspaceId: CONTESTED_ID,

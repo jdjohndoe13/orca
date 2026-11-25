@@ -117,19 +117,14 @@ export function useMobileSessionTerminalInput(scope: MobileSessionFileActionsMod
         // Why: a mirrored row's gesture flush rides the gateway relay; the local
         // path keeps the ordered-input seam so reconnect cannot replay stale bytes.
         await forwardOrLocal(rpc, sessionRelay, 'terminal.send', sendParams, () =>
-          sendTerminalOrderedInput(
-            rpc,
-            sendParams,
-            TERMINAL_INPUT_SEND_OPTIONS,
-            {
-              onAdmission: advance,
-              gestureDeadline: queued.lastUpdatedMs + TERMINAL_GESTURE_INPUT_MAX_QUEUE_AGE_MS,
-              isCurrent: () =>
-                clientRef.current === rpc &&
-                handle === activeHandleRef.current &&
-                activeSessionTabTypeRef.current === 'terminal'
-            }
-          )
+          sendTerminalOrderedInput(rpc, sendParams, TERMINAL_INPUT_SEND_OPTIONS, {
+            onAdmission: advance,
+            gestureDeadline: queued.lastUpdatedMs + TERMINAL_GESTURE_INPUT_MAX_QUEUE_AGE_MS,
+            isCurrent: () =>
+              clientRef.current === rpc &&
+              handle === activeHandleRef.current &&
+              activeSessionTabTypeRef.current === 'terminal'
+          })
         )
       } catch {
         // Transient failure
@@ -261,8 +256,7 @@ export function useMobileSessionTerminalInput(scope: MobileSessionFileActionsMod
         sessionRelay,
         'terminal.clearBuffer',
         clearParams,
-        () =>
-          terminalBufferClear.request(client, clearParams, { failWhenDisconnected: true })
+        () => terminalBufferClear.request(client, clearParams, { failWhenDisconnected: true })
       )
       if (!isCurrent()) {
         return

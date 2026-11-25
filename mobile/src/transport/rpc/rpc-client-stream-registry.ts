@@ -1,4 +1,8 @@
-import { BrowserScreencastSlots, decodeBrowserScreencast, routeBrowserScreencastFrame } from '../browser-screencast-slots'
+import {
+  BrowserScreencastSlots,
+  decodeBrowserScreencast,
+  routeBrowserScreencastFrame
+} from '../browser-screencast-slots'
 import type { BrowserScreencastFrame } from '../../browser/screencast/browser-screencast-protocol'
 import type {
   RpcStreamingListener,
@@ -17,13 +21,7 @@ import {
   sendServerSubscriptionUnsubscribe
 } from './rpc-client-server-subscription'
 import { isStreamingOpenerReply } from './rpc-acceptance-policies'
-import {
-  buildGatewayBridgeUnsubscribe,
-  isGatewayBridgeStream,
-  terminalVehicleKind,
-  TerminalVehicleArbiter,
-  unwrapGatewayBridgeEvent
-} from '../gateway-subscribe-envelope'
+import { createGatewayBridgeStreams } from '../gateway-bridge-streams'
 import {
   isStreamEndResult,
   isStreamingSubscriptionReadyResult,
@@ -38,7 +36,7 @@ import { translate } from '../../i18n/mobile-i18n'
 export class RpcClientStreamRegistry {
   private readonly streams = new Map<string, StreamRequest>()
   private readonly terminalRouter = new RpcClientTerminalStreamRouter()
-  private readonly terminalVehicles = new TerminalVehicleArbiter()
+  private readonly bridge = createGatewayBridgeStreams()
   private readonly browserSlots = new BrowserScreencastSlots()
 
   constructor(private readonly options: StreamRegistryOptions) {}
@@ -59,11 +57,8 @@ export class RpcClientStreamRegistry {
       holdReplay: subscribeOptions?.holdReplay
     }
     this.streams.set(id, stream)
-    const vehicle = terminalVehicleKind(method, params)
-    if (vehicle) {
-      for (const evicted of this.terminalVehicles.claim(vehicle, id)) {
-        this.evictTerminalVehicle(evicted)
-      }
+    for (const evicted of this.bridge.claim(method, params, id)) {
+      this.evictTerminalVehicle(evicted)
     }
     if (method === 'browser.screencast') {
       this.replaceBrowserStream(id)
@@ -195,18 +190,15 @@ export class RpcClientStreamRegistry {
     if (!stream) {
       return
     }
-    let result = response.result
-    if (isGatewayBridgeStream(stream.method)) {
-      const unwrapped = unwrapGatewayBridgeEvent(result)
-      if (unwrapped.kind === 'keepalive') {
-        return
-      }
-      if (unwrapped.kind === 'error') {
-        this.finish(response.id, stream, { type: 'error', message: unwrapped.message })
-        return
-      }
-      result = unwrapped.result
+    const unwrapped = this.bridge.unwrap(stream.method, response.result)
+    if (unwrapped.kind === 'keepalive') {
+      return
     }
+    if (unwrapped.kind === 'error') {
+      this.finish(response.id, stream, { type: 'error', message: unwrapped.message })
+      return
+    }
+    const result = unwrapped.result
     if (isStreamEndResult(result)) {
       this.finish(response.id, stream, result)
       return
@@ -218,9 +210,8 @@ export class RpcClientStreamRegistry {
     if (isStreamingSubscriptionReadyResult(result)) {
       stream.subscriptionId = result.subscriptionId
       if (stream.cancelled) {
-        sendServerSubscriptionUnsubscribe(
-          stream,
-          (method, params) => this.sendRpc(method, params, stream.envelope)
+        sendServerSubscriptionUnsubscribe(stream, (method, params) =>
+          this.sendRpc(method, params, stream.envelope)
         )
         this.remove(response.id)
         return
@@ -266,14 +257,11 @@ export class RpcClientStreamRegistry {
     if (stream && sessionTabsStream.holdUnsubscribe(stream)) {
       return
     }
-    if (isGatewayBridgeStream(stream?.method)) {
-      // The shared socket cannot close its way out of a bridge; the gateway
-      // releases it by the request id that opened it. An old gateway answers
-      // method_not_found, which the stream drops like any lost reply.
-      const release = buildGatewayBridgeUnsubscribe(stream?.method, id)
-      if (release) {
-        this.sendRpc(release.method, release.params, stream?.envelope)
-      }
+    const bridgeRelease = this.bridge.release(stream?.method, id)
+    if (bridgeRelease) {
+      // The shared socket cannot close its way out of a bridge; the gateway releases
+      // it by the request id that opened it, then the stream drops it like a lost reply.
+      this.sendRpc(bridgeRelease.method, bridgeRelease.params, stream?.envelope)
       this.remove(id)
       return
     }
@@ -308,7 +296,7 @@ export class RpcClientStreamRegistry {
     this.streams.delete(id)
     this.browserSlots.release(id)
     this.terminalRouter.reset(id)
-    this.terminalVehicles.forget(id)
+    this.bridge.forget(id)
     if (stream?.method === 'browser.screencast') {
       stream.cancelled = true
     }

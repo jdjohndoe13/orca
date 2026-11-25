@@ -109,9 +109,7 @@ const REVEAL_WORKSPACE: Record<keyof WorkspaceRowFilters, (context: RevealContex
     // user-facing filter on.
     const contested = getContestedWorktreeIds(state.worktreesByRepo)
     const tabsByWorktree = getVisibleWorktreeTerminalActivityTabs(state.tabsByWorktree)
-    const browserTabsByWorktree = getVisibleWorktreeBrowserActivityTabs(
-      state.browserTabsByWorktree
-    )
+    const browserTabsByWorktree = getVisibleWorktreeBrowserActivityTabs(state.browserTabsByWorktree)
     const liveAgentWorktrees = getWorktreeIdsWithLiveAgent(
       state.agentStatusByPaneKey,
       tabsByWorktree,

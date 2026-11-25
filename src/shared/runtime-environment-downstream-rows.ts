@@ -1,5 +1,8 @@
 import type { PairingOffer } from './remote-runtime/pairing/mobile-relay-pairing-offer'
-import { readEnvironmentStore, writeEnvironmentStore } from './remote-runtime/host-store/runtime-environment-store-file'
+import {
+  readEnvironmentStore,
+  writeEnvironmentStore
+} from './remote-runtime/host-store/runtime-environment-store-file'
 import { downstreamEnvironmentId } from './runtime-environment-relay-row-ids'
 import {
   createEnvironmentFromPairingOffer,

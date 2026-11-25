@@ -177,7 +177,11 @@ describe('open-access connect-by-IP verification', () => {
     const link = pairingCode('ws://127.0.0.1:6768')
 
     await expect(
-      verifyAndAdd(null, { name: 'desk', pairingCode: link, endpointOverride: '192.168.250.29:6768' })
+      verifyAndAdd(null, {
+        name: 'desk',
+        pairingCode: link,
+        endpointOverride: '192.168.250.29:6768'
+      })
     ).resolves.toMatchObject({ ok: true })
 
     // The override wins for the loopback check too: the link is loopback, the address is LAN.
@@ -212,7 +216,11 @@ describe('open-access connect-by-IP verification', () => {
       { name: string; pairingCode: string; endpointOverride?: string },
       { ok: boolean }
     >('runtimeEnvironments:verifyAndAddFromPairingCode')
-    await verifyAndAdd(null, { name: 'desk', pairingCode: '', endpointOverride: '192.168.250.29:6768' })
+    await verifyAndAdd(null, {
+      name: 'desk',
+      pairingCode: '',
+      endpointOverride: '192.168.250.29:6768'
+    })
     const before = await environmentStore.resolveEnvironment(userDataPath, 'desk')
     sendRemoteRuntimeRequestMock.mockResolvedValue(statusResponse())
 

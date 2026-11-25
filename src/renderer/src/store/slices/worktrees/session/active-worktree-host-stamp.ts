@@ -1,7 +1,10 @@
 import type { ExecutionHostId } from '../../../../../../shared/execution-host/execution-host'
 import { hasContestedClaim } from '../../../../../../shared/workspace-session-worktree-key'
 import type { AppState } from '../../../types'
-import { getContestedWorktreeIds, getIndexedWorktreesById } from '../../worktrees/listing/worktree-catalog-index'
+import {
+  getContestedWorktreeIds,
+  getIndexedWorktreesById
+} from '../../worktrees/listing/worktree-catalog-index'
 
 /**
  * The host to stamp when an activation names no host of its own.

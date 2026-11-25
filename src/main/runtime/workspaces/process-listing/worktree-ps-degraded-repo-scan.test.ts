@@ -226,9 +226,11 @@ describe('worktree.ps on a degraded repo scan', () => {
     expect(restored?.hostId).toBe(RUNTIME_HOST_ID)
   })
 
-  // Why: a runtime-host repo whose local scan succeeds published locally readable truth before
-  // and must keep doing so — the recovery only replaces an empty verdict.
-  it('keeps a healthy local scan authoritative for a runtime-host repo', async () => {
+  // Why: the catalog owner's route gate (buildRoutes skips non-local repos) means a
+  // `runtime:<env>` repo never runs a local scan — the "healthy scan" state cannot occur.
+  // Pinned so the recovery above cannot silently regress into a real scan whose empty
+  // verdict would starve the listing of the host's certified rows.
+  it('answers a runtime-host repo from stored rows without running a local scan', async () => {
     listWorktreesStrictMock.mockResolvedValue([
       { path: REPO_PATH, head: 'abc', branch: 'local-truth', isBare: false, isMainWorktree: true }
     ])
@@ -251,9 +253,10 @@ describe('worktree.ps on a degraded repo scan', () => {
 
     const result = await runtime.getWorktreePs(10_000)
 
-    // The scanned truth wins and the unverified persisted row does not ride along.
-    expect(result.worktrees.map((worktree) => worktree.worktreeId)).not.toContain(WORKTREE_ID)
-    expect(result.worktrees.map((worktree) => worktree.worktreeId)).toContain(MAIN_WORKTREE_ID)
+    expect(listWorktreesStrictMock).not.toHaveBeenCalled()
+    expect(result.worktrees.map((worktree) => worktree.worktreeId).sort()).toEqual(
+      [MAIN_WORKTREE_ID, WORKTREE_ID].sort()
+    )
   })
 
   it('lists restored worktrees while a scan is stalled and still hides agent scratch', async () => {

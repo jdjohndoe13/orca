@@ -10,10 +10,9 @@ export function persistAgentLaunchTabOrder(worktreeId: string, tabId: string): v
   // the same key itself, so the write below stays on the bare id.
   const rowKey = resolveWorkspaceSessionRowKey(store, worktreeId)
   const terminalIds = (store.tabsByWorktree[rowKey] ?? []).map((tab) => tab.id)
-  const editorIds = workspaceEditorFiles(
-    store.openFiles,
-    store.unifiedTabsByWorktree[rowKey]
-  ).map((file) => file.id)
+  const editorIds = workspaceEditorFiles(store.openFiles, store.unifiedTabsByWorktree[rowKey]).map(
+    (file) => file.id
+  )
   const browserIds = (store.browserTabsByWorktree?.[rowKey] ?? []).map((tab) => tab.id)
   const order = reconcileTabOrder(
     store.tabBarOrderByWorktree[rowKey],

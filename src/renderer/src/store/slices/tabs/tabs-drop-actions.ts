@@ -81,8 +81,7 @@ export function createTabsDropActions(
             tabOrder: []
           }
           const currentLayout =
-            state.layoutByWorktree[rowKey] ??
-            ({ type: 'leaf', groupId: target.groupId } as const)
+            state.layoutByWorktree[rowKey] ?? ({ type: 'leaf', groupId: target.groupId } as const)
           const replacement = buildSplitNode(
             target.groupId,
             newGroupId,

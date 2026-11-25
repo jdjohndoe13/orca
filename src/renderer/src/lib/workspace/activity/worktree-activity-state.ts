@@ -91,7 +91,10 @@ export function getLiveAgentStatusByWorktreeId(
         entry,
         contested
       }) ?? resolvedWorktreeId
-    result.set(worktreeId, strongerLiveAgentStatus(result.get(worktreeId), liveAgentStatusOf(entry)))
+    result.set(
+      worktreeId,
+      strongerLiveAgentStatus(result.get(worktreeId), liveAgentStatusOf(entry))
+    )
   }
   return result
 }
