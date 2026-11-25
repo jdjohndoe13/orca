@@ -35,3 +35,21 @@ index fbc745de0b351ca6193930a5682e5fa44589e8bf..7f75eaa3e62230435bd634882cdb98cd
    return nil;
  }
  
+diff --git a/android/CMakeLists.txt b/android/CMakeLists.txt
+--- a/android/CMakeLists.txt
++++ b/android/CMakeLists.txt
+@@ -3,6 +3,13 @@ cmake_minimum_required(VERSION 3.4.1)
+ set (CMAKE_VERBOSE_MAKEFILE ON)
+ set (CMAKE_CXX_STANDARD 20)
+ 
++# Orca: gradle passes NODE_MODULES_DIR with backslashes on Windows and CMake
++# reads them as escape sequences (e.g. "\a" in "B:\ai\..."). Normalise to
++# forward slashes before the first use.
++if(DEFINED NODE_MODULES_DIR)
++  string(REPLACE "\\" "/" NODE_MODULES_DIR "${NODE_MODULES_DIR}")
++endif()
++
+ # add directories to "include" search paths
+ include_directories(
+             ../cpp
+
