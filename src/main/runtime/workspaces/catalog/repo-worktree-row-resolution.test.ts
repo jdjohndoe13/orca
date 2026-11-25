@@ -141,12 +141,7 @@ describe('host-qualified scoped worktree resolution', () => {
       hostId: 'runtime:win-b',
       instanceId: 'win-b-instance'
     } as unknown as WorktreeMeta
-    ;// oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the store stub is a partial mock; adding the member this test needs is the whole point of the extension.
-    (
-      deps.store as Store & {
-        getWorktreeMetaForHost: () => WorktreeMeta
-      }
-    ).getWorktreeMetaForHost = () => winBMeta
+    Object.assign(deps.store, { getWorktreeMetaForHost: () => winBMeta })
 
     const rows = await resolveRepoWorktreeRows(
       deps,

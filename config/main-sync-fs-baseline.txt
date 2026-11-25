@@ -457,6 +457,7 @@
 2 src/main/runtime/rpc/server/pairing/device-registry-disk-merge.ts
 1 src/main/runtime/rpc/server/pairing/device-registry-file-read.ts
 3 src/main/runtime/rpc/server/pairing/e2ee-keypair.ts
+1 src/main/runtime/rpc/server/pairing/open-access-mode.ts # fork: the open-access mode file is read live on every auth path so the share toggle takes effect without a restart and a flip to off revokes immediately; callers (validateToken/dispatch) are sync
 3 src/main/runtime/rpc/server/runtime-metadata.ts
 2 src/main/runtime/rpc/server/runtime-rpc-socket-metadata.ts
 5 src/main/runtime/rpc/transports/unix-socket-transport.ts
