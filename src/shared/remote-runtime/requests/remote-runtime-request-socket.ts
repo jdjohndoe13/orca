@@ -175,9 +175,9 @@ export async function sendRemoteRuntimeRequestOnSocket<TResult>(
       async function sendPreparedRpc(status?: unknown): Promise<void> {
         try {
           if (requestSelection) {
-            const selectedParams = requestSelection.paramsForStatus(status)
             releaseRemoteRuntimePreparedRequest(pendingRequest)
-            pendingRequest.preparedRequest = prepare(selectedParams)
+            // Fork: inlined the params local to keep the file under the 300-code-line ratchet.
+            pendingRequest.preparedRequest = prepare(requestSelection.paramsForStatus(status))
           }
           await prepareCurrentRuntimeRequest({
             connection,
