@@ -7,10 +7,10 @@ import type { PRGroupKey } from '../../workspace-view/workspace-pr-groups'
 import type { NoticeHostContext } from '../hosts/host-labels'
 import {
   getHostWorktreeIds,
-  getLaneHostWorktreeScope,
   getMixedHostContextLabels,
   getProjectHeaderHostRepos
 } from '../hosts/host-labels'
+import { getLaneHostWorktreeScope } from '../hosts/host-lane-worktree-scope'
 import type { OrderedGroupEntry, WorktreeGroupEntry } from './worktree-group-entry'
 import type { RenderableFolderWorkspace } from '../folders/folder-workspace-lanes'
 import type { ProjectGroupingIndex } from './project-section-grouping'

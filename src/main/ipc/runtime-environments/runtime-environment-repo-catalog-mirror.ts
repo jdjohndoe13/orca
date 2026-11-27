@@ -12,6 +12,7 @@ import * as z from 'zod'
 import type { Store } from '../../persistence/loading-store/store'
 import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
 import { mainProcessState } from '../../startup/main-process-state'
+import { lazyZodSchema } from '../../../shared/schema/lazy-zod-schema'
 
 export type PairedEnvironmentRepoCatalogEngraftSummary = {
   reposAdded: number
@@ -62,28 +63,36 @@ export function getPairedEnvironmentRepoCatalogMirrorDeps(): PairedEnvironmentRe
  * produced by the same persistence pipeline the source host persists with, so
  * extra keys are exactly that host's repo fields.
  */
-const PairedRepoCatalogRowSchema = z.looseObject({
-  id: z.string().min(1),
-  path: z.string().min(1),
-  displayName: z.string(),
-  badgeColor: z.string(),
-  addedAt: z.number(),
-  kind: z.enum(['git', 'folder']).optional()
-})
+const PairedRepoCatalogRowSchema = lazyZodSchema(() =>
+  z.looseObject({
+    id: z.string().min(1),
+    path: z.string().min(1),
+    displayName: z.string(),
+    badgeColor: z.string(),
+    addedAt: z.number(),
+    kind: z.enum(['git', 'folder']).optional()
+  })
+)
 
-export const PairedRepoCatalogListSchema = z.object({ repos: z.array(PairedRepoCatalogRowSchema) })
+export const PairedRepoCatalogListSchema = lazyZodSchema(() =>
+  z.object({ repos: z.array(PairedRepoCatalogRowSchema) })
+)
 
 /** Only the fields the mirror consumes; like `repo.list`, unknown keys stay tolerated. */
-const PairedWorktreeCatalogRowSchema = z.looseObject({
-  path: z.string().min(1),
-  displayName: z.string().optional(),
-  ownership: z.string().optional()
-})
+const PairedWorktreeCatalogRowSchema = lazyZodSchema(() =>
+  z.looseObject({
+    path: z.string().min(1),
+    displayName: z.string().optional(),
+    ownership: z.string().optional()
+  })
+)
 
-export const PairedWorktreeCatalogListSchema = z.object({
-  authoritative: z.boolean(),
-  worktrees: z.array(PairedWorktreeCatalogRowSchema)
-})
+export const PairedWorktreeCatalogListSchema = lazyZodSchema(() =>
+  z.object({
+    authoritative: z.boolean(),
+    worktrees: z.array(PairedWorktreeCatalogRowSchema)
+  })
+)
 
 export type EngraftRow = z.infer<typeof PairedRepoCatalogRowSchema>
 

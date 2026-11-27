@@ -23,7 +23,15 @@ vi.mock('../../../git/worktrees/catalog/worktree-listing', async (importOriginal
 
 vi.mock('electron', () => electronMocks)
 vi.mock('../catalog/repo-worktree-admin-fingerprint', () => ({
-  readRepoWorktreeAdminFingerprint: vi.fn(async () => null)
+  readRepoWorktreeAdminFingerprint: vi.fn(async () => null),
+  // Upstream #50186 moved the verifier factory into this module; the scan path calls it
+  // whenever the scan TTL is below the reconcile ceiling. A null fingerprint means "unknown",
+  // which makes the owner run the real scan — the same behavior the old read-only mock had.
+  createLocalAdminFingerprintVerifier: () => ({
+    ceilingMs: 24 * 60 * 60 * 1000,
+    probe: async () => ({ fingerprint: null }),
+    onUnknown: () => {}
+  })
 }))
 
 const listWorktreesStrictMock = vi.hoisted(() => vi.fn())

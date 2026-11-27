@@ -1,6 +1,3 @@
-import * as z from 'zod'
-import { RuntimeRpcEnvelopeSchema } from '../remote-runtime/rpc/runtime-rpc-envelope'
-import { requiredString } from './rpc-param-primitives'
 import {
   REMOTE_RUNTIME_RELAY_RUNTIME_CAPABILITY,
   REMOTE_RUNTIME_RELAY_ATTACH_RUNTIME_CAPABILITY
@@ -326,60 +323,20 @@ export function relayForbiddenError(method: string): Error {
   })
 }
 
-const RuntimeEnvironmentRelayMethodSchema = requiredString('Missing upstream method')
-
-export const RuntimeEnvironmentGatewayCallParamsSchema = z.looseObject({
-  gatewayEnvironmentId: requiredString('Missing gateway environment ID'),
-  method: RuntimeEnvironmentRelayMethodSchema,
-  params: z.unknown().optional()
-})
-export type RuntimeEnvironmentGatewayCallParams = z.infer<
-  typeof RuntimeEnvironmentGatewayCallParamsSchema
->
-
-/**
- * `response` carries the upstream host's RPC envelope VERBATIM — including its
- * failure envelopes, so a caller must read `response.ok` before treating the
- * outer relay result as success. `_meta.gatewayEnvironmentId` is the addressing
- * key the gateway resolved, letting a caller match a reply to the row it named.
- */
-export const RuntimeEnvironmentGatewayCallResultSchema = z.looseObject({
-  response: RuntimeRpcEnvelopeSchema,
-  _meta: z.looseObject({ gatewayEnvironmentId: z.string().min(1) })
-})
-export type RuntimeEnvironmentGatewayCallResult = z.infer<
-  typeof RuntimeEnvironmentGatewayCallResultSchema
->
-
-export const RuntimeEnvironmentGatewaySubscribeParamsSchema = z.looseObject({
-  gatewayEnvironmentId: requiredString('Missing gateway environment ID'),
-  method: RuntimeEnvironmentRelayMethodSchema,
-  params: z.unknown().optional()
-})
-export type RuntimeEnvironmentGatewaySubscribeParams = z.infer<
-  typeof RuntimeEnvironmentGatewaySubscribeParamsSchema
->
-
-export const RuntimeEnvironmentGatewayUnsubscribeParamsSchema = z.looseObject({
-  requestId: requiredString('Missing bridge request ID')
-})
-export type RuntimeEnvironmentGatewayUnsubscribeParams = z.infer<
-  typeof RuntimeEnvironmentGatewayUnsubscribeParamsSchema
->
-
-/**
- * One `emit` value per forwarded upstream event, streamed by
- * `runtimeEnvironment.downstream.subscribe`. `response` rides the upstream
- * envelope VERBATIM (success or failure, its `_meta` names the upstream host —
- * never this gateway); binary PTY frames travel as raw binary frames instead,
- * byte-identical, never wrapped in this payload. `end` is the stream-finished
- * marker; `error` carries transport failures so the subscriber can retry.
- */
-export const RuntimeEnvironmentGatewaySubscribeEventSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('response'), response: RuntimeRpcEnvelopeSchema }),
-  z.object({ type: z.literal('end') }),
-  z.object({ type: z.literal('error'), code: z.string(), message: z.string() })
-])
-export type RuntimeEnvironmentGatewaySubscribeEvent = z.infer<
-  typeof RuntimeEnvironmentGatewaySubscribeEventSchema
->
+// The gateway call/subscribe wire schemas live in runtime-environment-gateway-params.ts
+// (split for the max-lines budget); re-exported so existing importers and the
+// generated params catalog keep one import path.
+export {
+  RuntimeEnvironmentGatewayCallParamsSchema,
+  RuntimeEnvironmentGatewayCallResultSchema,
+  RuntimeEnvironmentGatewaySubscribeParamsSchema,
+  RuntimeEnvironmentGatewayUnsubscribeParamsSchema,
+  RuntimeEnvironmentGatewaySubscribeEventSchema
+} from './runtime-environment-gateway-params'
+export type {
+  RuntimeEnvironmentGatewayCallParams,
+  RuntimeEnvironmentGatewayCallResult,
+  RuntimeEnvironmentGatewaySubscribeParams,
+  RuntimeEnvironmentGatewayUnsubscribeParams,
+  RuntimeEnvironmentGatewaySubscribeEvent
+} from './runtime-environment-gateway-params'

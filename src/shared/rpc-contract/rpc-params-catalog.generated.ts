@@ -848,7 +848,7 @@ import {
   RuntimeEnvironmentGatewayCallParamsSchema,
   RuntimeEnvironmentGatewaySubscribeParamsSchema,
   RuntimeEnvironmentGatewayUnsubscribeParamsSchema
-} from './runtime-environment-relay-params'
+} from './runtime-environment-gateway-params'
 import { SessionTabsUnsubscribeAllParams } from './session-tabs/session-tabs-params'
 import {
   ActivateTab,

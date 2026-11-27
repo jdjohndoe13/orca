@@ -10,11 +10,8 @@ import type { HiddenProjects } from '../project/catalog/hidden-projects'
 import { ALL_GROUP_KEY, PINNED_GROUP_KEY } from './sections/group-keys'
 import { appendOrderedGroups, type SectionAppendContext } from './sections/group-sections'
 
-import {
-  getLaneHostWorktreeScope,
-  getMixedWorktreeHostContextLabels,
-  getNoticeHostContextLabels
-} from './hosts/host-labels'
+import { getMixedWorktreeHostContextLabels, getNoticeHostContextLabels } from './hosts/host-labels'
+import { getLaneHostWorktreeScope } from './hosts/host-lane-worktree-scope'
 import {
   buildProjectGroupingIndex,
   getProjectGroupingForRepo,
