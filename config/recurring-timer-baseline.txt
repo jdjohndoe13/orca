@@ -68,6 +68,7 @@
 1 src/main/ssh/protocol/ssh-channel-multiplexer.ts
 1 src/main/startup/configure-process.ts
 1 src/main/startup/diagnostics/event-loop-stall-probe.ts
+1 src/main/startup/hub-registration/hub-registration.ts # hub re-registration heartbeat; cadence is the feature, stopped on reject/shutdown
 1 src/main/startup/main-window/synthetic-title-runtime.ts
 1 src/main/telemetry/wsl-usage-reporter.ts
 1 src/main/webhooks/webhook-recovery-sweep.ts

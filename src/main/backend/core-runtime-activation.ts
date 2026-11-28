@@ -38,6 +38,7 @@ import {
   startOrcadHostSearchAndModels,
   startOrcadManagedRuntimeReleases
 } from '../orcad/host-runtime/orcad-runtime-attachments'
+import { installHubRegistration } from '../startup/hub-registration/hub-registration-startup'
 
 export async function activateBackendRuntime(
   host: BackendCoreHost,
@@ -268,6 +269,8 @@ export async function activateBackendRuntime(
   startOrcadDesktopPushService(runtime, rpc)
   console.error(`[orcad] ${describeOrcadBindExposure(bindHost)}`)
 
+  // A VM behind NAT registers with its fixed-IP hub only once the WS port is actually bound.
+  await installHubRegistration(rpc, registerCleanup)
   const readiness = await buildOrcadServeReadiness({
     options,
     runtimeId: runtime.getRuntimeId(),

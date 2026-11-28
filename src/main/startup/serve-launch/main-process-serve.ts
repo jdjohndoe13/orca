@@ -4,6 +4,7 @@ import { clearServeAbortPark } from '../../../shared/remote-runtime/serve-superv
 import { findBundledWebClientRoot } from '../../../shared/web-client/bundled-web-client-root'
 import { buildServePairingReadiness, servePublishMode } from '../../server/serve-pairing-readiness'
 import { mainProcessState as state } from '../main-process-state'
+import { installHubRegistration } from '../hub-registration/hub-registration-startup'
 import type { ServeOptions } from './serve-options'
 
 export function getBundledWebClientRoot(): string | undefined {
@@ -28,6 +29,10 @@ export async function printServeReady(options: ServeOptions): Promise<void> {
     output
   )
   notifyServeSupervisorReady(runtime.getRuntimeId())
+  // A VM behind NAT registers with its fixed-IP hub only now that the WS port is bound.
+  await installHubRegistration(runtimeRpc, (stop) => {
+    app.once('will-quit', stop)
+  })
   // Successful readiness disproves the previous serve-abort park.
   clearServeAbortPark(app.getPath('userData'))
 }
