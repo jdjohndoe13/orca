@@ -308,9 +308,7 @@ export function getRemovedWorktreeIdsAfterAuthoritativeScan(
   // Why canonicalize: the known ids mix the store's rows with the hydrated session keys, and a
   // persisted row that never reconciled (or a store that never restarted) can hold the other
   // separator spelling — a byte-miss would purge a live workspace's session.
-  const detectedIds = new Set(
-    detected.worktrees.map((worktree) => canonicalizeWorktreeId(worktree.id))
-  )
+  const detectedIds = new Set(detected.worktrees.map((w) => canonicalizeWorktreeId(w.id)))
   return getKnownWorktreeIdsForPurge(state, repoId, hostId).filter(
     (id) => !detectedIds.has(canonicalizeWorktreeId(id))
   )
