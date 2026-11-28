@@ -5,7 +5,7 @@
 // bytes back.
 
 import { createServer, type Server } from 'node:net'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { BrowserNetworkTunnelClient } from '../../browser/network/tunnels/browser-network-tunnel-client'
 import { instanceIdFromPublicKey } from './hub-registration-crypto'
@@ -61,6 +61,8 @@ type FakeHub = {
   url: string
   /** Control frame types the hub received, in order. */
   received: string[]
+  /** Client sockets the hub has seen close (the reject path closes one). */
+  closedCount: () => number
   /** Drop every client socket so the VM sees a close and reconnects. */
   hangUp: () => void
   /** The hub's tunnel client, attached once the VM's socket is open. */
@@ -78,6 +80,7 @@ function startFakeHub(
 ): Promise<FakeHub> {
   const wss = new WebSocketServer({ host: '127.0.0.1', port: 0, perMessageDeflate: false })
   const received: string[] = []
+  let closed = 0
   let tunnel: BrowserNetworkTunnelClient | null = null
 
   return new Promise((resolve) => {
@@ -106,12 +109,14 @@ function startFakeHub(
             }
           }
         })
+        ws.on('close', () => {
+          closed += 1
+        })
         ws.on('message', (data: Buffer, isBinary: boolean) => {
           if (isBinary) {
             tunnel?.handleBinary(new Uint8Array(data))
             return
-          }
-          // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fake hub only reads the fields the VM's own register/auth frames carry.
+          } // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fake hub only reads the fields the VM's own register/auth frames carry.
           const value = JSON.parse(data.toString('utf8')) as { type?: string; secret?: string }
           received.push(value.type ?? '')
           if (value.type !== 'auth' || authed) {
@@ -134,6 +139,7 @@ function startFakeHub(
       resolve({
         url: `ws://127.0.0.1:${port}/v1/register`,
         received,
+        closedCount: () => closed,
         hangUp: () => {
           for (const client of wss.clients) {
             client.terminate()
@@ -161,13 +167,16 @@ function countTypes(received: string[], type: string): number {
 }
 
 async function waitFor(predicate: () => boolean, timeoutMs = 5_000): Promise<void> {
-  const started = Date.now()
-  while (!predicate()) {
-    if (Date.now() - started > timeoutMs) {
-      throw new Error('timed out waiting for the fake hub')
-    }
-    await new Promise((done) => setTimeout(done, 10))
-  }
+  // vi.waitFor resolves when the callback stops throwing — a returned
+  // `false` alone is not enough.
+  await vi.waitFor(
+    () => {
+      if (!predicate()) {
+        throw new Error('waiting for the fake hub')
+      }
+    },
+    { timeout: timeoutMs, interval: 10 }
+  )
 }
 
 function target(hub: FakeHub, ports: number[]): HubRegistrationTarget {
@@ -199,8 +208,9 @@ describe('registerWithHub against a fake hub', () => {
     const handle = registerWithHub(target(hub, [6768]), { dial: loopbackDial() })
     cleanups.push(() => handle.stop())
     await waitFor(() => hub.received.length >= 1)
-    await new Promise((done) => setTimeout(done, 300))
-    // A wrong secret is terminal: exactly one auth, never a retry.
+    // The reject path is terminal: the hub sees the socket close, and the
+    // VM's stop-on-reject means no reconnect and no second auth follows.
+    await waitFor(() => hub.closedCount() >= 1)
     expect(countTypes(hub.received, 'auth')).toBe(1)
   })
 
