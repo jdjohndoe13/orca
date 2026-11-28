@@ -648,6 +648,7 @@
 2 src/main/ipc/register-core-handlers/lazy-rare-ipc-handlers.ts # charges moved from register-core-handlers; handlers import on first invoke, so the blocking helpers never run at boot
 2 src/main/ipc/register-core-handlers/lazy-setup-ipc-handlers.ts # cli and shell handler charges moved from register-core-handlers; modules import on first invoke, never at boot
 7 src/main/ipc/register-core-handlers/register-core-handlers.ts # clipboard path authorization moved here from window/clipboard/clipboard-ipc-handlers.ts
+1 src/main/ipc/register-lazy-mobile-handlers.ts # registerMobileHandlers reads the open-access mode file once at registration; the same auth path already baselines the device-registry's sync file reads
 5 src/main/ipc/repos.ts
 1 src/main/ipc/repos/local-repo-registration.ts
 1 src/main/ipc/repos/nested-repo-import-handler.ts
@@ -1376,9 +1377,9 @@
 2 src/main/startup/profile-startup/single-instance-lock.ts
 12 src/main/startup/pty-startup/main-process-pty-startup.ts
 1 src/main/startup/quit/main-process-quit.ts # superseded-session unlink on a rare memory-only sign-in or rotation stays ordered with the sync saves, sign-out and quit flush (#44285)
-16 src/main/startup/runtime-startup/main-process-runtime-launch.ts # +1 registerMobileHandlers reads the open-access mode file once at startup registration
-4 src/main/startup/runtime-startup/main-process-runtime-service.ts
->1 src/main/startup/serve-launch/headless-serve-ssh-registration.ts
+15 src/main/startup/runtime-startup/main-process-runtime-launch.ts # +1 registerMobileHandlers reads the open-access mode file once at startup registration
+3 src/main/startup/runtime-startup/main-process-runtime-service.ts
+1 src/main/startup/serve-launch/headless-serve-ssh-registration.ts
 3 src/main/startup/serve-launch/main-process-serve.ts
 3 src/main/startup/serve-launch/serve-cli-registration.ts
 1 src/main/startup/serve-launch/serve-user-data-path-guard.ts
