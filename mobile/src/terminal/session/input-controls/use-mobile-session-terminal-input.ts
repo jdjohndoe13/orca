@@ -2,7 +2,6 @@ import { useCallback } from 'react'
 import { translate } from '../../../i18n/mobile-i18n'
 import { terminalBufferClear } from '../../host-operations/mobile-terminal-operations'
 import { sendMobileTerminalQueryReply } from '../../host-operations/mobile-terminal-query-reply'
-import { forwardOrLocal } from '../../../session/mobile-remote-runtime-forwarded-call'
 import {
   buildTerminalSendParams,
   TERMINAL_INPUT_SEND_OPTIONS
@@ -25,7 +24,6 @@ export function useMobileSessionTerminalInput(scope: MobileSessionFileActionsMod
     client,
     sendTerminalOrderedInput,
     connState,
-    sessionRelay,
     ptyModesRef,
     terminalGestureInputBucketsRef,
     terminalGestureInputQueuesRef,
@@ -114,18 +112,14 @@ export function useMobileSessionTerminalInput(scope: MobileSessionFileActionsMod
           enter: false,
           deviceToken: deviceTokenRef.current
         })
-        // Why: a mirrored row's gesture flush rides the gateway relay; the local
-        // path keeps the ordered-input seam so reconnect cannot replay stale bytes.
-        await forwardOrLocal(rpc, sessionRelay, 'terminal.send', sendParams, () =>
-          sendTerminalOrderedInput(rpc, sendParams, TERMINAL_INPUT_SEND_OPTIONS, {
-            onAdmission: advance,
-            gestureDeadline: queued.lastUpdatedMs + TERMINAL_GESTURE_INPUT_MAX_QUEUE_AGE_MS,
-            isCurrent: () =>
-              clientRef.current === rpc &&
-              handle === activeHandleRef.current &&
-              activeSessionTabTypeRef.current === 'terminal'
-          })
-        )
+        await sendTerminalOrderedInput(rpc, sendParams, TERMINAL_INPUT_SEND_OPTIONS, {
+          onAdmission: advance,
+          gestureDeadline: queued.lastUpdatedMs + TERMINAL_GESTURE_INPUT_MAX_QUEUE_AGE_MS,
+          isCurrent: () =>
+            clientRef.current === rpc &&
+            handle === activeHandleRef.current &&
+            activeSessionTabTypeRef.current === 'terminal'
+        })
       } catch {
         // Transient failure
       } finally {
@@ -145,7 +139,7 @@ export function useMobileSessionTerminalInput(scope: MobileSessionFileActionsMod
         }
       }
     },
-    [sendTerminalOrderedInput, sessionRelay]
+    [sendTerminalOrderedInput]
   )
 
   const enqueueTerminalGestureInput = useCallback(
@@ -224,22 +218,18 @@ export function useMobileSessionTerminalInput(scope: MobileSessionFileActionsMod
     [allowTerminalGestureInput, client, connState, enqueueTerminalGestureInput, sendLiveInputClick]
   )
 
-  const handleTerminalQueryReply = useCallback(
-    (handle: string, bytes: string) => {
-      void sendMobileTerminalQueryReply({
-        bytes,
-        client: clientRef.current,
-        clientId: deviceTokenRef.current,
-        connected: connStateRef.current === 'connected',
-        handle,
-        hostSupportsQueryReplyInput: hostQueryReplyInputSupportedRef.current,
-        hostSupportsProgramStatus: hostProgramStatusSupportedRef.current,
-        subscribedTerminals: terminalUnsubsRef.current,
-        sessionRelay
-      })
-    },
-    [sessionRelay]
-  )
+  const handleTerminalQueryReply = useCallback((handle: string, bytes: string) => {
+    void sendMobileTerminalQueryReply({
+      bytes,
+      client: clientRef.current,
+      clientId: deviceTokenRef.current,
+      connected: connStateRef.current === 'connected',
+      handle,
+      hostSupportsQueryReplyInput: hostQueryReplyInputSupportedRef.current,
+      hostSupportsProgramStatus: hostProgramStatusSupportedRef.current,
+      subscribedTerminals: terminalUnsubsRef.current
+    })
+  }, [])
 
   async function handleClearTerminal(target: Terminal) {
     if (!client) {
@@ -249,15 +239,9 @@ export function useMobileSessionTerminalInput(scope: MobileSessionFileActionsMod
     const isCurrent = () => clientRef.current === client
     try {
       const clearParams = { terminal: target.handle }
-      // Why: a mirrored row's clear rides the gateway relay; the local path keeps
-      // the disconnect-failure option so a stale client cannot toast success.
-      const response = await forwardOrLocal(
-        client,
-        sessionRelay,
-        'terminal.clearBuffer',
-        clearParams,
-        () => terminalBufferClear.request(client, clearParams, { failWhenDisconnected: true })
-      )
+      const response = await terminalBufferClear.request(client, clearParams, {
+        failWhenDisconnected: true
+      })
       if (!isCurrent()) {
         return
       }

@@ -112,21 +112,6 @@ export const sessionTabsListRead = bindDeferredRpcOperation(
 )
 
 /**
- * The gateway relay call a mirrored workspace's screen reads through. The caller
- * unwraps the forwarded upstream envelope itself, so the reader stays opaque like
- * the tab snapshot's.
- */
-export const runtimeEnvironmentCallRead = bindDeferredRpcOperation(
-  defineRpcOperation({
-    name: 'runtime-environment-call',
-    method: 'runtimeEnvironment.call',
-    acceptance: 'require-result-or-throw-message',
-    barrier: 'after-caller-barrier',
-    read: rpcResultVariant('relay-forwarded-envelope', sessionForwardedReplySchema)
-  })
-)
-
-/**
  * The two ways native chat gets workspace paths. Both answer the same `relativePath` list, and
  * both refuse by leaving the suggestion list alone — the search's `method_not_found` is read raw
  * beforehand, because that code is what makes the composer fall back to the full inventory.

@@ -11,7 +11,6 @@ import {
 } from '../../live-input/terminal-live-input'
 import { dismissTerminalKeyboard } from '../../keyboard/terminal-keyboard-dismiss'
 import { terminalInputSend } from '../../host-operations/mobile-terminal-operations'
-import { forwardOrLocal } from '../../../session/mobile-remote-runtime-forwarded-call'
 import {
   buildTerminalSendParams,
   TERMINAL_INPUT_SEND_OPTIONS
@@ -33,7 +32,6 @@ export function useMobileSessionTerminalSendActions(scope: MobileSessionTerminal
     sendTerminalOrderedInput,
     terminalRefs,
     activeHandle,
-    sessionRelay,
     activeSessionTab,
     setActionTarget,
     setMarkdownActionTarget,
@@ -140,8 +138,7 @@ export function useMobileSessionTerminalSendActions(scope: MobileSessionTerminal
       activeSessionTabType: activeSessionTabTypeRef.current,
       connState: connStateRef.current,
       bytes: encoded.bytes,
-      deviceToken: deviceTokenRef.current,
-      sessionRelay
+      deviceToken: deviceTokenRef.current
     })
   }
 
@@ -186,18 +183,14 @@ export function useMobileSessionTerminalSendActions(scope: MobileSessionTerminal
         enter: false,
         deviceToken: deviceTokenRef.current
       })
-      // Why: a mirrored row's live send rides the gateway relay; the local path
-      // keeps the ordered-input seam so reconnect cannot replay stale bytes.
-      return forwardOrLocal(rpc, sessionRelay, 'terminal.send', liveParams, () =>
-        sendTerminalOrderedInput(rpc, liveParams, TERMINAL_INPUT_SEND_OPTIONS, enqueue)
-      ).then(
+      return sendTerminalOrderedInput(rpc, liveParams, TERMINAL_INPUT_SEND_OPTIONS, enqueue).then(
         (response) => {
           return terminalInputSend.interpret(response) === true
         },
         () => false
       )
     },
-    [hostPlatform, sendTerminalOrderedInput, sessionRelay, showToast, terminalRefs]
+    [hostPlatform, sendTerminalOrderedInput, showToast, terminalRefs]
   )
   sendLiveTerminalInputRef.current = sendLiveTerminalInput
 

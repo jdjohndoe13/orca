@@ -12,8 +12,6 @@ import { epoch } from '../../input-delivery/mobile-terminal-input-owner'
 import { useCallback, useRef, type RefObject } from 'react'
 import { translate } from '../../../i18n/mobile-i18n'
 import { terminalInputSend } from '../../host-operations/mobile-terminal-operations'
-import { forwardOrLocal } from '../../../session/mobile-remote-runtime-forwarded-call'
-import type { RelayTabsSource } from '../../../session/mobile-remote-runtime-session-tabs'
 import { useClipboardReader } from '../../../platform/clipboard/clipboard'
 import type { TerminalModes } from '../../webview/terminal-webview-contract'
 import type { RpcClient } from '../../../transport/rpc/rpc-client-contract'
@@ -55,7 +53,6 @@ type UseMobileTerminalPasteOptions = {
   readonly ptyModesRef: RefObject<Map<string, TerminalModes>>
   readonly refreshCanPaste: () => void
   readonly showToast: (message: string, durationMs?: number) => void
-  readonly sessionRelay?: RelayTabsSource | null
 }
 
 export function useMobileTerminalPaste({
@@ -75,8 +72,7 @@ export function useMobileTerminalPaste({
   onSuccess,
   ptyModesRef,
   refreshCanPaste,
-  showToast,
-  sessionRelay
+  showToast
 }: UseMobileTerminalPasteOptions): () => Promise<void> {
   // Read images through native media handles: inline clipboard base64 can exceed the bridge reply cap.
   const clipboard = useClipboardReader()
@@ -172,9 +168,7 @@ export function useMobileTerminalPaste({
             ? { client: { id: deviceTokenRef.current, type: 'mobile' as const } }
             : {})
         }
-        return forwardOrLocal(currentClient, sessionRelay, 'terminal.send', pasteParams, () =>
-          sendTerminalUserInput(currentClient, pasteParams)
-        ).then(
+        return sendTerminalUserInput(currentClient, pasteParams).then(
           (response) => terminalInputSend.interpret(response) === true,
           () => false
         )
@@ -246,7 +240,6 @@ export function useMobileTerminalPaste({
     onSuccess,
     ptyModesRef,
     refreshCanPaste,
-    showToast,
-    sessionRelay
+    showToast
   ])
 }

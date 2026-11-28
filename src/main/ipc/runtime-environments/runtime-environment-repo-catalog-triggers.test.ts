@@ -29,10 +29,6 @@ import {
   addEnvironmentFromPairingCode,
   resolveEnvironment
 } from '../../../shared/remote-runtime/host-store/runtime-environment-store-operations'
-import {
-  readEnvironmentStore,
-  writeEnvironmentStore
-} from '../../../shared/remote-runtime/host-store/runtime-environment-store-file'
 import { markRuntimeEnvironmentManuallyDisconnected } from './connectivity/runtime-environment-manual-disconnect'
 import { configurePairedEnvironmentRepoCatalogMirror } from './runtime-environment-repo-catalog-mirror'
 import {
@@ -109,7 +105,7 @@ afterEach(async () => {
 })
 
 describe('paired repo catalog mirror triggers', () => {
-  it('boot engages directly paired rows only, skipping relay views and ephemeral rows', async () => {
+  it('boot engages directly paired rows only, skipping ephemeral rows', async () => {
     const paired = addEnvironmentFromPairingCode(userDataPath, {
       name: 'desk',
       pairingCode: pairingCode()
@@ -119,17 +115,6 @@ describe('paired repo catalog mirror triggers', () => {
       pairingCode: pairingCode('ws://10.0.0.10:6768'),
       source: 'ephemeral-vm'
     })
-    const relayed = addEnvironmentFromPairingCode(userDataPath, {
-      name: 'relay view',
-      pairingCode: pairingCode('ws://10.0.0.11:6768')
-    })
-    const stored = readEnvironmentStore(userDataPath)
-    writeEnvironmentStore(userDataPath, {
-      version: 1,
-      environments: stored.environments.map((entry) =>
-        entry.id === relayed.id ? { ...entry, gatewayEnvironmentId: 'gateway-1' } : entry
-      )
-    })
 
     engageAllPairedEnvironmentRepoCatalogMirrors(userDataPath)
     await vi.waitFor(() => {
@@ -137,7 +122,6 @@ describe('paired repo catalog mirror triggers', () => {
     })
 
     expect(dial('repo.list')).not.toContain(ephemeral.id)
-    expect(dial('repo.list')).not.toContain(relayed.id)
   })
 
   it('boot piggybacks an engage already in flight instead of re-dialing the pair', async () => {
@@ -187,17 +171,6 @@ describe('paired repo catalog mirror triggers', () => {
       pairingCode: pairingCode('ws://10.0.0.13:6768')
     })
     markRuntimeEnvironmentManuallyDisconnected(disconnected.id)
-    const relayed = addEnvironmentFromPairingCode(userDataPath, {
-      name: 'relay view',
-      pairingCode: pairingCode('ws://10.0.0.11:6768')
-    })
-    const stored = readEnvironmentStore(userDataPath)
-    writeEnvironmentStore(userDataPath, {
-      version: 1,
-      environments: stored.environments.map((entry) =>
-        entry.id === relayed.id ? { ...entry, gatewayEnvironmentId: 'gateway-1' } : entry
-      )
-    })
 
     engageOnEnvironmentConnected(userDataPath, resolveEnvironment(userDataPath, paired.id))
     await vi.waitFor(() => {
@@ -208,7 +181,6 @@ describe('paired repo catalog mirror triggers', () => {
     // can never add a dial; wait on the accepted engage's own second dial instead of
     // a fixed settle.
     engageOnEnvironmentConnected(userDataPath, resolveEnvironment(userDataPath, disconnected.id))
-    engageOnEnvironmentConnected(userDataPath, resolveEnvironment(userDataPath, relayed.id))
     await vi.waitFor(() => {
       expect(dial('worktree.detectedList')).toHaveLength(1)
     })

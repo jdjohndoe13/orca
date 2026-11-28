@@ -8,7 +8,6 @@ import {
   type SessionTabsApplyOutcome,
   type SessionTabsStreamSource
 } from './mobile-session-tabs-stream-health'
-import type { RelayTabsSource } from '../mobile-remote-runtime-session-tabs'
 import { PendingTerminalHandleRecoveryBudget } from '../../terminal/session/inventory/pending-terminal-handle-recovery'
 import {
   useMobileTerminalInventoryRecovery,
@@ -19,7 +18,6 @@ type Params<Result, Tab> = {
   client: RpcClient | null
   connState: ConnectionState
   worktreeId: string
-  relay?: RelayTabsSource | null
   applySessionTabs: (result: Result) => SessionTabsApplyOutcome<Tab>
   consumeAcceptedSessionTabs: (
     result: Result,
@@ -54,7 +52,6 @@ export function useMobileSessionTabsReconciliation<Result, Tab>({
   client,
   connState,
   worktreeId,
-  relay,
   applySessionTabs,
   consumeAcceptedSessionTabs,
   fetchTerminals,
@@ -103,7 +100,6 @@ export function useMobileSessionTabsReconciliation<Result, Tab>({
         ? new MobileSessionTabsStreamHealth<Result, Tab>({
             client,
             scope: `id:${worktreeId}`,
-            relay,
             apply: applySessionTabs,
             consumeAccepted: consumeAcceptedSessionTabs,
             hasRecoveryNeed: combinedHasRecoveryNeed,
@@ -127,7 +123,6 @@ export function useMobileSessionTabsReconciliation<Result, Tab>({
       onFetchFailed,
       onFetchStarted,
       onFetchSucceeded,
-      relay,
       worktreeId
     ]
   )
@@ -158,11 +153,6 @@ export function useMobileSessionTabsReconciliation<Result, Tab>({
   useFocusEffect(
     useCallback(() => {
       if (!client || !controller || connState !== 'connected') {
-        return
-      }
-      // Why: a relay-backed row's local subscribe would answer an empty snapshot
-      // and paint the false empty state; the relay poll owns the tab list.
-      if (relay) {
         return
       }
       let unsubscribe: (() => void) | null = null
@@ -197,7 +187,7 @@ export function useMobileSessionTabsReconciliation<Result, Tab>({
         appStateSubscription.remove()
         updatePresence(false)
       }
-    }, [client, connState, controller, relay, resetPendingTerminalRecovery, worktreeId])
+    }, [client, connState, controller, resetPendingTerminalRecovery, worktreeId])
   )
 
   useFocusEffect(

@@ -14,7 +14,6 @@ import { LINEAR_METHODS } from './integrations/linear/linear'
 import { LINEAR_AGENT_ACCESS_METHODS } from './integrations/linear/linear-agent-access'
 import { JIRA_METHODS } from './integrations/jira/jira'
 import { COMPUTER_METHODS } from './computer/computer'
-import { RUNTIME_ENVIRONMENT_GATEWAY_METHODS } from './runtime-environment-gateway-methods'
 import { AUTOMATION_METHODS } from './automations/automations'
 import { AUTOMATIC_WORK_METHODS } from './automations/automatic-work'
 import { ARTIFACT_METHODS } from './artifacts/artifacts'
@@ -85,7 +84,6 @@ import { NATIVE_CHAT_METHODS } from './native-chat/native-chat'
 
 const CORE_RPC_METHODS = [
   ...EAGER_CORE_RPC_METHODS,
-  ...RUNTIME_ENVIRONMENT_GATEWAY_METHODS,
   ...ARTIFACT_METHODS,
   ...AUTOMATION_METHODS,
   ...CONNECTOR_METHODS,

@@ -55,11 +55,6 @@ export async function engagePairedEnvironmentRepoCatalogMirror(
     // Hosts that never load the IPC registry have no store to write.
     return noopEngraftSummary()
   }
-  if (environment.gatewayEnvironmentId) {
-    // Relay view rows dial through their gateway; what gets mirrored is the pair's
-    // own catalog, so engraving a learned row under this stamp would duplicate it.
-    return noopEngraftSummary()
-  }
   if (isEphemeralVmRuntimeEnvironment(environment)) {
     // Ephemeral machines are torn down with their VM; mirrored rows would outlive them.
     return noopEngraftSummary()

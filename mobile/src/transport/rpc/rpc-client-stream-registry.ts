@@ -12,7 +12,6 @@ import type {
 } from './rpc-client-stream-request'
 import {
   buildRequestStreamUnsubscribe,
-  updateGatewayBridgeTerminalViewport,
   updateTerminalSubscriptionViewport
 } from './rpc-client-terminal-subscription'
 import {
@@ -21,7 +20,6 @@ import {
   sendServerSubscriptionUnsubscribe
 } from './rpc-client-server-subscription'
 import { isStreamingOpenerReply } from './rpc-acceptance-policies'
-import { createGatewayBridgeStreams } from '../gateway-bridge-streams'
 import {
   isStreamEndResult,
   isStreamingSubscriptionReadyResult,
@@ -36,7 +34,6 @@ import { translate } from '../../i18n/mobile-i18n'
 export class RpcClientStreamRegistry {
   private readonly streams = new Map<string, StreamRequest>()
   private readonly terminalRouter = new RpcClientTerminalStreamRouter()
-  private readonly bridge = createGatewayBridgeStreams()
   private readonly browserSlots = new BrowserScreencastSlots()
 
   constructor(private readonly options: StreamRegistryOptions) {}
@@ -57,9 +54,6 @@ export class RpcClientStreamRegistry {
       holdReplay: subscribeOptions?.holdReplay
     }
     this.streams.set(id, stream)
-    for (const evicted of this.bridge.claim(method, params, id)) {
-      this.evictTerminalVehicle(evicted)
-    }
     if (method === 'browser.screencast') {
       this.replaceBrowserStream(id)
     }
@@ -178,7 +172,6 @@ export class RpcClientStreamRegistry {
 
   updateTerminalViewport(terminal: string, viewport: { cols: number; rows: number }): void {
     updateTerminalSubscriptionViewport(this.streams.values(), terminal, viewport)
-    updateGatewayBridgeTerminalViewport(this.streams.values(), terminal, viewport)
   }
 
   size(): number {
@@ -190,15 +183,7 @@ export class RpcClientStreamRegistry {
     if (!stream) {
       return
     }
-    const unwrapped = this.bridge.unwrap(stream.method, response.result)
-    if (unwrapped.kind === 'keepalive') {
-      return
-    }
-    if (unwrapped.kind === 'error') {
-      this.finish(response.id, stream, { type: 'error', message: unwrapped.message })
-      return
-    }
-    const result = unwrapped.result
+    const result = response.result
     if (isStreamEndResult(result)) {
       this.finish(response.id, stream, result)
       return
@@ -257,14 +242,6 @@ export class RpcClientStreamRegistry {
     if (stream && sessionTabsStream.holdUnsubscribe(stream)) {
       return
     }
-    const bridgeRelease = this.bridge.release(stream?.method, id)
-    if (bridgeRelease) {
-      // The shared socket cannot close its way out of a bridge; the gateway releases
-      // it by the request id that opened it, then the stream drops it like a lost reply.
-      this.sendRpc(bridgeRelease.method, bridgeRelease.params, stream?.envelope)
-      this.remove(id)
-      return
-    }
     // An unsent stream has nothing on the desktop, and one held for its owner's verdict must stay silent.
     const unsubscribe = stream?.sent
       ? buildRequestStreamUnsubscribe(stream.method, stream.params, id)
@@ -296,19 +273,8 @@ export class RpcClientStreamRegistry {
     this.streams.delete(id)
     this.browserSlots.release(id)
     this.terminalRouter.reset(id)
-    this.bridge.forget(id)
     if (stream?.method === 'browser.screencast') {
       stream.cancelled = true
-    }
-  }
-
-  /** The arbiter replaced this stream's binary vehicle: end it like a host-ended
-   *  stream so the session layer's `end` path (unsubscribe + inventory recovery)
-   *  runs and the screen can re-subscribe when it regains focus. */
-  private evictTerminalVehicle(id: string): void {
-    const stream = this.streams.get(id)
-    if (stream && !stream.cancelled) {
-      this.finish(id, stream, { type: 'end' })
     }
   }
 

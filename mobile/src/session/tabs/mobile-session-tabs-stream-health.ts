@@ -1,5 +1,4 @@
 import { sessionTabsListRead } from './mobile-session-tab-read-operations'
-import { fetchSessionTabsList, type RelayTabsSource } from '../mobile-remote-runtime-session-tabs'
 import type { RpcClient } from '../../transport/rpc/rpc-client-contract'
 import type { RpcFailure } from '../../transport/rpc/rpc-wire-types'
 
@@ -35,10 +34,6 @@ type ControllerOptions<Result, Tab> = {
   ) => void
   hasRecoveryNeed: () => boolean
   allowRecoveryPoll?: () => boolean
-  // null/undefined: local list+subscribe. 'pending': the row's host stamp is
-  // unresolved — park every read so a mirrored row can't paint a local empty
-  // snapshot. 'relay': poll the list through the gateway call; no local subscribe.
-  relay?: RelayTabsSource | null
   getApplicationRevision?: () => number
   onFetchStarted?: () => void
   onFetchSucceeded?: (result: Result) => void
@@ -103,7 +98,7 @@ export class MobileSessionTabsStreamHealth<Result, Tab> {
 
   poll(): Promise<void> | null {
     this.syncGeneration()
-    if (!this.reconciliationActive || this.options.relay?.mode === 'pending') {
+    if (!this.reconciliationActive) {
       return null
     }
     const recoveryNeeded = this.options.hasRecoveryNeed()
@@ -212,7 +207,7 @@ export class MobileSessionTabsStreamHealth<Result, Tab> {
   }
 
   private startCurrentRequest(retry = false): Promise<void> {
-    if (this.disposed || !this.reconciliationActive || this.options.relay?.mode === 'pending') {
+    if (this.disposed || !this.reconciliationActive) {
       return Promise.resolve()
     }
     const key = `${this.generation}:${this.barrier}`
@@ -259,8 +254,8 @@ export class MobileSessionTabsStreamHealth<Result, Tab> {
   private async runRequest(owner: RequestOwner): Promise<boolean> {
     try {
       this.options.onFetchStarted?.()
-      const { client, relay, scope } = this.options
-      const response = await fetchSessionTabsList(client, relay, scope)
+      const { client, scope } = this.options
+      const response = await sessionTabsListRead.request(client, { worktree: scope })
       if (!this.isCurrentGeneration(owner.generation)) {
         return false
       }

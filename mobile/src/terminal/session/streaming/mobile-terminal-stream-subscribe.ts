@@ -1,4 +1,3 @@
-import type { RelayTabsSource } from '../../../session/mobile-remote-runtime-session-tabs'
 import type { RpcClient } from '../../../transport/rpc/rpc-client-contract'
 import type { TerminalWebViewHandle } from '../../webview/terminal-webview-contract'
 
@@ -41,32 +40,15 @@ export function createMobileTerminalStreamLifetime(args: {
   }
 }
 
-/**
- * Opens the terminal's output stream, or its gateway bridge when the workspace
- * is mirrored (runtime-backed). The bridge is the same `terminal.subscribe`
- * wrapped in the `downstream.subscribe` vehicle: the gateway re-emits the
- * upstream host's events unwrapped and forwards its binary frames, so the
- * caller's event handler sees the same stream either way.
- */
+/** Opens the terminal's output stream, releasing the subscribing marker on a synchronous failure. */
 export function subscribeMobileTerminalSafely(
   client: Pick<RpcClient, 'subscribe'>,
   params: unknown,
   onData: Parameters<RpcClient['subscribe']>[2],
-  onSynchronousError: () => void,
-  relay?: RelayTabsSource | null
+  onSynchronousError: () => void
 ): () => void {
-  const bridge =
-    relay?.mode === 'relay'
-      ? {
-          gatewayEnvironmentId: relay.gatewayEnvironmentId,
-          method: 'terminal.subscribe',
-          params
-        }
-      : null
   try {
-    return bridge
-      ? client.subscribe('runtimeEnvironment.downstream.subscribe', bridge, onData)
-      : client.subscribe('terminal.subscribe', params, onData)
+    return client.subscribe('terminal.subscribe', params, onData)
   } catch {
     // Synchronous subscribe failures still need to release the subscribing marker.
     onSynchronousError()

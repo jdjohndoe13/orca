@@ -26,7 +26,6 @@ export type MobileSessionKeyboardScope = Pick<
   | 'terminals'
   | 'terminalTextScale'
   | 'terminalFontStyle'
-  | 'sessionRelay'
   | 'unsubscribeTerminal'
   | 'viewportMeasuredRef'
   | 'viewportRef'
@@ -53,8 +52,7 @@ export function useMobileSessionKeyboardState(scope: MobileSessionKeyboardScope)
     terminalFrameRef,
     showNativeChatRef,
     unsubscribeTerminal,
-    subscribeToTerminal,
-    sessionRelay
+    subscribeToTerminal
   } = scope
   const {
     notifyTerminalFrameHeight,
@@ -76,8 +74,7 @@ export function useMobileSessionKeyboardState(scope: MobileSessionKeyboardScope)
     tabStripVisible: terminals.length > 1,
     fontMetricsKey: `${terminalTextScale}/${terminalFontStyle.font}/${terminalFontStyle.lineHeight}/${terminalFontStyle.weight}`,
     unsubscribeTerminal,
-    subscribeToTerminal,
-    sessionRelay
+    subscribeToTerminal
   })
 
   // Use the keyboard seam because web Keyboard emits nothing; visibility goes out with the event, before the lift renders, so refits defer while it opens.

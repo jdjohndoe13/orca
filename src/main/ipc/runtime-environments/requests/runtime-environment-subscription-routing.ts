@@ -26,7 +26,6 @@ import {
   shouldRouteSubscriptionBySupport,
   subscribeSupportRoutedRuntimeEnvironment
 } from './runtime-environment-support-routing'
-import { subscribeRelayDownstreamEnvironment } from '../runtime-environment-relay-subscribe-routing'
 
 const DEFAULT_REMOTE_RUNTIME_TIMEOUT_MS = 15_000
 // A browser pane on a host's page or dev server is use the host's idle probes cannot see.
@@ -129,20 +128,6 @@ export async function subscribeRuntimeEnvironment(
   // Initial connection failures reject; midstream errors use onError above.
   const connect = async (): Promise<RemoteRuntimeTransportSubscription> => {
     try {
-      // Why before support routing: a relay row's transport is its gateway's
-      // dedicated streaming socket — the gateway runs its own support routing
-      // against the upstream host, so this side never shares routes.
-      if (environment.gatewayEnvironmentId) {
-        return await subscribeRelayDownstreamEnvironment({
-          userDataPath,
-          environment,
-          method,
-          params,
-          timeoutMs: effectiveTimeoutMs,
-          callbacks,
-          markUsedOnce
-        })
-      }
       if (shouldRouteSubscriptionBySupport(method)) {
         return await subscribeSupportRoutedRuntimeEnvironment({
           userDataPath,

@@ -58,22 +58,6 @@ export const DEFAULT_LAZY_RPC_METHOD_GROUPS: readonly LazyRpcMethodGroup[] = [
     async () => (await import('./host-management/recipe-vm-wake')).RECIPE_VM_WAKE_METHODS,
     { exactNames: ['runtimeEnvironment.wakeRecipeVm'] }
   ),
-  // The fork's relay/gateway surface: the phone dials these on the desktop's own
-  // socket to reach a paired downstream host. Only the subscribe vehicle streams.
-  prefixRpcMethodGroup(
-    [],
-    async () =>
-      (await import('./runtime-environment-gateway-methods')).RUNTIME_ENVIRONMENT_GATEWAY_METHODS,
-    {
-      exactNames: [
-        'runtimeEnvironment.call',
-        'runtimeEnvironment.downstream.list',
-        'runtimeEnvironment.downstream.subscribe',
-        'runtimeEnvironment.downstream.unsubscribe'
-      ],
-      streamingNames: ['runtimeEnvironment.downstream.subscribe']
-    }
-  ),
   prefixRpcMethodGroup(
     [],
     async () => (await import('./host-management/environment-doctor')).ENVIRONMENT_DOCTOR_METHODS,

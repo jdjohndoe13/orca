@@ -15,7 +15,6 @@ export function useMobileSessionBulkClose(scope: MobileSessionCloseActionsModel)
     worktreeId,
     client,
     connState,
-    sessionRelay,
     sessionTabs,
     sessionTabsRef,
     activeSessionTabIdRef,
@@ -99,20 +98,16 @@ export function useMobileSessionBulkClose(scope: MobileSessionCloseActionsModel)
     }
     // Pending server-owned tabs need activation to materialize their PTY handles.
     pendingTerminalActivationAttemptRef.current = activationKey
-    void activateMobileSessionTab(
-      client,
-      {
-        worktree: `id:${worktreeId}`,
-        tabId: activePendingTerminalTab.id,
-        leafId: activePendingTerminalTab.leafId,
-        notifyClients: false,
-        navigation: 'caller',
-        // Why: this only ever runs for the tab the user is looking at, so it is the
-        // tail of their tap — the gesture that materializes a parked pane.
-        intent: 'user'
-      },
-      sessionRelay
-    )
+    void activateMobileSessionTab(client, {
+      worktree: `id:${worktreeId}`,
+      tabId: activePendingTerminalTab.id,
+      leafId: activePendingTerminalTab.leafId,
+      notifyClients: false,
+      navigation: 'caller',
+      // Why: this only ever runs for the tab the user is looking at, so it is the
+      // tail of their tap — the gesture that materializes a parked pane.
+      intent: 'user'
+    })
       .then((response) => {
         // A route reset or another attempt replaced this one; its tabs belong to that older route.
         if (pendingTerminalActivationAttemptRef.current !== activationKey) {
@@ -138,8 +133,7 @@ export function useMobileSessionBulkClose(scope: MobileSessionCloseActionsModel)
     connState,
     fetchSessionTabs,
     scheduleDelayedAction,
-    worktreeId,
-    sessionRelay
+    worktreeId
   ])
   return {
     bulkCloseActions,

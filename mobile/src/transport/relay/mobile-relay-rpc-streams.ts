@@ -4,13 +4,9 @@ import {
   type TerminalSnapshotState
 } from '../rpc/rpc-client-terminal-binary-frame'
 import { TerminalUnreadableFrameResets } from '../rpc/terminal-unreadable-frame-resets'
-import {
-  updateGatewayBridgeTerminalViewport,
-  updateTerminalSubscriptionViewport
-} from '../rpc/rpc-client-terminal-subscription'
+import { updateTerminalSubscriptionViewport } from '../rpc/rpc-client-terminal-subscription'
 import { buildReadyStreamUnsubscribe, isReadyIdStream } from '../rpc/rpc-client-server-subscription'
 import { isStreamingOpenerReply } from '../rpc/rpc-acceptance-policies'
-import { createGatewayBridgeStreams } from '../gateway-bridge-streams'
 import {
   buildParamsUnsubscribe,
   unsubscribeSlot,
@@ -54,7 +50,6 @@ export class MobileRelayRpcStreams {
   private readonly terminalListeners = new Map<number, (result: unknown) => void>()
   private readonly terminalSnapshots = new Map<number, TerminalSnapshotState>()
   private readonly unreadableTerminalFrames = new TerminalUnreadableFrameResets()
-  private readonly bridge = createGatewayBridgeStreams()
   private activeBrowserStream: StreamRecord | null = null
   private sendCount = 0
 
@@ -78,14 +73,6 @@ export class MobileRelayRpcStreams {
       sendOrder: null
     }
     this.streams.set(id, stream)
-    // The arbiter replaced a stream's binary vehicle: end it like a host-ended stream so
-    // the session layer's `end` path (unsubscribe + inventory recovery) can re-subscribe.
-    for (const evicted of this.bridge.claim(method, params, id)) {
-      const stale = this.streams.get(evicted)
-      if (stale && !stale.cancelled) {
-        this.finish(evicted, stale, { type: 'end' })
-      }
-    }
     void this.options
       .waitForConnected()
       .then(() => {
@@ -106,7 +93,6 @@ export class MobileRelayRpcStreams {
 
   updateTerminalViewport(terminal: string, viewport: { cols: number; rows: number }): void {
     updateTerminalSubscriptionViewport(this.streams.values(), terminal, viewport)
-    updateGatewayBridgeTerminalViewport(this.streams.values(), terminal, viewport)
   }
 
   handleResponse(response: RpcResponse): boolean {
@@ -151,15 +137,7 @@ export class MobileRelayRpcStreams {
       return true
     }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the ok===false branch above returned; the discriminated union is narrowed to the success arm.
-    const unwrapped = this.bridge.unwrap(stream.method, (response as RpcSuccess).result)
-    if (unwrapped.kind === 'keepalive') {
-      return true
-    }
-    if (unwrapped.kind === 'error') {
-      this.fail(response.id, stream, unwrapped.message)
-      return true
-    }
-    const result = unwrapped.result
+    const result = (response as RpcSuccess).result
     if (result && typeof result === 'object') {
       const metadata = result as { subscriptionId?: unknown; streamId?: unknown; type?: unknown }
       if (stream.method === 'session.tabs.subscribe' && metadata.type === 'snapshot') {
@@ -221,10 +199,6 @@ export class MobileRelayRpcStreams {
           this.sendUnsubscribe(byParams, stream.sendOrder, stream.envelope, id)
         }
       } else {
-        const bridgeRelease = this.bridge.release(stream.method, id)
-        if (bridgeRelease) {
-          this.sendUnsubscribe(bridgeRelease, stream.sendOrder, stream.envelope)
-        }
         const unsubscribe = stream.subscriptionId
           ? buildReadyStreamUnsubscribe(stream.method, stream.subscriptionId)
           : null
@@ -299,7 +273,6 @@ export class MobileRelayRpcStreams {
       this.terminalSnapshots.delete(streamId)
       this.unreadableTerminalFrames.forget(streamId)
     }
-    this.bridge.forget(id)
     if (this.activeBrowserStream === stream) {
       this.activeBrowserStream = null
     }

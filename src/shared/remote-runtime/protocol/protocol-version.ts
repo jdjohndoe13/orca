@@ -71,33 +71,11 @@ export const NATIVE_REMOTE_RUNTIME_CLIENT_CAPABILITIES = [
 export const SAVED_RESUME_ORIGIN_RUNTIME_CAPABILITY =
   'agent-session.saved-resume-origin.v1' as const
 
-// Why: advertises the multi-hop gateway surface (Phase 1: `runtimeEnvironment.downstream.list`
-// plus the phase-1 read allowlist over `runtimeEnvironment.call`). Registered unconditionally —
-// every build that registers the methods advertises it, so an old host answers these method
-// names with method_not_found and an old client never calls them at all.
-export const REMOTE_RUNTIME_RELAY_RUNTIME_CAPABILITY = 'remote-runtime.relay.v1' as const
-// Why: Phase 2 extends the relay family with the operate/stream surface
-// (runtimeEnvironment.downstream.subscribe + the Phase-2 operate allowlist over
-// runtimeEnvironment.call). Registered unconditionally like Phase 1 — every
-// build that registers it advertises it, an old host answers method_not_found.
-export const REMOTE_RUNTIME_RELAY_ATTACH_RUNTIME_CAPABILITY =
-  'remote-runtime.relay.attach.v1' as const
-// Why: milestone 2 widens the operate allowlist (git/worktrees/files/agent
-// lifecycle/terminal management/PR landing). Widening an allowlist needs no
-// negotiation — an old client never names the new methods — and this milestone
-// deliberately keeps both fences allowlist-driven, so the capability is
-// registered unconditionally for future negotiation only.
-export const REMOTE_RUNTIME_RELAY_OPERATE_RUNTIME_CAPABILITY =
-  'remote-runtime.relay-operate.v2' as const
-
 // Individual protocol exports must not retain the unused host capability aggregate.
 export const RUNTIME_CAPABILITIES = /* @__PURE__ */ (() =>
   [
     ...EMULATOR_RUNTIME_CAPABILITIES,
     SAVED_RESUME_ORIGIN_RUNTIME_CAPABILITY,
-    REMOTE_RUNTIME_RELAY_RUNTIME_CAPABILITY,
-    REMOTE_RUNTIME_RELAY_ATTACH_RUNTIME_CAPABILITY,
-    REMOTE_RUNTIME_RELAY_OPERATE_RUNTIME_CAPABILITY,
     ...HOST_RUNTIME_CAPABILITIES,
     ...DEVICE_KEY_RUNTIME_CAPABILITIES,
     E2EE_V2_TOKEN_CAPABILITIES_RUNTIME_CAPABILITY,

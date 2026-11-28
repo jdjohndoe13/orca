@@ -1,7 +1,5 @@
 import { isTerminalQueryReply } from '../../../../src/shared/terminal/protocol/queries/terminal-query-reply'
 import { PROGRAM_STATUS_OSC_PREFIX } from '../../../../src/shared/program-status/protocol'
-import { forwardOrLocal } from '../../session/mobile-remote-runtime-forwarded-call'
-import type { RelayTabsSource } from '../../session/mobile-remote-runtime-session-tabs'
 import type { UnvalidatedRpcRequestPort } from '../../transport/rpc/unvalidated-rpc-request-port'
 import { terminalInputSend } from './mobile-terminal-operations'
 
@@ -18,7 +16,6 @@ type MobileTerminalQueryReplyOptions = {
   hostSupportsQueryReplyInput: boolean
   hostSupportsProgramStatus: boolean
   subscribedTerminals: TerminalSubscriptionRegistry
-  sessionRelay?: RelayTabsSource | null
 }
 
 export function sendMobileTerminalQueryReply({
@@ -29,8 +26,7 @@ export function sendMobileTerminalQueryReply({
   handle,
   hostSupportsQueryReplyInput,
   hostSupportsProgramStatus,
-  subscribedTerminals,
-  sessionRelay
+  subscribedTerminals
 }: MobileTerminalQueryReplyOptions): Promise<boolean> {
   // Subscriptions, including hidden panes, suppress the desktop responder and own replies.
   // Drop on older hosts that strip inputKind, or reply bytes would take the input floor.
@@ -53,9 +49,7 @@ export function sendMobileTerminalQueryReply({
     inputKind: 'query-reply' as const,
     ...(clientId ? { client: { id: clientId, type: 'mobile' as const } } : {})
   }
-  return forwardOrLocal(client, sessionRelay, 'terminal.send', params, () =>
-    terminalInputSend.request(client, params)
-  ).then(
+  return terminalInputSend.request(client, params).then(
     (reply) => terminalInputSend.interpret(reply) === true,
     () => false
   )

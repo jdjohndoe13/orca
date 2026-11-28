@@ -32,8 +32,7 @@ export function useTerminalViewportRefit(options: TerminalViewportRefitOptions) 
     tabStripVisible,
     fontMetricsKey,
     unsubscribeTerminal,
-    subscribeToTerminal,
-    sessionRelay
+    subscribeToTerminal
   } = options
 
   const invalidateViewports = useCallback(() => {
@@ -137,7 +136,6 @@ export function useTerminalViewportRefit(options: TerminalViewportRefitOptions) 
                 dims,
                 frame,
                 ref,
-                sessionRelay,
                 isCurrentTarget,
                 onCapability: (capability) => {
                   updateViewportCapabilityRef.current = capability
@@ -166,8 +164,7 @@ export function useTerminalViewportRefit(options: TerminalViewportRefitOptions) 
       clientRef,
       deviceTokenRef,
       unsubscribeTerminal,
-      subscribeToTerminal,
-      sessionRelay
+      subscribeToTerminal
     ]
   )
   const scheduleForcedViewportRefit = useCallback(() => {

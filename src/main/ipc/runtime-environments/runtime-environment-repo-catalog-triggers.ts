@@ -40,7 +40,6 @@ function engageOnce(userDataPath: string, environment: KnownRuntimeEnvironment):
 
 function isMirrorCandidate(environment: KnownRuntimeEnvironment): boolean {
   return (
-    !environment.gatewayEnvironmentId &&
     !isEphemeralVmRuntimeEnvironment(environment) &&
     !isRuntimeEnvironmentManuallyDisconnected(environment.id)
   )

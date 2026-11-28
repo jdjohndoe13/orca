@@ -1120,9 +1120,6 @@
     },
     "rpcClientTerminalBinaryFrame": {
       "unsupportedFrame": "Unsupported terminal stream frame (opcode {{opcode}})."
-    },
-    "gatewaySubscribeEnvelope": {
-      "unreadableResponse": "Unreadable gateway relay response."
     }
   },
   "worktree": {

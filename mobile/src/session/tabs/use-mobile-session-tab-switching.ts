@@ -13,7 +13,6 @@ export function useMobileSessionTabSwitching(scope: MobileSessionKeyboardStateMo
   const {
     worktreeId,
     client,
-    sessionRelay,
     sessionTabs,
     setActiveHandle,
     setSplitTerminalHandles,
@@ -79,17 +78,13 @@ export function useMobileSessionTabSwitching(scope: MobileSessionKeyboardStateMo
       subscribeToTerminal(handle)
       if (client) {
         if (matchingTab) {
-          void activateMobileSessionTab(
-            client,
-            {
-              worktree: `id:${worktreeId}`,
-              tabId: matchingTab.id,
-              notifyClients: false,
-              navigation: 'caller',
-              intent: 'user'
-            },
-            sessionRelay
-          )
+          void activateMobileSessionTab(client, {
+            worktree: `id:${worktreeId}`,
+            tabId: matchingTab.id,
+            notifyClients: false,
+            navigation: 'caller',
+            intent: 'user'
+          })
             .then(reportActivation)
             .catch(() => {})
         }
@@ -102,8 +97,7 @@ export function useMobileSessionTabSwitching(scope: MobileSessionKeyboardStateMo
       setSplitTerminalHandles,
       subscribeToTerminal,
       unsubscribeTerminal,
-      worktreeId,
-      sessionRelay
+      worktreeId
     ]
   )
 
@@ -139,17 +133,13 @@ export function useMobileSessionTabSwitching(scope: MobileSessionKeyboardStateMo
         activeHandleRef.current = null
         setActiveHandle(null)
         if (client && options?.activate !== false) {
-          void activateMobileSessionTab(
-            client,
-            {
-              worktree: `id:${worktreeId}`,
-              tabId: tab.id,
-              notifyClients: false,
-              navigation: 'caller',
-              intent: 'user'
-            },
-            sessionRelay
-          )
+          void activateMobileSessionTab(client, {
+            worktree: `id:${worktreeId}`,
+            tabId: tab.id,
+            notifyClients: false,
+            navigation: 'caller',
+            intent: 'user'
+          })
             .then(reportActivation)
             .catch(() => {})
         }
@@ -170,17 +160,13 @@ export function useMobileSessionTabSwitching(scope: MobileSessionKeyboardStateMo
       activeHandleRef.current = null
       setActiveHandle(null)
       if (client && options?.activate !== false) {
-        void activateMobileSessionTab(
-          client,
-          {
-            worktree: `id:${worktreeId}`,
-            tabId: tab.id,
-            notifyClients: false,
-            navigation: 'caller',
-            intent: 'user'
-          },
-          sessionRelay
-        )
+        void activateMobileSessionTab(client, {
+          worktree: `id:${worktreeId}`,
+          tabId: tab.id,
+          notifyClients: false,
+          navigation: 'caller',
+          intent: 'user'
+        })
           .then(reportActivation)
           .catch(() => {})
       }
@@ -211,8 +197,7 @@ export function useMobileSessionTabSwitching(scope: MobileSessionKeyboardStateMo
       reportActivation,
       switchTab,
       unsubscribeTerminal,
-      worktreeId,
-      sessionRelay
+      worktreeId
     ]
   )
   switchSessionTabRef.current = switchSessionTab

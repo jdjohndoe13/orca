@@ -37,7 +37,6 @@ import { rendererOrchestrationEnvelope } from '../connections/runtime-environmen
 import { getRuntimeEnvironmentStatus } from '../status/runtime-environment-status-probe'
 import { noteRuntimeEnvironmentConnectRequested } from '../pairing/runtime-environment-pairing-refusal-registry'
 import { publicRuntimeEnvironmentWithHostKey } from '../catalog/runtime-environment-host-key'
-import { callDownstreamEnvironment } from '../runtime-environment-relay-routing'
 import { engageOnEnvironmentConnected } from '../runtime-environment-repo-catalog-triggers'
 import { withWslOrcadAccountEnv } from '../../../wsl/orcad/wsl-orcad-account-env'
 import { clearSshCredentialDeclinedForEnvironment } from '../../../ssh/authentication/ssh-credential-decline'
@@ -212,12 +211,6 @@ function registerPassiveCallHandler(
       const environment = await resolveEnvironment(getUserDataPath(), args.selector)
       if (isRuntimeEnvironmentManuallyDisconnected(environment.id)) {
         return manuallyDisconnectedResponse(environment)
-      }
-      // A downstream view row dials through its gateway, never directly: the
-      // route endpoint may name the gateway's offer, and only the relay hops
-      // (and unwraps) the upstream host's envelope for capability probes etc.
-      if (environment.gatewayEnvironmentId) {
-        return callDownstreamEnvironment(getUserDataPath(), environment, args)
       }
       if (isHostSpawnFencedForWslMoveUndo(environment.id, args.method)) {
         return wslMoveUndoSpawnFencedResponse(environment, args.method)

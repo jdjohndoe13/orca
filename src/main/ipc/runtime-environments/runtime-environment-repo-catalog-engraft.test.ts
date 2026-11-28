@@ -292,7 +292,7 @@ describe('engrafting a paired environment repo catalog', () => {
     expect(mirroredRowsFor(env.id)).toHaveLength(1)
   })
 
-  it('skips relay view rows and ephemeral machines, and dial slots are scoped to the list', async () => {
+  it('skips ephemeral machines, and dial slots are scoped to the list', async () => {
     const env = await pairedEnvironment()
     callRuntimeEnvironmentMock.mockImplementation(
       async (_userDataPath, _selectorId: string, method: string, params: unknown) => {
@@ -303,10 +303,6 @@ describe('engrafting a paired environment repo catalog', () => {
       }
     )
 
-    const relayEnv = { ...env, id: `${env.id}-relay`, gatewayEnvironmentId: 'gw-1' }
-    expect(
-      (await engagePairedEnvironmentRepoCatalogMirror(userDataPath, relayEnv)).reposAdded
-    ).toBe(0)
     const ephemeralEnv = { ...env, id: `${env.id}-vm`, source: 'ephemeral-vm' as const }
     expect(
       (await engagePairedEnvironmentRepoCatalogMirror(userDataPath, ephemeralEnv)).reposAdded

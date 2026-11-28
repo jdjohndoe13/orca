@@ -1,5 +1,3 @@
-import { forwardOrLocal } from '../../session/mobile-remote-runtime-forwarded-call'
-import type { RelayTabsSource } from '../../session/mobile-remote-runtime-session-tabs'
 import { terminalViewportUpdate } from '../host-operations/mobile-terminal-operations'
 import {
   resolveTerminalUpdateViewportCapability,
@@ -17,7 +15,6 @@ export type TerminalViewportUpdateAttempt = {
   dims: { cols: number; rows: number }
   frame: TerminalFrame
   ref: TerminalWebViewHandle
-  sessionRelay: RelayTabsSource | null | undefined
   // The trigger re-checks staleness after every await; the caller owns the answer.
   isCurrentTarget: () => boolean
   // Reports the resolved capability back so the caller can cache `unsupported`.
@@ -34,33 +31,21 @@ export type TerminalViewportUpdateOutcome =
 
 /**
  * Prefer an in-place `terminal.updateViewport` over resubscribe so the mobile
- * subscriber record stays alive (docs/mobile-presence-lock.md). Mirrored rows
- * send it through the gateway relay.
+ * subscriber record stays alive (docs/mobile-presence-lock.md).
  */
 export async function attemptTerminalViewportUpdate(
   options: TerminalViewportUpdateAttempt
 ): Promise<TerminalViewportUpdateOutcome> {
-  const { rpc, deviceToken, capability, handle, dims, frame, ref, sessionRelay } = options
+  const { rpc, deviceToken, capability, handle, dims, frame, ref } = options
   if (capability === 'unsupported') {
     return { kind: 'fallthrough' }
   }
   try {
-    const reply = await forwardOrLocal(
-      rpc,
-      sessionRelay,
-      'terminal.updateViewport',
-      {
-        terminal: handle,
-        client: { id: deviceToken, type: 'mobile' as const },
-        viewport: dims
-      },
-      () =>
-        terminalViewportUpdate.request(rpc, {
-          terminal: handle,
-          client: { id: deviceToken, type: 'mobile' as const },
-          viewport: dims
-        })
-    )
+    const reply = await terminalViewportUpdate.request(rpc, {
+      terminal: handle,
+      client: { id: deviceToken, type: 'mobile' as const },
+      viewport: dims
+    })
     if (!options.isCurrentTarget()) {
       return { kind: 'stale' }
     }

@@ -46,7 +46,6 @@ export function useMobileSessionTabApplication(scope: MobileSessionTerminalListM
     worktreeId,
     setTerminals,
     terminalsRef,
-    sessionRelay,
     setSessionTabs,
     setFileDocs,
     sessionTabsRef,
@@ -194,17 +193,13 @@ export function useMobileSessionTabApplication(scope: MobileSessionTerminalListM
         }
         if (launch.landedTabId && clientRef.current) {
           // Why: a launch carries no navigation, so record the pick as a tap does, or the host keeps this device on the old tab.
-          void activateMobileSessionTab(
-            clientRef.current,
-            {
-              worktree: `id:${result.worktree}`,
-              tabId: launch.landedTabId,
-              notifyClients: false,
-              navigation: 'caller',
-              intent: 'user'
-            },
-            sessionRelay
-          ).catch(() => {})
+          void activateMobileSessionTab(clientRef.current, {
+            worktree: `id:${result.worktree}`,
+            tabId: launch.landedTabId,
+            notifyClients: false,
+            navigation: 'caller',
+            intent: 'user'
+          }).catch(() => {})
         }
       }
       const pendingActiveSessionTabId = pendingSelectionTabId(pendingSelectionRef.current)
