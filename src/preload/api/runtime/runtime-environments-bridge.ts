@@ -10,6 +10,11 @@ import type {
   PublicKnownRuntimeEnvironment,
   RuntimeEnvironmentRemoval
 } from '../../../shared/remote-runtime/host-catalog/runtime-environments'
+import type {
+  HubAddResult,
+  HubLinkPublic,
+  HubRemoveResult
+} from '../../../shared/remote-runtime/hub/hub-link-ipc-types'
 import type { RemoteRuntimeSharedConnectionDiagnostics } from '../../../shared/remote-runtime/control/remote-runtime-shared-control-types'
 import { RUNTIME_ENVIRONMENT_DIAGNOSTICS_CHANNEL } from '../../../shared/remote-runtime/host-catalog/runtime-environment-diagnostics'
 import { RUNTIME_ENVIRONMENT_CATALOG_CHANGED_CHANNEL } from '../../../shared/remote-runtime/host-catalog/runtime-environment-catalog-channel'
@@ -123,6 +128,15 @@ export const runtimeEnvironmentsApi = {
     ipcRenderer.invoke('runtimeEnvironments:getOpenAccessMode'),
   setOpenAccessMode: (args: { acceptAnyAccessKey: boolean }): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke('runtimeEnvironments:setOpenAccessMode', args),
+  // Fork extension: the client-side hub record. The access key is sent to main and never comes
+  // back: the renderer only learns which hubs are configured.
+  listHubLinks: (): Promise<HubLinkPublic[]> =>
+    ipcRenderer.invoke('runtimeEnvironments:listHubLinks'),
+  addHubLink: (args: { hubUrl: string; accessKey: string }): Promise<HubAddResult> =>
+    ipcRenderer.invoke('runtimeEnvironments:addHubLink', args),
+  removeHubLink: (args: { hubUrl: string }): Promise<HubRemoveResult> =>
+    ipcRenderer.invoke('runtimeEnvironments:removeHubLink', args),
+  syncHubLinks: (): Promise<void> => ipcRenderer.invoke('runtimeEnvironments:syncHubLinks'),
   retryConnectionsNow: (): Promise<void> =>
     ipcRenderer.invoke('runtimeEnvironments:retryConnectionsNow'),
   call: (args: {

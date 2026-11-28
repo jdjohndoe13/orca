@@ -31,6 +31,11 @@ import type {
 } from '../../../shared/browser/client-hosting/browser-client-host-placement'
 import type { RemoteRuntimeSharedConnectionDiagnostics } from '../../../shared/remote-runtime/control/remote-runtime-shared-control-types'
 import type { WslOrcadAccountNotAppliedEvent } from '../../../shared/remote-runtime/wsl-hosts/wsl-orcad-account-notice'
+import type {
+  HubAddResult,
+  HubLinkPublic,
+  HubRemoveResult
+} from '../../../shared/remote-runtime/hub/hub-link-ipc-types'
 
 export type RuntimeEnvironmentSubscriptionHandle = {
   unsubscribe: () => void
@@ -165,6 +170,12 @@ export type RuntimeApi = {
     // client, which has no host-side mode file to toggle.
     getOpenAccessMode?: () => Promise<{ acceptAnyAccessKey: boolean }>
     setOpenAccessMode?: (args: { acceptAnyAccessKey: boolean }) => Promise<{ ok: boolean }>
+    // Fork extension: the client-side hub record. Absent in the web client, which stores its
+    // catalog in the browser. The access key is write-only from the renderer's point of view.
+    listHubLinks?: () => Promise<HubLinkPublic[]>
+    addHubLink?: (args: { hubUrl: string; accessKey: string }) => Promise<HubAddResult>
+    removeHubLink?: (args: { hubUrl: string }) => Promise<HubRemoveResult>
+    syncHubLinks?: () => Promise<void>
     // Resume/online events advance only pending shared-control reconnect timers.
     retryConnectionsNow?: () => Promise<void>
     call: (args: {

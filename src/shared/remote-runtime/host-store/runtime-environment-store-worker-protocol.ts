@@ -7,6 +7,8 @@ import type * as core3 from './runtime-environment-wsl-host-operations'
 import type * as core4 from './runtime-environment-resume-pairing-operations'
 import type * as core5 from './runtime-environment-store-records'
 import type * as core6 from './wsl-host-deployment-store'
+import type * as core7 from './runtime-environment-hub-link-store'
+import type * as core8 from './runtime-environment-hub-row-operations'
 
 export type EnvironmentStoreCommand =
   | { operation: 'listEnvironments'; args: Parameters<typeof core0.listEnvironments> }
@@ -95,6 +97,18 @@ export type EnvironmentStoreCommand =
       args: Parameters<typeof core5.readEnvironmentStoreRecords>
     }
   | { operation: 'readWslHostDeployments'; args: Parameters<typeof core6.readWslHostDeployments> }
+  | { operation: 'readHubLinks'; args: Parameters<typeof core7.readHubLinks> }
+  | { operation: 'addHubLink'; args: Parameters<typeof core7.addHubLink> }
+  | { operation: 'removeHubLink'; args: Parameters<typeof core7.removeHubLink> }
+  | { operation: 'syncHubEnvironments'; args: Parameters<typeof core8.syncHubEnvironments> }
+  | {
+      operation: 'removeHubEnvironmentsForHub'
+      args: Parameters<typeof core8.removeHubEnvironmentsForHub>
+    }
+  | {
+      operation: 'pruneHubEnvironmentsForLinks'
+      args: Parameters<typeof core8.pruneHubEnvironmentsForLinks>
+    }
 export type EnvironmentStoreSuccess =
   | { operation: 'listEnvironments'; value: ReturnType<typeof core0.listEnvironments> }
   | {
@@ -182,6 +196,18 @@ export type EnvironmentStoreSuccess =
       value: ReturnType<typeof core5.readEnvironmentStoreRecords>
     }
   | { operation: 'readWslHostDeployments'; value: ReturnType<typeof core6.readWslHostDeployments> }
+  | { operation: 'readHubLinks'; value: ReturnType<typeof core7.readHubLinks> }
+  | { operation: 'addHubLink'; value: ReturnType<typeof core7.addHubLink> }
+  | { operation: 'removeHubLink'; value: ReturnType<typeof core7.removeHubLink> }
+  | { operation: 'syncHubEnvironments'; value: ReturnType<typeof core8.syncHubEnvironments> }
+  | {
+      operation: 'removeHubEnvironmentsForHub'
+      value: ReturnType<typeof core8.removeHubEnvironmentsForHub>
+    }
+  | {
+      operation: 'pruneHubEnvironmentsForLinks'
+      value: ReturnType<typeof core8.pruneHubEnvironmentsForLinks>
+    }
 export type EnvironmentStoreRequest = {
   id: number
   servingWsl: boolean

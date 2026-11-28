@@ -5,6 +5,8 @@ import * as core3 from './runtime-environment-wsl-host-operations'
 import * as core4 from './runtime-environment-resume-pairing-operations'
 import * as core5 from './runtime-environment-store-records'
 import * as core6 from './wsl-host-deployment-store'
+import * as core7 from './runtime-environment-hub-link-store'
+import * as core8 from './runtime-environment-hub-row-operations'
 import type {
   EnvironmentStoreCommand,
   EnvironmentStoreSuccess
@@ -128,5 +130,23 @@ export function executeEnvironmentStoreCommand(
       }
     case 'readWslHostDeployments':
       return { operation: command.operation, value: core6.readWslHostDeployments(...command.args) }
+    case 'readHubLinks':
+      return { operation: command.operation, value: core7.readHubLinks(...command.args) }
+    case 'addHubLink':
+      return { operation: command.operation, value: core7.addHubLink(...command.args) }
+    case 'removeHubLink':
+      return { operation: command.operation, value: core7.removeHubLink(...command.args) }
+    case 'syncHubEnvironments':
+      return { operation: command.operation, value: core8.syncHubEnvironments(...command.args) }
+    case 'removeHubEnvironmentsForHub':
+      return {
+        operation: command.operation,
+        value: core8.removeHubEnvironmentsForHub(...command.args)
+      }
+    case 'pruneHubEnvironmentsForLinks':
+      return {
+        operation: command.operation,
+        value: core8.pruneHubEnvironmentsForLinks(...command.args)
+      }
   }
 }

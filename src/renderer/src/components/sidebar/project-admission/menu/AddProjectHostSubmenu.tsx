@@ -259,6 +259,19 @@ export function AddProjectHostSubmenu({
                     </span>
                   </span>
                 </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => handleOpenAddHost('hub')}>
+                  <span className="flex flex-col items-start gap-0.5 py-0.5">
+                    <span className="text-xs font-medium text-foreground">
+                      {t('auto.components.sidebar.AddRepoHostSelector.addHub', 'Add hub')}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">
+                      {t(
+                        'auto.components.sidebar.AddRepoHostSelector.addHubDetail',
+                        'Every server an Orca hub lists for your access key.'
+                      )}
+                    </span>
+                  </span>
+                </DropdownMenuItem>
                 {!wslHostsAcceptNewWork && wslHostsPausedNote ? (
                   <p className="px-2.5 py-1.5 text-2xs text-muted-foreground">
                     {wslHostsPausedNote}

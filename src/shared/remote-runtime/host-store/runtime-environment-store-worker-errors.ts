@@ -1,6 +1,7 @@
 import { RuntimeEnvironmentStoreError } from './runtime-environment-store-records'
 import { RuntimeEnvironmentSidecarInvalidError } from './runtime-environment-sidecar'
 import { WslHostDeploymentStoreInvalidError } from './wsl-host-deployment-store'
+import { HubLinkStoreInvalidError } from './runtime-environment-hub-link-store'
 import type { EnvironmentStoreError } from './runtime-environment-store-worker-protocol'
 
 export function deserializeEnvironmentStoreError(error: EnvironmentStoreError): Error {
@@ -16,6 +17,8 @@ export function deserializeEnvironmentStoreError(error: EnvironmentStoreError): 
     Object.setPrototypeOf(result, RuntimeEnvironmentSidecarInvalidError.prototype)
   } else if (error.name === 'WslHostDeploymentStoreInvalidError') {
     Object.setPrototypeOf(result, WslHostDeploymentStoreInvalidError.prototype)
+  } else if (error.name === 'HubLinkStoreInvalidError') {
+    Object.setPrototypeOf(result, HubLinkStoreInvalidError.prototype)
   }
   result.name = error.name
   if (error.code) {

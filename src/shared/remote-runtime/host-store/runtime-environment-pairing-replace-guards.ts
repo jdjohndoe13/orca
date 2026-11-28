@@ -9,6 +9,21 @@ import {
   RuntimeEnvironmentStoreError
 } from './runtime-environment-store-records'
 
+/**
+ * Hub rows are derived from the hub's instance list, so the list owns them: a user cannot remove
+ * or re-pair one, or the next sync would silently undo it. Removal follows the hub's list.
+ */
+export function assertNotHubDerivedRow(
+  environment: Pick<KnownRuntimeEnvironment, 'source' | 'name'>
+): void {
+  if (environment.source === 'hub') {
+    throw new RuntimeEnvironmentStoreError(
+      'invalid_argument',
+      `"${environment.name}" is listed by a hub, so Orca keeps it from the hub's list. To stop tracking it, remove the instance on the hub or remove the hub itself.`
+    )
+  }
+}
+
 /** Refuses replacing or removing a pairing that SSH access or a managed deployment depends on. */
 export function assertNoIndependentSshAccess(environment: KnownRuntimeEnvironment): void {
   if (environment.orcadDeployment) {

@@ -35,6 +35,7 @@ import {
 } from '../host-catalog/runtime-environment-host-key-match'
 import {
   assertNoIndependentSshAccess,
+  assertNotHubDerivedRow,
   assertPairingReplaceableByAdd
 } from './runtime-environment-pairing-replace-guards'
 
@@ -145,6 +146,7 @@ export function parseRemotePairingCode(userDataPath: string, pairingCode: string
 
 export function removeEnvironment(userDataPath: string, selector: string): KnownRuntimeEnvironment {
   const environment = resolveEnvironmentFromStore(readEnvironmentStore(userDataPath), selector)
+  assertNotHubDerivedRow(environment)
   assertNoIndependentSshAccess(environment)
   const store = readPersistedEnvironmentStore(userDataPath)
   const persisted = resolveEnvironmentFromStore(store, environment.id)
@@ -162,6 +164,7 @@ export function updateEnvironmentFromPairingCode(
 ): KnownRuntimeEnvironment {
   const offer = parseRemotePairingCode(userDataPath, args.pairingCode)
   const current = resolveEnvironmentFromStore(readEnvironmentStore(userDataPath), selector)
+  assertNotHubDerivedRow(current)
   assertNoIndependentSshAccess(current)
   return replaceEnvironmentPairing(userDataPath, selector, offer, {
     now: args.now ?? Date.now(),

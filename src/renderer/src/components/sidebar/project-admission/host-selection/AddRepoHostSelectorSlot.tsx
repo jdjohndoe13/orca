@@ -35,6 +35,7 @@ export function AddRepoHostSelectorSlot({
         onAddSshHost={() => setAddRemoteHostMode('ssh')}
         onAddRemoteServer={() => setAddRemoteHostMode('server')}
         onAddWslHost={wslHostsAcceptNewWork ? () => setAddRemoteHostMode('wsl') : undefined}
+        onAddHub={() => setAddRemoteHostMode('hub')}
         wslHostsPausedNote={wslHostsPaused ? getWslHostsPausedShortLabel(t) : undefined}
         onOpenWslHostsSetting={openWslHostsExperimentalSetting}
       />

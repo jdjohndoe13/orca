@@ -38,5 +38,9 @@ export const RUNTIME_ENVIRONMENT_HANDLER_CHANNELS = [
   'runtimeEnvironments:previewOrcadDeltaMove',
   'runtimeEnvironments:moveOrcadDelta',
   'runtimeEnvironments:keepOrcadServerVersion',
-  'runtimeEnvironments:allowOrcadMoveLeavingBehind'
+  'runtimeEnvironments:allowOrcadMoveLeavingBehind',
+  'runtimeEnvironments:listHubLinks',
+  'runtimeEnvironments:addHubLink',
+  'runtimeEnvironments:removeHubLink',
+  'runtimeEnvironments:syncHubLinks'
 ] as const

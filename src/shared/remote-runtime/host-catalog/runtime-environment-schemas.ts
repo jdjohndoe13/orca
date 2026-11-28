@@ -30,10 +30,12 @@ export const PublicRuntimeAccessEndpointSchema = lazyZodSchema(() =>
 
 export type PublicRuntimeAccessEndpoint = z.infer<typeof PublicRuntimeAccessEndpointSchema>
 
+// 'hub' rows are derived from a hub's instance list, not authored. openEnum keeps this
+// backward-compatible: a shipped build reads the value as 'manual' and can still dial the row.
 export const RuntimeEnvironmentSourceSchema = lazyZodSchema(() =>
-  openEnum(['manual', 'ephemeral-vm'] as const, 'manual')
+  openEnum(['manual', 'ephemeral-vm', 'hub'] as const, 'manual')
 )
-export type RuntimeEnvironmentSource = 'manual' | 'ephemeral-vm'
+export type RuntimeEnvironmentSource = 'manual' | 'ephemeral-vm' | 'hub'
 
 export const RuntimeSshTunnelLinkSchema = lazyZodSchema(() =>
   z.object({

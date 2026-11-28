@@ -46,6 +46,7 @@ import { isGatedOffWslHost } from '../../wsl/host-lifecycle/wsl-host-gate'
 import { resetDesktopBrowserBridgeEnvironment } from '../browser/desktop-browser-bridge-reconcile'
 import { configurePairedEnvironmentRepoCatalogMirror } from './runtime-environment-repo-catalog-mirror'
 import { engageAllPairedEnvironmentRepoCatalogMirrors } from './runtime-environment-repo-catalog-triggers'
+import { syncHubEnvironmentsAtStartup } from './hub/runtime-environment-hub-startup-sync'
 
 const remoteRuntimeSubscriptions = new Map<string, RetainedRemoteRuntimeSubscription>()
 const getUserDataPath = getRuntimeEnvironmentRegistryRoot
@@ -218,8 +219,15 @@ export async function registerRuntimeEnvironmentHandlers(
   await hostInitialization
   await holdLaunchReconnectOptOuts(store.getSshTargets?.() ?? [])
   await retireStateOfRemovedEnvironments(store)
+  const savedEnvironments = await listEnvironments(getUserDataPath())
+  // Not awaited: the hub's list is a network call, and a hub that is down must not delay handlers.
+  // Rows the sync adds are activated by that pass; the ones already on disk are activated here.
+  void syncHubEnvironmentsAtStartup(
+    getUserDataPath,
+    new Set(savedEnvironments.map((environment) => environment.id))
+  )
   await Promise.all(
-    (await listEnvironments(getUserDataPath())).map(async (environment) => {
+    savedEnvironments.map(async (environment) => {
       if (
         !isRuntimeEnvironmentManuallyDisconnected(environment.id) &&
         !isGatedOffWslHost(environment)

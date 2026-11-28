@@ -136,6 +136,20 @@ export function registerLazyRuntimeEnvironmentHandlers(
     registerOrcadLeaveBehindHandlers(ipc)
   })
 
+  registerLazyIpcHandleGroup(
+    [
+      'runtimeEnvironments:listHubLinks',
+      'runtimeEnvironments:addHubLink',
+      'runtimeEnvironments:removeHubLink',
+      'runtimeEnvironments:syncHubLinks'
+    ],
+    async (ipc) => {
+      const { registerRuntimeEnvironmentHubHandlers } =
+        await import('./hub/runtime-environment-hub-handlers')
+      registerRuntimeEnvironmentHubHandlers(getUserDataPath, ipc)
+    }
+  )
+
   // CLI runtime RPC uses managedServer actions even before any desktop maintenance IPC fires.
   registerManagedServerActions(createLazyManagedServerActions(options))
   registerLazyIpcHandleGroup(

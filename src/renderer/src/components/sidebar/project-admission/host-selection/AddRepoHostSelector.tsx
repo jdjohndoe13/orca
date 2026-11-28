@@ -32,6 +32,8 @@ type AddRepoHostSelectorProps = {
   onAddRemoteServer?: () => void
   /** Present only where WSL hosts are available and turned on. */
   onAddWslHost?: () => void
+  /** Fork extension: the client-side hub record. */
+  onAddHub?: () => void
   /** Serve-only: why "Add WSL distro" is missing from the add-host menu. */
   wslHostsPausedNote?: string
   /** Opens Experimental → WSL distros as hosts, for a WSL host listed while that is off. */
@@ -48,6 +50,7 @@ export function AddRepoHostSelector({
   onAddSshHost,
   onAddRemoteServer,
   onAddWslHost,
+  onAddHub,
   wslHostsPausedNote,
   onOpenWslHostsSetting
 }: AddRepoHostSelectorProps): React.JSX.Element | null {
@@ -191,6 +194,27 @@ export function AddRepoHostSelector({
                           {t(
                             'auto.components.sidebar.AddRepoHostSelector.addRemoteServerDetail',
                             'Orca on another computer, no SSH needed.'
+                          )}
+                        </span>
+                      </button>
+                    ) : null}
+                    {onAddHub ? (
+                      <button
+                        type="button"
+                        className="flex w-full flex-col rounded-sm px-2.5 py-2 text-left hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                        onClick={() => {
+                          setAddHostOpen(false)
+                          onOpenChange(false)
+                          onAddHub()
+                        }}
+                      >
+                        <span className="text-xs font-medium">
+                          {t('auto.components.sidebar.AddRepoHostSelector.addHub', 'Add hub')}
+                        </span>
+                        <span className="mt-0.5 text-[11px] text-muted-foreground">
+                          {t(
+                            'auto.components.sidebar.AddRepoHostSelector.addHubDetail',
+                            'Every server an Orca hub lists for your access key.'
                           )}
                         </span>
                       </button>

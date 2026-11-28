@@ -1552,9 +1552,11 @@
 1 src/shared/remote-runtime/ephemeral-vm-store/ephemeral-vm-workspace-runtime.ts
 2 src/shared/remote-runtime/host-store/runtime-e2ee-keypair-file.ts
 3 src/shared/remote-runtime/host-store/runtime-environment-managed-orcad-operations.ts
+4 src/shared/remote-runtime/host-store/runtime-environment-hub-link-store.ts # hub link file reads/writes go through the environment store worker, like the sibling WSL deployment store
+3 src/shared/remote-runtime/host-store/runtime-environment-hub-row-operations.ts # derived hub rows write the environment store through the worker, like the sibling store-operations callers
 2 src/shared/remote-runtime/host-store/runtime-environment-resume-pairing-operations.ts
 2 src/shared/remote-runtime/host-store/runtime-environment-sidecar.ts
-4 src/shared/remote-runtime/host-store/runtime-environment-store-command.ts
+6 src/shared/remote-runtime/host-store/runtime-environment-store-command.ts # the worker's dispatch references the hub link store's writes alongside the pairing store's
 2 src/shared/remote-runtime/host-store/runtime-environment-store-file.ts
 6 src/shared/remote-runtime/host-store/runtime-environment-store-observation.ts
 9 src/shared/remote-runtime/host-store/runtime-environment-store-operations.ts

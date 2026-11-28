@@ -10,6 +10,7 @@ import { AddRemoteHostSshConfigPicker } from './AddRemoteHostSshConfigPicker'
 import { AddRemoteHostSshFormPanel } from './AddRemoteHostSshFormPanel'
 import { AddRemoteHostServerFormPanel } from './AddRemoteHostServerFormPanel'
 import { AddWslHostDialogBody } from '../wsl/AddWslHostDialogBody'
+import { AddRemoteHostHubForm } from './AddRemoteHostHubForm'
 import { saveRemoteServerFromForm } from './add-remote-host-server-actions'
 import {
   addAllSshConfigHostsToOrca,
@@ -19,7 +20,7 @@ import {
 } from './add-remote-host-ssh-actions'
 import { runWithFinally } from '@/lib/run-with-finally'
 
-export type AddRemoteHostMode = 'ssh' | 'server' | 'wsl'
+export type AddRemoteHostMode = 'ssh' | 'server' | 'wsl' | 'hub'
 
 export type AddRemoteHostDialogProps = {
   mode: AddRemoteHostMode | null
@@ -314,6 +315,16 @@ export function AddRemoteHostDialog({
           <AddWslHostDialogBody
             key={wslDistro}
             initialDistro={wslDistro}
+            adding={isSaving}
+            onAddingChange={setIsSaving}
+            onAdded={() => {
+              reset()
+              onOpenChange(null)
+            }}
+            onCancel={close}
+          />
+        ) : renderMode === 'hub' ? (
+          <AddRemoteHostHubForm
             adding={isSaving}
             onAddingChange={setIsSaving}
             onAdded={() => {
